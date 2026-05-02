@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from backend.app.generators.ros2_package_generator import generate_ros2_package
+from backend.app.generators.fusion360_script_generator import (
+    generate_fusion360_export,
+    should_generate_fusion360_script,
+)
 from backend.app.validators.ros2_build_validator import validate_ros2_package
 
 
@@ -102,7 +106,9 @@ def should_generate_ros2_package(artifacts: Dict[str, Any]) -> bool:
     return False
 
 
-def compact_validation_result(validation_report: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def compact_validation_result(
+    validation_report: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
     """
     Returns a compact frontend/API-friendly summary of the full ROS2 validation report.
     The full report is still written into the generated package build_reports folder.
@@ -150,7 +156,10 @@ def compact_validation_result(validation_report: Optional[Dict[str, Any]]) -> Op
                 "nodes": launch_check.get("nodes", []),
                 "topics": launch_check.get("topics", []),
                 "expected_topics": launch_check.get("expected_topics", []),
-                "missing_expected_topics": launch_check.get("missing_expected_topics", []),
+                "missing_expected_topics": launch_check.get(
+                    "missing_expected_topics",
+                    [],
+                ),
             },
         },
     }
@@ -248,13 +257,17 @@ def export_mission_files(
     - revision
 
     If a ROS2 package is generated, this can also auto-run the ROS2 build validator.
+    If CAD/Fusion content is detected, this can generate a Fusion 360 Python script.
     """
 
     if not isinstance(mission_result, dict):
         raise ValueError("mission_result must be a dictionary.")
 
     mission = mission_result.get("mission", "omni_mission")
-    result_id = mission_result.get("result_id") or datetime.now().isoformat().replace(":", "-")
+    result_id = mission_result.get("result_id") or datetime.now().isoformat().replace(
+        ":",
+        "-",
+    )
     folder_name = safe_folder_name(f"{mission}_{result_id}")
 
     export_dir = OUTPUT_ROOT / folder_name
@@ -395,7 +408,11 @@ def export_mission_files(
                 write_json(path, ros2_validation)
                 record(path)
 
-                report_paths = ros2_validation.get("report_paths", {}) if isinstance(ros2_validation, dict) else {}
+                report_paths = (
+                    ros2_validation.get("report_paths", {})
+                    if isinstance(ros2_validation, dict)
+                    else {}
+                )
 
                 for report_path in report_paths.values():
                     try:
@@ -426,6 +443,35 @@ def export_mission_files(
             record(path)
 
     # ---------------------------------------------------------
+    # Generated Fusion 360 concept script
+    # ---------------------------------------------------------
+    fusion360_generation = None
+
+    if should_generate_fusion360_script(mission_result):
+        try:
+            fusion360_generation = generate_fusion360_export(
+                mission_result=mission_result,
+                output_root=export_dir,
+            )
+
+            path = artifact_dir / "fusion360_generation_summary.json"
+            write_json(path, fusion360_generation)
+            record(path)
+
+            for generated_file in fusion360_generation.get("files", []):
+                record_generated_file(generated_file)
+
+        except Exception as error:
+            fusion360_generation = {
+                "status": "failed",
+                "error": str(error),
+            }
+
+            path = artifact_dir / "fusion360_generation_summary.json"
+            write_json(path, fusion360_generation)
+            record(path)
+
+    # ---------------------------------------------------------
     # Human-readable README
     # ---------------------------------------------------------
     validation = mission_result.get("validation", {}) or {}
@@ -451,6 +497,22 @@ def export_mission_files(
         else False
     )
 
+    fusion360_generation_status = (
+        fusion360_generation.get("status", "not_generated")
+        if isinstance(fusion360_generation, dict)
+        else "not_generated"
+    )
+    fusion360_project_type = (
+        fusion360_generation.get("project_type", "none")
+        if isinstance(fusion360_generation, dict)
+        else "none"
+    )
+    fusion360_model_name = (
+        fusion360_generation.get("model_name", "none")
+        if isinstance(fusion360_generation, dict)
+        else "none"
+    )
+
     readme = f"""# OMNI Mission Export
 
 ## Mission
@@ -474,6 +536,11 @@ def export_mission_files(
 - Status: {ros2_validation_status}
 - Passed: {ros2_validation_passed}
 
+## Fusion 360 CAD Generation
+- Status: {fusion360_generation_status}
+- Project Type: {fusion360_project_type}
+- Model Name: {fusion360_model_name}
+
 ## Files
 {chr(10).join(f"- {file}" for file in written_files)}
 """
@@ -490,4 +557,5 @@ def export_mission_files(
         "file_count": len(written_files),
         "ros2_generation": ros2_generation,
         "ros2_validation": ros2_validation,
+        "fusion360_generation": fusion360_generation,
     }

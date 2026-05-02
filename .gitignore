@@ -21,3 +21,18 @@ missions/
 
 # Large third-party ROS2 source references
 knowledge/ros2_sources/
+
+# OMNI local/generated files
+outputs/
+test_outputs/
+knowledge/cad_sources/
+memory/project_memory.json
+
+# ROS2 generated build artifacts
+**/build/
+**/install/
+**/log/
+
+# Python cache
+__pycache__/
+*.pyc
