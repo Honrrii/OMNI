@@ -511,6 +511,144 @@ function ReportRenderer({ text }) {
   );
 }
 
+function getRos2Validation(exportResult) {
+  return (
+    exportResult?.export?.ros2_validation ||
+    exportResult?.ros2_validation ||
+    null
+  );
+}
+
+function StatusBadge({ passed, label }) {
+  return (
+    <span className={`verification-badge ${passed ? "passed" : "failed"}`}>
+      {passed ? "✓" : "!"} {label}
+    </span>
+  );
+}
+
+function BuildVerificationCard({ exportResult }) {
+  const validation = getRos2Validation(exportResult);
+
+  if (!validation) {
+    return null;
+  }
+
+  const checks = validation.checks || {};
+  const reportPaths = validation.report_paths || {};
+
+  const checkItems = [
+    {
+      key: "expected_files",
+      label: "Expected files",
+      passed: checks.expected_files?.passed,
+    },
+    {
+      key: "colcon_build",
+      label: "Colcon build",
+      passed: checks.colcon_build?.passed,
+    },
+    {
+      key: "installed_files",
+      label: "Installed files",
+      passed: checks.installed_files?.passed,
+    },
+    {
+      key: "smoke_script",
+      label: "Smoke script",
+      passed: checks.smoke_script?.passed,
+    },
+    {
+      key: "launch_check",
+      label: "Launch check",
+      passed: checks.launch_check?.passed,
+    },
+  ];
+
+  return (
+    <div className={`build-verification-card ${validation.passed ? "passed" : "failed"}`}>
+      <div className="build-verification-header">
+        <div>
+          <p className="eyebrow">ROS2 Build Verification</p>
+          <h2>{validation.passed ? "Build Verified" : "Build Needs Review"}</h2>
+          <p>
+            Package: <strong>{validation.package_name || "unknown"}</strong>
+          </p>
+        </div>
+
+        <div className="verification-score-ring">
+          {validation.passed ? "PASS" : "FAIL"}
+        </div>
+      </div>
+
+      <div className="verification-check-grid">
+        {checkItems.map((item) => (
+          <StatusBadge
+            key={item.key}
+            passed={Boolean(item.passed)}
+            label={item.label}
+          />
+        ))}
+      </div>
+
+      {checks.launch_check && (
+        <div className="verification-details-grid">
+          <div>
+            <h3>Detected Nodes</h3>
+            <ul>
+              {(checks.launch_check.nodes || []).map((node, index) => (
+                <li key={`${node}-${index}`}>
+                  <code>{node}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3>Detected Topics</h3>
+            <ul>
+              {(checks.launch_check.topics || []).map((topic, index) => (
+                <li key={`${topic}-${index}`}>
+                  <code>{topic}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {checks.launch_check?.missing_expected_topics?.length > 0 && (
+        <div className="verification-warning">
+          <h3>Missing Expected Topics</h3>
+          <ul>
+            {checks.launch_check.missing_expected_topics.map((topic) => (
+              <li key={topic}>
+                <code>{topic}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="verification-report-paths">
+        <h3>Generated Reports</h3>
+
+        {reportPaths.json_report && (
+          <p>
+            JSON: <code>{reportPaths.json_report}</code>
+          </p>
+        )}
+
+        {reportPaths.markdown_report && (
+          <p>
+            Markdown: <code>{reportPaths.markdown_report}</code>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AgentFigure({ type = "omni", small = false }) {
   const shellClass = `figure-shell shape-shell ${type} ${
     small ? "figure-small" : ""
@@ -1055,6 +1193,8 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
     return <EmptyPage title="Artifacts" message="Run a mission to generate artifacts." />;
   }
 
+  const ros2Validation = getRos2Validation(exportResult);
+
   return (
     <section className="page artifacts-page-v2">
       <div className="page-header">
@@ -1063,12 +1203,12 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
           <h1>Mission Artifacts</h1>
           <p>
             Structured outputs from OMNI. These are the pieces that can later become
-            diagrams, files, tables, code, or CAD prompts.
+            diagrams, files, tables, code, ROS2 packages, CAD prompts, or validation reports.
           </p>
 
           <div className="export-action-row">
             <button className="primary-button" onClick={exportMission} disabled={exporting}>
-              {exporting ? "Exporting..." : "Export Mission Files"}
+              {exporting ? "Exporting + Verifying..." : "Export Mission Files"}
             </button>
 
             {exportResult && (
@@ -1076,11 +1216,19 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
                 <strong>Export complete</strong>
                 <span>{exportResult.export?.file_count || 0} files generated</span>
                 <code>{exportResult.export?.export_dir}</code>
+
+                {ros2Validation && (
+                  <span className={ros2Validation.passed ? "mini-pass-text" : "mini-fail-text"}>
+                    ROS2 validation: {ros2Validation.passed ? "PASSED" : "NEEDS REVIEW"}
+                  </span>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      <BuildVerificationCard exportResult={exportResult} />
 
       <div className="artifact-grid-v2">
         {missionResult.artifacts.map((artifact) => (
