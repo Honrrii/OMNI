@@ -1,0 +1,23 @@
+# Environment
+.env
+avengers_env/
+
+# Python
+__pycache__/
+*.pyc
+
+# Outputs
+outputs/
+missions/
+
+# OS / Editor
+.vscode/
+.DS_Store
+
+# Local environment secrets
+.env
+.env.*
+!.env.example
+
+# Large third-party ROS2 source references
+knowledge/ros2_sources/

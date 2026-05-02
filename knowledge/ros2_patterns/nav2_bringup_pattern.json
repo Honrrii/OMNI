@@ -1,0 +1,1440 @@
+{
+  "analyzer": "OMNI ROS2 Package Analyzer",
+  "analyzed_at": "2026-05-01T20:46:38.444550",
+  "package_name": "nav2_bringup",
+  "package_dir": "/home/honri/AI_Avengers_HQ/knowledge/ros2_sources/navigation2/nav2_bringup",
+  "package_type": "navigation",
+  "files": [
+    "CHANGELOG.rst",
+    "CMakeLists.txt",
+    "README.md",
+    "graphs/depot_graph.geojson",
+    "graphs/turtlebot3_graph.geojson",
+    "graphs/warehouse_graph.geojson",
+    "launch/bringup_launch.py",
+    "launch/cloned_multi_tb3_simulation_launch.py",
+    "launch/keepout_zone_launch.py",
+    "launch/localization_launch.py",
+    "launch/navigation_launch.py",
+    "launch/rviz_launch.py",
+    "launch/slam_launch.py",
+    "launch/speed_zone_launch.py",
+    "launch/tb3_loopback_simulation_launch.py",
+    "launch/tb3_simulation_launch.py",
+    "launch/tb4_loopback_simulation_launch.py",
+    "launch/tb4_simulation_launch.py",
+    "launch/unique_multi_tb3_simulation_launch.py",
+    "maps/depot.pgm",
+    "maps/depot.yaml",
+    "maps/depot_keepout.pgm",
+    "maps/depot_keepout.yaml",
+    "maps/depot_speed.pgm",
+    "maps/depot_speed.yaml",
+    "maps/tb3_sandbox.pgm",
+    "maps/tb3_sandbox.yaml",
+    "maps/warehouse.pgm",
+    "maps/warehouse.yaml",
+    "maps/warehouse_keepout.pgm",
+    "maps/warehouse_keepout.yaml",
+    "maps/warehouse_speed.pgm",
+    "maps/warehouse_speed.yaml",
+    "package.xml",
+    "params/nav2_params.yaml",
+    "rviz/nav2_default_view.rviz"
+  ],
+  "folders": [
+    "graphs",
+    "launch",
+    "maps",
+    "params",
+    "rviz"
+  ],
+  "package_xml": {
+    "exists": true,
+    "name": "nav2_bringup",
+    "version": "1.4.0",
+    "description": "Bringup scripts and configurations for the Nav2 stack",
+    "maintainers": [
+      {
+        "name": "Michael Jeronimo",
+        "email": "michael.jeronimo@intel.com"
+      },
+      {
+        "name": "Steve Macenski",
+        "email": "stevenmacenski@gmail.com"
+      },
+      {
+        "name": "Carlos Orduno",
+        "email": "carlos.a.orduno@intel.com"
+      }
+    ],
+    "licenses": [
+      "Apache-2.0"
+    ],
+    "buildtool_dependencies": [
+      "ament_cmake"
+    ],
+    "dependencies": [],
+    "test_dependencies": [
+      "ament_lint_common",
+      "ament_lint_auto",
+      "ament_mypy",
+      "ament_cmake_gtest",
+      "ament_cmake_pytest",
+      "launch",
+      "launch_testing",
+      "ament_cmake_ros"
+    ],
+    "exec_dependencies": [
+      "backward_ros",
+      "diff_drive_controller",
+      "joint_state_broadcaster",
+      "launch_ros",
+      "navigation2",
+      "nav2_common",
+      "ros_gz_bridge",
+      "ros_gz_sim",
+      "slam_toolbox",
+      "xacro",
+      "nav2_minimal_tb4_sim",
+      "nav2_minimal_tb3_sim",
+      "nav2_loopback_sim"
+    ],
+    "build_dependencies": [
+      "nav2_common",
+      "backward_ros",
+      "navigation2",
+      "launch_ros"
+    ],
+    "exports": [
+      {
+        "tag": "build_type",
+        "text": "ament_cmake"
+      }
+    ]
+  },
+  "setup_py": {
+    "exists": false,
+    "console_scripts": [],
+    "packages": [],
+    "data_files": [],
+    "install_requires": [],
+    "raw_package_name": null
+  },
+  "python_nodes": [
+    {
+      "file": "launch/speed_zone_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.GroupAction",
+        "launch.actions.SetEnvironmentVariable",
+        "launch.conditions.IfCondition",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.LoadComposableNodes",
+        "launch_ros.actions.Node",
+        "launch_ros.actions.PushROSNamespace",
+        "launch_ros.actions.SetParameter",
+        "launch_ros.descriptions.ComposableNode",
+        "launch_ros.descriptions.ParameterFile",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "nav2_common.launch.RewrittenYaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/tb3_simulation_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "tempfile",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.ExecuteProcess",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.actions.OpaqueFunction",
+        "launch.actions.RegisterEventHandler",
+        "launch.conditions.IfCondition",
+        "launch.event_handlers.OnShutdown",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.Node",
+        "nav2_common.launch.LaunchConfigAsBool"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/keepout_zone_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.GroupAction",
+        "launch.actions.SetEnvironmentVariable",
+        "launch.conditions.IfCondition",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.LoadComposableNodes",
+        "launch_ros.actions.Node",
+        "launch_ros.actions.PushROSNamespace",
+        "launch_ros.actions.SetParameter",
+        "launch_ros.descriptions.ComposableNode",
+        "launch_ros.descriptions.ParameterFile",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "nav2_common.launch.RewrittenYaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/bringup_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.GroupAction",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.actions.SetEnvironmentVariable",
+        "launch.conditions.IfCondition",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.Node",
+        "launch_ros.descriptions.ParameterFile",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "nav2_common.launch.RewrittenYaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/tb4_simulation_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "tempfile",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.AppendEnvironmentVariable",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.ExecuteProcess",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.actions.OpaqueFunction",
+        "launch.actions.RegisterEventHandler",
+        "launch.conditions.IfCondition",
+        "launch.event_handlers.OnShutdown",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.Command",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.Node",
+        "nav2_common.launch.LaunchConfigAsBool"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/tb3_loopback_simulation_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.GroupAction",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.conditions.IfCondition",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.LoadComposableNodes",
+        "launch_ros.actions.Node",
+        "launch_ros.actions.SetParameter",
+        "launch_ros.descriptions.ComposableNode",
+        "launch_ros.descriptions.ParameterFile",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "nav2_common.launch.RewrittenYaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/navigation_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.GroupAction",
+        "launch.actions.SetEnvironmentVariable",
+        "launch.conditions.IfCondition",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.LoadComposableNodes",
+        "launch_ros.actions.Node",
+        "launch_ros.actions.PushROSNamespace",
+        "launch_ros.actions.SetParameter",
+        "launch_ros.descriptions.ComposableNode",
+        "launch_ros.descriptions.ParameterFile",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "nav2_common.launch.RewrittenYaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/rviz_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.EmitEvent",
+        "launch.actions.RegisterEventHandler",
+        "launch.event_handlers.OnProcessExit",
+        "launch.events.Shutdown",
+        "launch.substitutions.LaunchConfiguration",
+        "launch_ros.actions.Node",
+        "nav2_common.launch.LaunchConfigAsBool"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/tb4_loopback_simulation_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.GroupAction",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.conditions.IfCondition",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.Command",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.LoadComposableNodes",
+        "launch_ros.actions.Node",
+        "launch_ros.actions.SetParameter",
+        "launch_ros.descriptions.ComposableNode",
+        "launch_ros.descriptions.ParameterFile",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "nav2_common.launch.RewrittenYaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/cloned_multi_tb3_simulation_launch.py",
+      "classes": [],
+      "functions": [
+        "count_robots",
+        "generate_robot_actions",
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "pathlib.Path",
+        "tempfile",
+        "typing.Optional",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.LaunchDescriptionEntity",
+        "launch.actions.AppendEnvironmentVariable",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.ExecuteProcess",
+        "launch.actions.ForEach",
+        "launch.actions.GroupAction",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.actions.LogInfo",
+        "launch.actions.OpaqueFunction",
+        "launch.actions.RegisterEventHandler",
+        "launch.conditions.IfCondition",
+        "launch.event_handlers.OnShutdown",
+        "launch.launch_context.LaunchContext",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.TextSubstitution",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "yaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/unique_multi_tb3_simulation_launch.py",
+      "classes": [
+        "RobotConfig"
+      ],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "pathlib.Path",
+        "tempfile",
+        "typing.TypedDict",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.AppendEnvironmentVariable",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.ExecuteProcess",
+        "launch.actions.GroupAction",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.actions.LogInfo",
+        "launch.actions.OpaqueFunction",
+        "launch.actions.RegisterEventHandler",
+        "launch.conditions.IfCondition",
+        "launch.event_handlers.OnShutdown",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.TextSubstitution",
+        "nav2_common.launch.LaunchConfigAsBool"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/localization_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.GroupAction",
+        "launch.actions.SetEnvironmentVariable",
+        "launch.conditions.IfCondition",
+        "launch.substitutions.EqualsSubstitution",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.NotEqualsSubstitution",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.LoadComposableNodes",
+        "launch_ros.actions.Node",
+        "launch_ros.actions.PushROSNamespace",
+        "launch_ros.actions.SetParameter",
+        "launch_ros.descriptions.ComposableNode",
+        "launch_ros.descriptions.ParameterFile",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "nav2_common.launch.RewrittenYaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/slam_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.GroupAction",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.conditions.IfCondition",
+        "launch.conditions.UnlessCondition",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.LaunchConfiguration",
+        "launch_ros.actions.Node",
+        "launch_ros.actions.PushROSNamespace",
+        "launch_ros.actions.SetParameter",
+        "launch_ros.actions.SetRemap",
+        "launch_ros.descriptions.ParameterFile",
+        "nav2_common.launch.HasNodeParams",
+        "nav2_common.launch.LaunchConfigAsBool",
+        "nav2_common.launch.RewrittenYaml"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    }
+  ],
+  "launch_files": [
+    {
+      "file": "launch/speed_zone_launch.py",
+      "nodes": [
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "lifecycle_manager",
+          "name": "lifecycle_manager_speed_zone"
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "",
+          "name": "speed_filter_mask_server"
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "",
+          "name": "speed_costmap_filter_info_server"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "",
+          "name": "lifecycle_manager_speed_zone"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [
+        "container_name",
+        "log_level",
+        "namespace",
+        "params_file",
+        "speed_mask",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_respawn",
+        "use_sim_time",
+        "use_speed_zones"
+      ],
+      "launch_configurations": [
+        "container_name",
+        "log_level",
+        "namespace",
+        "params_file",
+        "speed_mask"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/tb3_simulation_launch.py",
+      "nodes": [
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        }
+      ],
+      "includes": [
+        "PythonLaunchDescriptionSource(os.path.join(launch_dir, 'rviz_launch.py'",
+        "PythonLaunchDescriptionSource(os.path.join(launch_dir, 'bringup_launch.py'",
+        "PythonLaunchDescriptionSource(\n            os.path.join(get_package_share_directory('ros_gz_sim'",
+        "PythonLaunchDescriptionSource(\n            os.path.join(sim_dir, 'launch', 'spawn_tb3.launch.py'"
+      ],
+      "declared_arguments": [
+        "autostart",
+        "graph",
+        "headless",
+        "map",
+        "namespace",
+        "params_file",
+        "robot_name",
+        "robot_sdf",
+        "rviz_config_file",
+        "slam",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_respawn",
+        "use_robot_state_pub",
+        "use_rviz",
+        "use_sim_time",
+        "use_simulator",
+        "world"
+      ],
+      "launch_configurations": [
+        "autostart",
+        "graph",
+        "map",
+        "namespace",
+        "params_file",
+        "pitch",
+        "robot_name",
+        "robot_sdf",
+        "roll",
+        "rviz_config_file",
+        "world",
+        "x_pose",
+        "y_pose",
+        "yaw",
+        "z_pose"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/keepout_zone_launch.py",
+      "nodes": [
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "lifecycle_manager",
+          "name": "lifecycle_manager_keepout_zone"
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "",
+          "name": "keepout_filter_mask_server"
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "",
+          "name": "keepout_costmap_filter_info_server"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "",
+          "name": "lifecycle_manager_keepout_zone"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [
+        "container_name",
+        "keepout_mask",
+        "log_level",
+        "namespace",
+        "params_file",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_keepout_zones",
+        "use_respawn",
+        "use_sim_time"
+      ],
+      "launch_configurations": [
+        "container_name",
+        "keepout_mask",
+        "log_level",
+        "namespace",
+        "params_file"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/bringup_launch.py",
+      "nodes": [
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        }
+      ],
+      "includes": [
+        "PythonLaunchDescriptionSource(\n                    os.path.join(launch_dir, 'slam_launch.py'",
+        "PythonLaunchDescriptionSource(\n                    os.path.join(launch_dir, 'localization_launch.py'",
+        "PythonLaunchDescriptionSource(\n                    os.path.join(launch_dir, 'keepout_zone_launch.py'",
+        "PythonLaunchDescriptionSource(\n                    os.path.join(launch_dir, 'speed_zone_launch.py'",
+        "PythonLaunchDescriptionSource(\n                    os.path.join(launch_dir, 'navigation_launch.py'"
+      ],
+      "declared_arguments": [
+        "autostart",
+        "container_name",
+        "graph",
+        "keepout_mask",
+        "log_level",
+        "map",
+        "namespace",
+        "params_file",
+        "slam",
+        "speed_mask",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_keepout_zones",
+        "use_localization",
+        "use_respawn",
+        "use_sim_time",
+        "use_speed_zones"
+      ],
+      "launch_configurations": [
+        "container_name",
+        "graph",
+        "keepout_mask",
+        "log_level",
+        "map",
+        "namespace",
+        "params_file",
+        "speed_mask"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/tb4_simulation_launch.py",
+      "nodes": [
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        }
+      ],
+      "includes": [
+        "PythonLaunchDescriptionSource(os.path.join(launch_dir, 'rviz_launch.py'",
+        "PythonLaunchDescriptionSource(os.path.join(launch_dir, 'bringup_launch.py'",
+        "PythonLaunchDescriptionSource(\n            os.path.join(get_package_share_directory('ros_gz_sim'",
+        "PythonLaunchDescriptionSource(\n            os.path.join(sim_dir, 'launch', 'spawn_tb4.launch.py'"
+      ],
+      "declared_arguments": [
+        "autostart",
+        "graph",
+        "headless",
+        "keepout_mask",
+        "map",
+        "namespace",
+        "params_file",
+        "robot_name",
+        "robot_sdf",
+        "rviz_config_file",
+        "slam",
+        "speed_mask",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_keepout_zones",
+        "use_respawn",
+        "use_robot_state_pub",
+        "use_rviz",
+        "use_sim_time",
+        "use_simulator",
+        "use_speed_zones",
+        "world"
+      ],
+      "launch_configurations": [
+        "graph",
+        "keepout_mask",
+        "map",
+        "namespace",
+        "params_file",
+        "pitch",
+        "robot_name",
+        "robot_sdf",
+        "roll",
+        "rviz_config_file",
+        "speed_mask",
+        "world",
+        "x_pose",
+        "y_pose",
+        "yaw",
+        "z_pose"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/tb3_loopback_simulation_launch.py",
+      "nodes": [
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "map_server",
+          "name": "map_server"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "lifecycle_manager",
+          "name": "lifecycle_manager_map_server"
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "",
+          "name": "map_server"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "",
+          "name": "lifecycle_manager_map_server"
+        }
+      ],
+      "includes": [
+        "PythonLaunchDescriptionSource(os.path.join(launch_dir, 'rviz_launch.py'",
+        "PythonLaunchDescriptionSource(os.path.join(launch_dir, 'bringup_launch.py'",
+        "PythonLaunchDescriptionSource(\n            os.path.join(loopback_sim_dir, 'loopback_simulation.launch.py'"
+      ],
+      "declared_arguments": [
+        "autostart",
+        "graph",
+        "map",
+        "namespace",
+        "params_file",
+        "rviz_config_file",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_respawn",
+        "use_robot_state_pub",
+        "use_rviz"
+      ],
+      "launch_configurations": [
+        "graph",
+        "map",
+        "namespace",
+        "params_file",
+        "rviz_config_file"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/navigation_launch.py",
+      "nodes": [
+        {
+          "package": "nav2_controller",
+          "executable": "controller_server",
+          "name": ""
+        },
+        {
+          "package": "nav2_smoother",
+          "executable": "smoother_server",
+          "name": "smoother_server"
+        },
+        {
+          "package": "nav2_planner",
+          "executable": "planner_server",
+          "name": "planner_server"
+        },
+        {
+          "package": "nav2_route",
+          "executable": "route_server",
+          "name": "route_server"
+        },
+        {
+          "package": "nav2_behaviors",
+          "executable": "behavior_server",
+          "name": "behavior_server"
+        },
+        {
+          "package": "nav2_bt_navigator",
+          "executable": "bt_navigator",
+          "name": "bt_navigator"
+        },
+        {
+          "package": "nav2_waypoint_follower",
+          "executable": "waypoint_follower",
+          "name": "waypoint_follower"
+        },
+        {
+          "package": "nav2_velocity_smoother",
+          "executable": "velocity_smoother",
+          "name": "velocity_smoother"
+        },
+        {
+          "package": "nav2_collision_monitor",
+          "executable": "collision_monitor",
+          "name": "collision_monitor"
+        },
+        {
+          "package": "opennav_docking",
+          "executable": "opennav_docking",
+          "name": "docking_server"
+        },
+        {
+          "package": "opennav_following",
+          "executable": "opennav_following",
+          "name": "following_server"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "lifecycle_manager",
+          "name": "lifecycle_manager_navigation"
+        },
+        {
+          "package": "nav2_controller",
+          "executable": "",
+          "name": "controller_server"
+        },
+        {
+          "package": "nav2_smoother",
+          "executable": "",
+          "name": "smoother_server"
+        },
+        {
+          "package": "nav2_planner",
+          "executable": "",
+          "name": "planner_server"
+        },
+        {
+          "package": "nav2_route",
+          "executable": "",
+          "name": "route_server"
+        },
+        {
+          "package": "nav2_behaviors",
+          "executable": "",
+          "name": "behavior_server"
+        },
+        {
+          "package": "nav2_bt_navigator",
+          "executable": "",
+          "name": "bt_navigator"
+        },
+        {
+          "package": "nav2_waypoint_follower",
+          "executable": "",
+          "name": "waypoint_follower"
+        },
+        {
+          "package": "nav2_velocity_smoother",
+          "executable": "",
+          "name": "velocity_smoother"
+        },
+        {
+          "package": "nav2_collision_monitor",
+          "executable": "",
+          "name": "collision_monitor"
+        },
+        {
+          "package": "opennav_docking",
+          "executable": "",
+          "name": "docking_server"
+        },
+        {
+          "package": "opennav_following",
+          "executable": "",
+          "name": "following_server"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "",
+          "name": "lifecycle_manager_navigation"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [
+        "autostart",
+        "container_name",
+        "graph",
+        "log_level",
+        "namespace",
+        "params_file",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_keepout_zones",
+        "use_respawn",
+        "use_sim_time",
+        "use_speed_zones"
+      ],
+      "launch_configurations": [
+        "container_name",
+        "graph",
+        "log_level",
+        "namespace",
+        "params_file"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/rviz_launch.py",
+      "nodes": [
+        {
+          "package": "rviz2",
+          "executable": "rviz2",
+          "name": ""
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [
+        "namespace",
+        "rviz_config",
+        "use_sim_time"
+      ],
+      "launch_configurations": [
+        "namespace",
+        "rviz_config"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/tb4_loopback_simulation_launch.py",
+      "nodes": [
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "tf2_ros",
+          "executable": "static_transform_publisher",
+          "name": ""
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "map_server",
+          "name": "map_server"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "lifecycle_manager",
+          "name": "lifecycle_manager_map_server"
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "",
+          "name": "map_server"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "",
+          "name": "lifecycle_manager_map_server"
+        }
+      ],
+      "includes": [
+        "PythonLaunchDescriptionSource(os.path.join(launch_dir, 'rviz_launch.py'",
+        "PythonLaunchDescriptionSource(os.path.join(launch_dir, 'bringup_launch.py'",
+        "PythonLaunchDescriptionSource(\n            os.path.join(loopback_sim_dir, 'loopback_simulation.launch.py'"
+      ],
+      "declared_arguments": [
+        "autostart",
+        "graph",
+        "map",
+        "namespace",
+        "params_file",
+        "rviz_config_file",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_respawn",
+        "use_robot_state_pub",
+        "use_rviz"
+      ],
+      "launch_configurations": [
+        "graph",
+        "map",
+        "namespace",
+        "params_file",
+        "rviz_config_file"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/cloned_multi_tb3_simulation_launch.py",
+      "nodes": [],
+      "includes": [
+        "PythonLaunchDescriptionSource(\n                        os.path.join(launch_dir, 'rviz_launch.py'",
+        "PythonLaunchDescriptionSource(\n                        os.path.join(bringup_dir, 'launch', 'tb3_simulation_launch.py'"
+      ],
+      "declared_arguments": [
+        "autostart",
+        "graph",
+        "map",
+        "params_file",
+        "robots",
+        "rviz_config",
+        "use_robot_state_pub",
+        "use_rviz",
+        "world"
+      ],
+      "launch_configurations": [
+        "graph",
+        "log_settings",
+        "map",
+        "params_file",
+        "robots",
+        "rviz_config",
+        "world"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/unique_multi_tb3_simulation_launch.py",
+      "nodes": [],
+      "includes": [
+        "PythonLaunchDescriptionSource(\n                        os.path.join(launch_dir, 'rviz_launch.py'",
+        "PythonLaunchDescriptionSource(\n                        os.path.join(bringup_dir, 'launch', 'tb3_simulation_launch.py'"
+      ],
+      "declared_arguments": [
+        "autostart",
+        "graph",
+        "map",
+        "robot1_params_file",
+        "robot2_params_file",
+        "rviz_config",
+        "use_robot_state_pub",
+        "use_rviz",
+        "world"
+      ],
+      "launch_configurations": [
+        "graph",
+        "log_settings",
+        "map",
+        "rviz_config",
+        "world"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/localization_launch.py",
+      "nodes": [
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "nav2_amcl",
+          "executable": "amcl",
+          "name": "amcl"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "lifecycle_manager",
+          "name": "lifecycle_manager_localization"
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "",
+          "name": "map_server"
+        },
+        {
+          "package": "nav2_map_server",
+          "executable": "",
+          "name": "map_server"
+        },
+        {
+          "package": "nav2_amcl",
+          "executable": "",
+          "name": "amcl"
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "",
+          "name": "lifecycle_manager_localization"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [
+        "autostart",
+        "container_name",
+        "log_level",
+        "map",
+        "namespace",
+        "params_file",
+        "use_composition",
+        "use_intra_process_comms",
+        "use_respawn",
+        "use_sim_time"
+      ],
+      "launch_configurations": [
+        "container_name",
+        "log_level",
+        "map",
+        "namespace",
+        "params_file"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/slam_launch.py",
+      "nodes": [
+        {
+          "package": "nav2_map_server",
+          "executable": "map_saver_server",
+          "name": ""
+        },
+        {
+          "package": "nav2_lifecycle_manager",
+          "executable": "lifecycle_manager",
+          "name": "lifecycle_manager_slam"
+        }
+      ],
+      "includes": [
+        "PythonLaunchDescriptionSource(slam_launch_file",
+        "PythonLaunchDescriptionSource(slam_launch_file"
+      ],
+      "declared_arguments": [
+        "autostart",
+        "log_level",
+        "namespace",
+        "params_file",
+        "use_respawn",
+        "use_sim_time"
+      ],
+      "launch_configurations": [
+        "log_level",
+        "namespace",
+        "params_file"
+      ],
+      "uses_launch_description": true
+    }
+  ],
+  "config_files": [
+    {
+      "file": "maps/depot.yaml",
+      "extension": ".yaml",
+      "line_count": 7,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "image",
+        "mode",
+        "resolution",
+        "origin",
+        "negate",
+        "occupied_thresh",
+        "free_thresh"
+      ]
+    },
+    {
+      "file": "maps/depot_keepout.yaml",
+      "extension": ".yaml",
+      "line_count": 7,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "image",
+        "mode",
+        "resolution",
+        "origin",
+        "negate",
+        "occupied_thresh",
+        "free_thresh"
+      ]
+    },
+    {
+      "file": "maps/depot_speed.yaml",
+      "extension": ".yaml",
+      "line_count": 7,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "image",
+        "mode",
+        "resolution",
+        "origin",
+        "negate",
+        "occupied_thresh",
+        "free_thresh"
+      ]
+    },
+    {
+      "file": "maps/tb3_sandbox.yaml",
+      "extension": ".yaml",
+      "line_count": 6,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "image",
+        "resolution",
+        "origin",
+        "negate",
+        "occupied_thresh",
+        "free_thresh"
+      ]
+    },
+    {
+      "file": "maps/warehouse.yaml",
+      "extension": ".yaml",
+      "line_count": 7,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "image",
+        "mode",
+        "resolution",
+        "origin",
+        "negate",
+        "occupied_thresh",
+        "free_thresh"
+      ]
+    },
+    {
+      "file": "maps/warehouse_keepout.yaml",
+      "extension": ".yaml",
+      "line_count": 7,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "image",
+        "mode",
+        "resolution",
+        "origin",
+        "negate",
+        "occupied_thresh",
+        "free_thresh"
+      ]
+    },
+    {
+      "file": "maps/warehouse_speed.yaml",
+      "extension": ".yaml",
+      "line_count": 7,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "image",
+        "mode",
+        "resolution",
+        "origin",
+        "negate",
+        "occupied_thresh",
+        "free_thresh"
+      ]
+    },
+    {
+      "file": "params/nav2_params.yaml",
+      "extension": ".yaml",
+      "line_count": 599,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "bt_navigator",
+        "controller_server",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "keepout_filter_mask_server",
+        "keepout_costmap_filter_info_server",
+        "speed_filter_mask_server",
+        "speed_costmap_filter_info_server",
+        "map_saver",
+        "planner_server",
+        "smoother_server",
+        "behavior_server",
+        "waypoint_follower",
+        "route_server",
+        "velocity_smoother",
+        "collision_monitor",
+        "docking_server",
+        "loopback_simulator"
+      ]
+    },
+    {
+      "file": "rviz/nav2_default_view.rviz",
+      "extension": ".rviz",
+      "line_count": 641,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "Panels"
+      ]
+    }
+  ],
+  "topic_contracts": [],
+  "structure_features": {
+    "has_package_xml": true,
+    "has_setup_py": false,
+    "has_setup_cfg": false,
+    "has_launch_folder": true,
+    "has_config_folder": false,
+    "has_param_folder": false,
+    "has_urdf_folder": false,
+    "has_rviz_folder": true,
+    "has_resource_marker": false,
+    "has_test_folder": false
+  },
+  "omni_lessons": [
+    "A ROS2 package should include package.xml with dependencies and build type.",
+    "Launch files should live in launch/ and start nodes through launch_ros.actions.Node."
+  ]
+}

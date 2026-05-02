@@ -1,0 +1,103 @@
+{
+  "analyzer": "OMNI ROS2 Package Analyzer",
+  "analyzed_at": "2026-05-01T20:46:38.308228",
+  "package_name": "turtlebot3_description",
+  "package_dir": "/home/honri/AI_Avengers_HQ/knowledge/ros2_sources/turtlebot3/turtlebot3_description",
+  "package_type": "robot_description",
+  "files": [
+    "CHANGELOG.rst",
+    "CMakeLists.txt",
+    "meshes/bases/burger_base.stl",
+    "meshes/bases/waffle_base.stl",
+    "meshes/bases/waffle_pi_base.stl",
+    "meshes/sensors/astra.dae",
+    "meshes/sensors/astra.jpg",
+    "meshes/sensors/lds.stl",
+    "meshes/sensors/r200.dae",
+    "meshes/sensors/r200.jpg",
+    "meshes/wheels/left_tire.stl",
+    "meshes/wheels/right_tire.stl",
+    "package.xml",
+    "rviz/model.rviz",
+    "urdf/common_properties.urdf",
+    "urdf/turtlebot3_burger.urdf",
+    "urdf/turtlebot3_waffle.urdf",
+    "urdf/turtlebot3_waffle_pi.urdf"
+  ],
+  "folders": [
+    "meshes",
+    "meshes/bases",
+    "meshes/sensors",
+    "meshes/wheels",
+    "rviz",
+    "urdf"
+  ],
+  "package_xml": {
+    "exists": true,
+    "name": "turtlebot3_description",
+    "version": "2.3.6",
+    "description": "\n    3D models of the TurtleBot3 for simulation and visualization\n  ",
+    "maintainers": [
+      {
+        "name": "Pyo",
+        "email": "pyo@robotis.com"
+      }
+    ],
+    "licenses": [
+      "Apache 2.0"
+    ],
+    "buildtool_dependencies": [
+      "ament_cmake"
+    ],
+    "dependencies": [
+      "urdf",
+      "xacro"
+    ],
+    "test_dependencies": [],
+    "exec_dependencies": [],
+    "build_dependencies": [],
+    "exports": [
+      {
+        "tag": "build_type",
+        "text": "ament_cmake"
+      }
+    ]
+  },
+  "setup_py": {
+    "exists": false,
+    "console_scripts": [],
+    "packages": [],
+    "data_files": [],
+    "install_requires": [],
+    "raw_package_name": null
+  },
+  "python_nodes": [],
+  "launch_files": [],
+  "config_files": [
+    {
+      "file": "rviz/model.rviz",
+      "extension": ".rviz",
+      "line_count": 285,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "Panels"
+      ]
+    }
+  ],
+  "topic_contracts": [],
+  "structure_features": {
+    "has_package_xml": true,
+    "has_setup_py": false,
+    "has_setup_cfg": false,
+    "has_launch_folder": false,
+    "has_config_folder": false,
+    "has_param_folder": false,
+    "has_urdf_folder": true,
+    "has_rviz_folder": true,
+    "has_resource_marker": false,
+    "has_test_folder": false
+  },
+  "omni_lessons": [
+    "A ROS2 package should include package.xml with dependencies and build type."
+  ]
+}

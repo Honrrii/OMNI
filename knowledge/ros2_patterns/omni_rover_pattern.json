@@ -1,0 +1,461 @@
+{
+  "analyzer": "OMNI ROS2 Package Analyzer",
+  "analyzed_at": "2026-05-01T20:40:51.303385",
+  "package_name": "omni_rover",
+  "package_dir": "/home/honri/AI_Avengers_HQ/knowledge/ros2_examples/omni_rover",
+  "package_type": "perception",
+  "files": [
+    "README.md",
+    "launch/omni_rover_launch.py",
+    "omni_rover/__init__.py",
+    "omni_rover/camera_node.py",
+    "omni_rover/distance_sensor_node.py",
+    "omni_rover/imu_node.py",
+    "omni_rover/motor_control_node.py",
+    "omni_rover/navigation_node.py",
+    "package.xml",
+    "resource/omni_rover",
+    "setup.cfg",
+    "setup.py",
+    "test/test_generated_package.py"
+  ],
+  "folders": [
+    "launch",
+    "omni_rover",
+    "resource",
+    "test"
+  ],
+  "package_xml": {
+    "exists": true,
+    "name": "omni_rover",
+    "version": "0.0.1",
+    "description": "Generated ROS2 package scaffold from OMNI Command.",
+    "maintainers": [
+      {
+        "name": "Henry Valladares",
+        "email": "henry@example.com"
+      }
+    ],
+    "licenses": [
+      "MIT"
+    ],
+    "buildtool_dependencies": [
+      "ament_python"
+    ],
+    "dependencies": [
+      "rclpy",
+      "std_msgs",
+      "geometry_msgs",
+      "sensor_msgs"
+    ],
+    "test_dependencies": [
+      "ament_copyright",
+      "ament_flake8",
+      "ament_pep257",
+      "python3-pytest"
+    ],
+    "exec_dependencies": [],
+    "build_dependencies": [],
+    "exports": [
+      {
+        "tag": "build_type",
+        "text": "ament_python"
+      }
+    ]
+  },
+  "setup_py": {
+    "exists": true,
+    "console_scripts": [
+      "camera_node = omni_rover.camera_node:main",
+      "distance_sensor_node = omni_rover.distance_sensor_node:main",
+      "imu_node = omni_rover.imu_node:main",
+      "motor_control_node = omni_rover.motor_control_node:main",
+      "navigation_node = omni_rover.navigation_node:main"
+    ],
+    "packages": [],
+    "data_files": [],
+    "install_requires": [
+      "setuptools"
+    ],
+    "raw_package_name": "omni_rover",
+    "has_data_files": true,
+    "data_file_hints": {
+      "resource_marker": true,
+      "package_xml": true,
+      "launch_files": true,
+      "config_files": false,
+      "rviz_files": false,
+      "urdf_files": false
+    }
+  },
+  "python_nodes": [
+    {
+      "file": "omni_rover/motor_control_node.py",
+      "classes": [
+        "MotorControlNode"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "publish_cmd_vel",
+        "handle_motor_commands"
+      ],
+      "imports": [
+        "rclpy",
+        "rclpy.node.Node",
+        "geometry_msgs.msg.Twist",
+        "std_msgs.msg.String"
+      ],
+      "publishers": [
+        {
+          "topic": "/cmd_vel",
+          "message_type_hint": "Twist"
+        }
+      ],
+      "subscribers": [
+        {
+          "topic": "/motor_commands",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [
+        "1.0"
+      ],
+      "parameters": [
+        "unknown"
+      ],
+      "logger_messages": [
+        "motor_control_node started.",
+        "Published Twist on /cmd_vel",
+        "Received message on /motor_commands"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "omni_rover/distance_sensor_node.py",
+      "classes": [
+        "DistanceSensorNode"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "publish_distance_data",
+        "handle_navigation_goal"
+      ],
+      "imports": [
+        "rclpy",
+        "rclpy.node.Node",
+        "std_msgs.msg.String"
+      ],
+      "publishers": [
+        {
+          "topic": "/distance_data",
+          "message_type_hint": "String"
+        }
+      ],
+      "subscribers": [
+        {
+          "topic": "/navigation_goal",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [
+        "1.0"
+      ],
+      "parameters": [
+        "unknown"
+      ],
+      "logger_messages": [
+        "distance_sensor_node started.",
+        "Published on /distance_data: ",
+        "Received message on /navigation_goal"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "omni_rover/__init__.py",
+      "classes": [],
+      "functions": [],
+      "imports": [],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "omni_rover/navigation_node.py",
+      "classes": [
+        "NavigationNode"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "publish_navigation_goal",
+        "handle_distance_data",
+        "handle_imu_data"
+      ],
+      "imports": [
+        "rclpy",
+        "rclpy.node.Node",
+        "sensor_msgs.msg.Imu",
+        "std_msgs.msg.String"
+      ],
+      "publishers": [
+        {
+          "topic": "/navigation_goal",
+          "message_type_hint": "String"
+        }
+      ],
+      "subscribers": [
+        {
+          "topic": "/distance_data",
+          "message_type_hint": "String"
+        },
+        {
+          "topic": "/imu_data",
+          "message_type_hint": "Imu"
+        }
+      ],
+      "timers": [
+        "1.0"
+      ],
+      "parameters": [
+        "unknown"
+      ],
+      "logger_messages": [
+        "navigation_node started.",
+        "Published on /navigation_goal: ",
+        "Received message on /distance_data",
+        "Received message on /imu_data"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "omni_rover/camera_node.py",
+      "classes": [
+        "CameraNode"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "publish_camera_images"
+      ],
+      "imports": [
+        "rclpy",
+        "rclpy.node.Node",
+        "sensor_msgs.msg.Image"
+      ],
+      "publishers": [
+        {
+          "topic": "/camera_images",
+          "message_type_hint": "Image"
+        }
+      ],
+      "subscribers": [],
+      "timers": [
+        "1.0"
+      ],
+      "parameters": [
+        "unknown"
+      ],
+      "logger_messages": [
+        "camera_node started.",
+        "Published Image on /camera_images"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "omni_rover/imu_node.py",
+      "classes": [
+        "ImuNode"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "publish_imu_data"
+      ],
+      "imports": [
+        "rclpy",
+        "rclpy.node.Node",
+        "sensor_msgs.msg.Imu"
+      ],
+      "publishers": [
+        {
+          "topic": "/imu_data",
+          "message_type_hint": "Imu"
+        }
+      ],
+      "subscribers": [],
+      "timers": [
+        "1.0"
+      ],
+      "parameters": [
+        "unknown"
+      ],
+      "logger_messages": [
+        "imu_node started.",
+        "Published Imu on /imu_data"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "launch/omni_rover_launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "launch.LaunchDescription",
+        "launch_ros.actions.Node"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    }
+  ],
+  "launch_files": [
+    {
+      "file": "launch/omni_rover_launch.py",
+      "nodes": [
+        {
+          "package": "omni_rover",
+          "executable": "motor_control_node",
+          "name": "motor_control_node"
+        },
+        {
+          "package": "omni_rover",
+          "executable": "distance_sensor_node",
+          "name": "distance_sensor_node"
+        },
+        {
+          "package": "omni_rover",
+          "executable": "imu_node",
+          "name": "imu_node"
+        },
+        {
+          "package": "omni_rover",
+          "executable": "camera_node",
+          "name": "camera_node"
+        },
+        {
+          "package": "omni_rover",
+          "executable": "navigation_node",
+          "name": "navigation_node"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [],
+      "launch_configurations": [],
+      "uses_launch_description": true
+    }
+  ],
+  "config_files": [
+    {
+      "file": "setup.cfg",
+      "extension": ".cfg",
+      "line_count": 5,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": []
+    }
+  ],
+  "topic_contracts": [
+    {
+      "topic": "/camera_images",
+      "message_type_hints": [
+        "Image"
+      ],
+      "publishers": [
+        "camera_node"
+      ],
+      "subscribers": []
+    },
+    {
+      "topic": "/cmd_vel",
+      "message_type_hints": [
+        "Twist"
+      ],
+      "publishers": [
+        "motor_control_node"
+      ],
+      "subscribers": []
+    },
+    {
+      "topic": "/distance_data",
+      "message_type_hints": [
+        "String"
+      ],
+      "publishers": [
+        "distance_sensor_node"
+      ],
+      "subscribers": [
+        "navigation_node"
+      ]
+    },
+    {
+      "topic": "/imu_data",
+      "message_type_hints": [
+        "Imu"
+      ],
+      "publishers": [
+        "imu_node"
+      ],
+      "subscribers": [
+        "navigation_node"
+      ]
+    },
+    {
+      "topic": "/motor_commands",
+      "message_type_hints": [
+        "String"
+      ],
+      "publishers": [],
+      "subscribers": [
+        "motor_control_node"
+      ]
+    },
+    {
+      "topic": "/navigation_goal",
+      "message_type_hints": [
+        "String"
+      ],
+      "publishers": [
+        "navigation_node"
+      ],
+      "subscribers": [
+        "distance_sensor_node"
+      ]
+    }
+  ],
+  "structure_features": {
+    "has_package_xml": true,
+    "has_setup_py": true,
+    "has_setup_cfg": true,
+    "has_launch_folder": true,
+    "has_config_folder": false,
+    "has_param_folder": false,
+    "has_urdf_folder": false,
+    "has_rviz_folder": false,
+    "has_resource_marker": true,
+    "has_test_folder": true
+  },
+  "omni_lessons": [
+    "A ROS2 package should include package.xml with dependencies and build type.",
+    "A Python ROS2 package should include setup.py with console_scripts entry points.",
+    "A Python ROS2 package should include setup.cfg so ros2 launch can find executables in lib/<package_name>.",
+    "Launch files should live in launch/ and start nodes through launch_ros.actions.Node.",
+    "Ament Python packages need a resource/<package_name> marker file.",
+    "Topic contracts should identify publishers, subscribers, and message type hints."
+  ]
+}

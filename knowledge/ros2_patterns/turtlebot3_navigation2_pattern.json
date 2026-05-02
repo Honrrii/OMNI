@@ -1,0 +1,344 @@
+{
+  "analyzer": "OMNI ROS2 Package Analyzer",
+  "analyzed_at": "2026-05-01T20:46:38.372731",
+  "package_name": "turtlebot3_navigation2",
+  "package_dir": "/home/honri/AI_Avengers_HQ/knowledge/ros2_sources/turtlebot3/turtlebot3_navigation2",
+  "package_type": "bringup",
+  "files": [
+    "CHANGELOG.rst",
+    "CMakeLists.txt",
+    "launch/navigation2.launch.py",
+    "map/map.pgm",
+    "map/map.yaml",
+    "package.xml",
+    "param/burger.yaml",
+    "param/burger_cam.yaml",
+    "param/humble/burger.yaml",
+    "param/humble/burger_cam.yaml",
+    "param/humble/waffle.yaml",
+    "param/humble/waffle_pi.yaml",
+    "param/waffle.yaml",
+    "param/waffle_pi.yaml",
+    "rviz/tb3_navigation2.rviz"
+  ],
+  "folders": [
+    "launch",
+    "map",
+    "param",
+    "param/humble",
+    "rviz"
+  ],
+  "package_xml": {
+    "exists": true,
+    "name": "turtlebot3_navigation2",
+    "version": "2.3.6",
+    "description": "\n    ROS 2 launch scripts for navigation2\n  ",
+    "maintainers": [
+      {
+        "name": "Pyo",
+        "email": "pyo@robotis.com"
+      }
+    ],
+    "licenses": [
+      "Apache 2.0"
+    ],
+    "buildtool_dependencies": [
+      "ament_cmake"
+    ],
+    "dependencies": [],
+    "test_dependencies": [],
+    "exec_dependencies": [
+      "nav2_bringup"
+    ],
+    "build_dependencies": [],
+    "exports": [
+      {
+        "tag": "build_type",
+        "text": "ament_cmake"
+      }
+    ]
+  },
+  "setup_py": {
+    "exists": false,
+    "console_scripts": [],
+    "packages": [],
+    "data_files": [],
+    "install_requires": [],
+    "raw_package_name": null
+  },
+  "python_nodes": [
+    {
+      "file": "launch/navigation2.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.LaunchConfiguration",
+        "launch_ros.actions.Node"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    }
+  ],
+  "launch_files": [
+    {
+      "file": "launch/navigation2.launch.py",
+      "nodes": [
+        {
+          "package": "rviz2",
+          "executable": "rviz2",
+          "name": "rviz2"
+        }
+      ],
+      "includes": [
+        "PythonLaunchDescriptionSource([nav2_launch_file_dir, '/bringup_launch.py']"
+      ],
+      "declared_arguments": [
+        "map",
+        "params_file",
+        "use_sim_time"
+      ],
+      "launch_configurations": [
+        "map",
+        "params_file",
+        "use_sim_time"
+      ],
+      "uses_launch_description": true
+    }
+  ],
+  "config_files": [
+    {
+      "file": "map/map.yaml",
+      "extension": ".yaml",
+      "line_count": 7,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "image",
+        "resolution",
+        "origin",
+        "negate",
+        "occupied_thresh",
+        "free_thresh"
+      ]
+    },
+    {
+      "file": "param/burger.yaml",
+      "extension": ".yaml",
+      "line_count": 433,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "bt_navigator",
+        "docking_server",
+        "controller_server",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "map_saver",
+        "planner_server",
+        "behavior_server",
+        "waypoint_follower",
+        "collision_monitor",
+        "velocity_smoother"
+      ]
+    },
+    {
+      "file": "param/burger_cam.yaml",
+      "extension": ".yaml",
+      "line_count": 433,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "bt_navigator",
+        "docking_server",
+        "controller_server",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "map_saver",
+        "planner_server",
+        "behavior_server",
+        "waypoint_follower",
+        "collision_monitor",
+        "velocity_smoother"
+      ]
+    },
+    {
+      "file": "param/humble/burger.yaml",
+      "extension": ".yaml",
+      "line_count": 350,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "amcl_map_client",
+        "amcl_rclcpp_node",
+        "bt_navigator",
+        "bt_navigator_rclcpp_node",
+        "controller_server",
+        "controller_server_rclcpp_node",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "map_saver",
+        "planner_server",
+        "planner_server_rclcpp_node",
+        "recoveries_server",
+        "robot_state_publisher",
+        "waypoint_follower"
+      ]
+    },
+    {
+      "file": "param/humble/burger_cam.yaml",
+      "extension": ".yaml",
+      "line_count": 350,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "amcl_map_client",
+        "amcl_rclcpp_node",
+        "bt_navigator",
+        "bt_navigator_rclcpp_node",
+        "controller_server",
+        "controller_server_rclcpp_node",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "map_saver",
+        "planner_server",
+        "planner_server_rclcpp_node",
+        "recoveries_server",
+        "robot_state_publisher",
+        "waypoint_follower"
+      ]
+    },
+    {
+      "file": "param/humble/waffle.yaml",
+      "extension": ".yaml",
+      "line_count": 350,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "amcl_map_client",
+        "amcl_rclcpp_node",
+        "bt_navigator",
+        "bt_navigator_rclcpp_node",
+        "controller_server",
+        "controller_server_rclcpp_node",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "map_saver",
+        "planner_server",
+        "planner_server_rclcpp_node",
+        "recoveries_server",
+        "robot_state_publisher",
+        "waypoint_follower"
+      ]
+    },
+    {
+      "file": "param/humble/waffle_pi.yaml",
+      "extension": ".yaml",
+      "line_count": 349,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "amcl_map_client",
+        "amcl_rclcpp_node",
+        "bt_navigator",
+        "bt_navigator_rclcpp_node",
+        "controller_server",
+        "controller_server_rclcpp_node",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "map_saver",
+        "planner_server",
+        "planner_server_rclcpp_node",
+        "recoveries_server",
+        "robot_state_publisher",
+        "waypoint_follower"
+      ]
+    },
+    {
+      "file": "param/waffle.yaml",
+      "extension": ".yaml",
+      "line_count": 433,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "bt_navigator",
+        "docking_server",
+        "controller_server",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "map_saver",
+        "planner_server",
+        "behavior_server",
+        "waypoint_follower",
+        "collision_monitor",
+        "velocity_smoother"
+      ]
+    },
+    {
+      "file": "param/waffle_pi.yaml",
+      "extension": ".yaml",
+      "line_count": 433,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "amcl",
+        "bt_navigator",
+        "docking_server",
+        "controller_server",
+        "local_costmap",
+        "global_costmap",
+        "map_server",
+        "map_saver",
+        "planner_server",
+        "behavior_server",
+        "waypoint_follower",
+        "collision_monitor",
+        "velocity_smoother"
+      ]
+    },
+    {
+      "file": "rviz/tb3_navigation2.rviz",
+      "extension": ".rviz",
+      "line_count": 603,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": [
+        "Panels"
+      ]
+    }
+  ],
+  "topic_contracts": [],
+  "structure_features": {
+    "has_package_xml": true,
+    "has_setup_py": false,
+    "has_setup_cfg": false,
+    "has_launch_folder": true,
+    "has_config_folder": false,
+    "has_param_folder": true,
+    "has_urdf_folder": false,
+    "has_rviz_folder": true,
+    "has_resource_marker": false,
+    "has_test_folder": false
+  },
+  "omni_lessons": [
+    "A ROS2 package should include package.xml with dependencies and build type.",
+    "Launch files should live in launch/ and start nodes through launch_ros.actions.Node.",
+    "Config or parameter YAML files should be exported when nodes need reusable runtime settings."
+  ]
+}

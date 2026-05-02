@@ -1,0 +1,230 @@
+{
+  "analyzer": "OMNI ROS2 Package Analyzer",
+  "analyzed_at": "2026-05-01T20:46:38.148893",
+  "package_name": "examples_rclpy_minimal_subscriber",
+  "package_dir": "/home/honri/AI_Avengers_HQ/knowledge/ros2_sources/examples/rclpy/topics/minimal_subscriber",
+  "package_type": "test_or_demo",
+  "files": [
+    "CHANGELOG.rst",
+    "README.md",
+    "examples_rclpy_minimal_subscriber/__init__.py",
+    "examples_rclpy_minimal_subscriber/subscriber_lambda.py",
+    "examples_rclpy_minimal_subscriber/subscriber_member_function.py",
+    "examples_rclpy_minimal_subscriber/subscriber_old_school.py",
+    "package.xml",
+    "resource/examples_rclpy_minimal_subscriber",
+    "setup.cfg",
+    "setup.py",
+    "test/test_copyright.py",
+    "test/test_flake8.py",
+    "test/test_pep257.py",
+    "test/test_xmllint.py"
+  ],
+  "folders": [
+    "examples_rclpy_minimal_subscriber",
+    "resource",
+    "test"
+  ],
+  "package_xml": {
+    "exists": true,
+    "name": "examples_rclpy_minimal_subscriber",
+    "version": "0.21.5",
+    "description": "Examples of minimal subscribers using rclpy.",
+    "maintainers": [
+      {
+        "name": "Aditya Pande",
+        "email": "aditya.pande@openrobotics.org"
+      },
+      {
+        "name": "Alejandro Hernandez Cordero",
+        "email": "alejandro@openrobotics.org"
+      }
+    ],
+    "licenses": [
+      "Apache License 2.0"
+    ],
+    "buildtool_dependencies": [],
+    "dependencies": [],
+    "test_dependencies": [
+      "ament_copyright",
+      "ament_flake8",
+      "ament_pep257",
+      "ament_xmllint",
+      "python3-pytest"
+    ],
+    "exec_dependencies": [
+      "rclpy",
+      "std_msgs"
+    ],
+    "build_dependencies": [],
+    "exports": [
+      {
+        "tag": "build_type",
+        "text": "ament_python"
+      }
+    ]
+  },
+  "setup_py": {
+    "exists": true,
+    "console_scripts": [
+      "subscriber_lambda = examples_rclpy_minimal_subscriber.subscriber_lambda:main"
+    ],
+    "packages": [],
+    "data_files": [],
+    "install_requires": [
+      "setuptools"
+    ],
+    "raw_package_name": "examples_rclpy_minimal_subscriber",
+    "has_data_files": true,
+    "data_file_hints": {
+      "resource_marker": true,
+      "package_xml": true,
+      "launch_files": false,
+      "config_files": false,
+      "rviz_files": false,
+      "urdf_files": false
+    }
+  },
+  "python_nodes": [
+    {
+      "file": "examples_rclpy_minimal_subscriber/__init__.py",
+      "classes": [],
+      "functions": [],
+      "imports": [],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "examples_rclpy_minimal_subscriber/subscriber_member_function.py",
+      "classes": [
+        "MinimalSubscriber"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "listener_callback"
+      ],
+      "imports": [
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.node.Node",
+        "std_msgs.msg.String"
+      ],
+      "publishers": [],
+      "subscribers": [
+        {
+          "topic": "topic",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "I heard: "
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "examples_rclpy_minimal_subscriber/subscriber_old_school.py",
+      "classes": [],
+      "functions": [
+        "chatter_callback",
+        "main"
+      ],
+      "imports": [
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "std_msgs.msg.String"
+      ],
+      "publishers": [],
+      "subscribers": [
+        {
+          "topic": "topic",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "I heard: "
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "examples_rclpy_minimal_subscriber/subscriber_lambda.py",
+      "classes": [],
+      "functions": [
+        "main"
+      ],
+      "imports": [
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "std_msgs.msg.String"
+      ],
+      "publishers": [],
+      "subscribers": [
+        {
+          "topic": "topic",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "I heard: "
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    }
+  ],
+  "launch_files": [],
+  "config_files": [
+    {
+      "file": "setup.cfg",
+      "extension": ".cfg",
+      "line_count": 4,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": []
+    }
+  ],
+  "topic_contracts": [
+    {
+      "topic": "topic",
+      "message_type_hints": [
+        "String"
+      ],
+      "publishers": [],
+      "subscribers": [
+        "subscriber_lambda",
+        "subscriber_member_function",
+        "subscriber_old_school"
+      ]
+    }
+  ],
+  "structure_features": {
+    "has_package_xml": true,
+    "has_setup_py": true,
+    "has_setup_cfg": true,
+    "has_launch_folder": false,
+    "has_config_folder": false,
+    "has_param_folder": false,
+    "has_urdf_folder": false,
+    "has_rviz_folder": false,
+    "has_resource_marker": true,
+    "has_test_folder": true
+  },
+  "omni_lessons": [
+    "A ROS2 package should include package.xml with dependencies and build type.",
+    "A Python ROS2 package should include setup.py with console_scripts entry points.",
+    "A Python ROS2 package should include setup.cfg so ros2 launch can find executables in lib/<package_name>.",
+    "Ament Python packages need a resource/<package_name> marker file.",
+    "Topic contracts should identify publishers, subscribers, and message type hints."
+  ]
+}

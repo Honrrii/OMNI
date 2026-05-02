@@ -1,0 +1,18 @@
+:root {
+  font-family: Arial, sans-serif;
+  color: #f5f3ff;
+  background-color: #050816;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-width: 100%;
+  min-height: 100%;
+  background-color: #050816;
+}
+
+body {
+  margin: 0;
+}

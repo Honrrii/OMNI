@@ -1,0 +1,394 @@
+{
+  "analyzer": "OMNI ROS2 Package Analyzer",
+  "analyzed_at": "2026-05-01T20:46:38.493837",
+  "package_name": "ros2_control_demo_example_1",
+  "package_dir": "/home/honri/AI_Avengers_HQ/knowledge/ros2_sources/ros2_control_demos/example_1",
+  "package_type": "robot_description",
+  "files": [
+    "CMakeLists.txt",
+    "README.md",
+    "bringup/config/rrbot_controllers.yaml",
+    "bringup/config/rrbot_forward_position_publisher.yaml",
+    "bringup/config/rrbot_joint_trajectory_publisher.yaml",
+    "bringup/config/rrbot_jtc.yaml",
+    "bringup/launch/rrbot.launch.py",
+    "bringup/launch/test_forward_position_controller.launch.py",
+    "bringup/launch/test_joint_trajectory_controller.launch.py",
+    "description/launch/view_robot.launch.py",
+    "description/ros2_control/rrbot.ros2_control.xacro",
+    "description/urdf/rrbot.urdf.xacro",
+    "doc/rrbot.png",
+    "doc/userdoc.rst",
+    "hardware/include/ros2_control_demo_example_1/rrbot.hpp",
+    "hardware/rrbot.cpp",
+    "package.xml",
+    "ros2_control_demo_example_1.xml",
+    "test/test_rrbot_launch.py",
+    "test/test_rrbot_launch_cli_direct.py",
+    "test/test_urdf_xacro.py",
+    "test/test_view_robot_launch.py"
+  ],
+  "folders": [
+    "bringup",
+    "bringup/config",
+    "bringup/launch",
+    "description",
+    "description/launch",
+    "description/ros2_control",
+    "description/urdf",
+    "doc",
+    "hardware",
+    "hardware/include",
+    "hardware/include/ros2_control_demo_example_1",
+    "test"
+  ],
+  "package_xml": {
+    "exists": true,
+    "name": "ros2_control_demo_example_1",
+    "version": "0.0.0",
+    "description": "Demo package of `ros2_control` hardware for RRbot.",
+    "maintainers": [
+      {
+        "name": "Dr.-Ing. Denis Štogl",
+        "email": "denis.stogl@stoglrobotics.de"
+      },
+      {
+        "name": "Bence Magyar",
+        "email": "bence.magyar.robotics@gmail.com"
+      },
+      {
+        "name": "Christoph Froehlich",
+        "email": "christoph.froehlich@ait.ac.at"
+      },
+      {
+        "name": "Sai Kishor Kothakota",
+        "email": "sai.kishor@pal-robotics.com"
+      }
+    ],
+    "licenses": [
+      "Apache-2.0"
+    ],
+    "buildtool_dependencies": [
+      "ament_cmake"
+    ],
+    "dependencies": [
+      "backward_ros",
+      "hardware_interface",
+      "pluginlib",
+      "rclcpp",
+      "rclcpp_lifecycle"
+    ],
+    "test_dependencies": [
+      "ament_cmake_pytest",
+      "ament_cmake_ros",
+      "launch_testing_ament_cmake",
+      "launch_testing",
+      "launch",
+      "liburdfdom-tools",
+      "rclpy"
+    ],
+    "exec_dependencies": [
+      "controller_manager",
+      "forward_command_controller",
+      "joint_state_broadcaster",
+      "joint_state_publisher_gui",
+      "joint_trajectory_controller",
+      "robot_state_publisher",
+      "ros2_control_demo_description",
+      "ros2_controllers_test_nodes",
+      "ros2controlcli",
+      "ros2launch",
+      "rqt_joint_trajectory_controller",
+      "rviz2",
+      "xacro"
+    ],
+    "build_dependencies": [
+      "ros2_control_cmake"
+    ],
+    "exports": [
+      {
+        "tag": "build_type",
+        "text": "ament_cmake"
+      }
+    ]
+  },
+  "setup_py": {
+    "exists": false,
+    "console_scripts": [],
+    "packages": [],
+    "data_files": [],
+    "install_requires": [],
+    "raw_package_name": null
+  },
+  "python_nodes": [
+    {
+      "file": "bringup/launch/rrbot.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.conditions.IfCondition",
+        "launch.substitutions.Command",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PathSubstitution",
+        "launch_ros.actions.Node",
+        "launch_ros.substitutions.FindPackageShare",
+        "launch_ros.parameter_descriptions.ParameterFile"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "bringup/launch/test_joint_trajectory_controller.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "launch.LaunchDescription",
+        "launch.substitutions.PathJoinSubstitution",
+        "launch_ros.actions.Node",
+        "launch_ros.substitutions.FindPackageShare"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "bringup/launch/test_forward_position_controller.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "launch.LaunchDescription",
+        "launch.substitutions.PathJoinSubstitution",
+        "launch_ros.actions.Node",
+        "launch_ros.substitutions.FindPackageShare"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "description/launch/view_robot.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.conditions.IfCondition",
+        "launch.substitutions.Command",
+        "launch.substitutions.FindExecutable",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PathJoinSubstitution",
+        "launch_ros.actions.Node",
+        "launch_ros.substitutions.FindPackageShare"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    }
+  ],
+  "launch_files": [
+    {
+      "file": "test/test_view_robot_launch.py",
+      "nodes": [],
+      "includes": [
+        "PythonLaunchDescriptionSource(\n            os.path.join(\n                get_package_share_directory(\"ros2_control_demo_example_1\""
+      ],
+      "declared_arguments": [],
+      "launch_configurations": [],
+      "uses_launch_description": true
+    },
+    {
+      "file": "test/test_rrbot_launch.py",
+      "nodes": [],
+      "includes": [
+        "PythonLaunchDescriptionSource(\n            os.path.join(\n                get_package_share_directory(\"ros2_control_demo_example_1\""
+      ],
+      "declared_arguments": [],
+      "launch_configurations": [],
+      "uses_launch_description": true
+    },
+    {
+      "file": "bringup/launch/rrbot.launch.py",
+      "nodes": [
+        {
+          "package": "controller_manager",
+          "executable": "ros2_control_node",
+          "name": ""
+        },
+        {
+          "package": "robot_state_publisher",
+          "executable": "robot_state_publisher",
+          "name": ""
+        },
+        {
+          "package": "rviz2",
+          "executable": "rviz2",
+          "name": "rviz2"
+        },
+        {
+          "package": "controller_manager",
+          "executable": "spawner",
+          "name": ""
+        },
+        {
+          "package": "controller_manager",
+          "executable": "spawner",
+          "name": ""
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [
+        "gui",
+        "joint_prefix"
+      ],
+      "launch_configurations": [
+        "gui",
+        "joint_prefix"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "bringup/launch/test_joint_trajectory_controller.launch.py",
+      "nodes": [
+        {
+          "package": "ros2_controllers_test_nodes",
+          "executable": "publisher_joint_trajectory_controller",
+          "name": "publisher_joint_trajectory_controller"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [],
+      "launch_configurations": [],
+      "uses_launch_description": true
+    },
+    {
+      "file": "bringup/launch/test_forward_position_controller.launch.py",
+      "nodes": [
+        {
+          "package": "ros2_controllers_test_nodes",
+          "executable": "publisher_forward_position_controller",
+          "name": "publisher_forward_position_controller"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [],
+      "launch_configurations": [],
+      "uses_launch_description": true
+    },
+    {
+      "file": "description/launch/view_robot.launch.py",
+      "nodes": [
+        {
+          "package": "joint_state_publisher_gui",
+          "executable": "joint_state_publisher_gui",
+          "name": ""
+        },
+        {
+          "package": "robot_state_publisher",
+          "executable": "robot_state_publisher",
+          "name": ""
+        },
+        {
+          "package": "rviz2",
+          "executable": "rviz2",
+          "name": "rviz2"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [
+        "description_file",
+        "description_package",
+        "gui",
+        "prefix"
+      ],
+      "launch_configurations": [
+        "description_file",
+        "description_package",
+        "gui",
+        "prefix"
+      ],
+      "uses_launch_description": true
+    }
+  ],
+  "config_files": [
+    {
+      "file": "bringup/config/rrbot_controllers.yaml",
+      "extension": ".yaml",
+      "line_count": 13,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "joint_state_broadcaster",
+        "forward_position_controller"
+      ]
+    },
+    {
+      "file": "bringup/config/rrbot_forward_position_publisher.yaml",
+      "extension": ".yaml",
+      "line_count": 11,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "publisher_forward_position_controller"
+      ]
+    },
+    {
+      "file": "bringup/config/rrbot_joint_trajectory_publisher.yaml",
+      "extension": ".yaml",
+      "line_count": 24,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "publisher_joint_trajectory_controller"
+      ]
+    },
+    {
+      "file": "bringup/config/rrbot_jtc.yaml",
+      "extension": ".yaml",
+      "line_count": 22,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "joint_trajectory_position_controller"
+      ]
+    }
+  ],
+  "topic_contracts": [],
+  "structure_features": {
+    "has_package_xml": true,
+    "has_setup_py": false,
+    "has_setup_cfg": false,
+    "has_launch_folder": false,
+    "has_config_folder": false,
+    "has_param_folder": false,
+    "has_urdf_folder": false,
+    "has_rviz_folder": false,
+    "has_resource_marker": false,
+    "has_test_folder": true
+  },
+  "omni_lessons": [
+    "A ROS2 package should include package.xml with dependencies and build type."
+  ]
+}

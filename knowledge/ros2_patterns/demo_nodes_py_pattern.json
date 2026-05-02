@@ -1,0 +1,727 @@
+{
+  "analyzer": "OMNI ROS2 Package Analyzer",
+  "analyzed_at": "2026-05-01T20:46:38.206301",
+  "package_name": "demo_nodes_py",
+  "package_dir": "/home/honri/AI_Avengers_HQ/knowledge/ros2_sources/demos/demo_nodes_py",
+  "package_type": "test_or_demo",
+  "files": [
+    "CHANGELOG.rst",
+    "README.md",
+    "demo_nodes_py/__init__.py",
+    "demo_nodes_py/events/__init__.py",
+    "demo_nodes_py/events/matched_event_detect.py",
+    "demo_nodes_py/logging/__init__.py",
+    "demo_nodes_py/logging/use_logger_service.py",
+    "demo_nodes_py/parameters/__init__.py",
+    "demo_nodes_py/parameters/async_param_client.py",
+    "demo_nodes_py/parameters/params.yaml",
+    "demo_nodes_py/parameters/set_parameters_callback.py",
+    "demo_nodes_py/services/__init__.py",
+    "demo_nodes_py/services/add_two_ints_client.py",
+    "demo_nodes_py/services/add_two_ints_client_async.py",
+    "demo_nodes_py/services/add_two_ints_server.py",
+    "demo_nodes_py/services/introspection.py",
+    "demo_nodes_py/topics/__init__.py",
+    "demo_nodes_py/topics/listener.py",
+    "demo_nodes_py/topics/listener_qos.py",
+    "demo_nodes_py/topics/listener_serialized.py",
+    "demo_nodes_py/topics/talker.py",
+    "demo_nodes_py/topics/talker_qos.py",
+    "img/qos_listener_talker.png",
+    "img/serialized_subscriber.png",
+    "img/server_client.png",
+    "img/set_parameters_callback.png",
+    "img/talker_listener.png",
+    "package.xml",
+    "resource/demo_nodes_py",
+    "setup.cfg",
+    "setup.py",
+    "test/test_copyright.py",
+    "test/test_flake8.py",
+    "test/test_pep257.py",
+    "test/test_xmllint.py"
+  ],
+  "folders": [
+    "demo_nodes_py",
+    "demo_nodes_py/events",
+    "demo_nodes_py/logging",
+    "demo_nodes_py/parameters",
+    "demo_nodes_py/services",
+    "demo_nodes_py/topics",
+    "img",
+    "resource",
+    "test"
+  ],
+  "package_xml": {
+    "exists": true,
+    "name": "demo_nodes_py",
+    "version": "0.37.8",
+    "description": "\n    Python nodes which were previously in the ros2/examples repository but are now just used for demo purposes.\n  ",
+    "maintainers": [
+      {
+        "name": "Aditya Pande",
+        "email": "aditya.pande@openrobotics.org"
+      },
+      {
+        "name": "Audrow Nash",
+        "email": "audrow@openrobotics.org"
+      }
+    ],
+    "licenses": [
+      "Apache License 2.0"
+    ],
+    "buildtool_dependencies": [],
+    "dependencies": [],
+    "test_dependencies": [
+      "ament_copyright",
+      "ament_flake8",
+      "ament_pep257",
+      "ament_xmllint",
+      "python3-pytest"
+    ],
+    "exec_dependencies": [
+      "ament_index_python",
+      "example_interfaces",
+      "rclpy",
+      "rcl_interfaces",
+      "example_interfaces"
+    ],
+    "build_dependencies": [],
+    "exports": [
+      {
+        "tag": "build_type",
+        "text": "ament_python"
+      }
+    ]
+  },
+  "setup_py": {
+    "exists": true,
+    "console_scripts": [
+      "add_two_ints_client = demo_nodes_py.services.add_two_ints_client:main",
+      "add_two_ints_client_async = demo_nodes_py.services.add_two_ints_client_async:main",
+      "add_two_ints_server = demo_nodes_py.services.add_two_ints_server:main",
+      "async_param_client = demo_nodes_py.parameters.async_param_client:main",
+      "introspection = demo_nodes_py.services.introspection:main",
+      "listener = demo_nodes_py.topics.listener:main",
+      "listener_qos = demo_nodes_py.topics.listener_qos:main",
+      "listener_serialized = demo_nodes_py.topics.listener_serialized:main",
+      "matched_event_detect = demo_nodes_py.events.matched_event_detect:main",
+      "set_parameters_callback = demo_nodes_py.parameters.set_parameters_callback:main",
+      "talker = demo_nodes_py.topics.talker:main",
+      "talker_qos = demo_nodes_py.topics.talker_qos:main",
+      "use_logger_service = demo_nodes_py.logging.use_logger_service:main"
+    ],
+    "packages": [],
+    "data_files": [],
+    "install_requires": [
+      "setuptools"
+    ],
+    "raw_package_name": "demo_nodes_py",
+    "has_data_files": true,
+    "data_file_hints": {
+      "resource_marker": true,
+      "package_xml": true,
+      "launch_files": false,
+      "config_files": false,
+      "rviz_files": false,
+      "urdf_files": false
+    }
+  },
+  "python_nodes": [
+    {
+      "file": "demo_nodes_py/__init__.py",
+      "classes": [],
+      "functions": [],
+      "imports": [],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "demo_nodes_py/logging/__init__.py",
+      "classes": [],
+      "functions": [],
+      "imports": [],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "demo_nodes_py/logging/use_logger_service.py",
+      "classes": [
+        "LoggerServiceNode",
+        "TestNode"
+      ],
+      "functions": [
+        "get_logger_level_func",
+        "main",
+        "__init__",
+        "callback",
+        "__init__",
+        "set_logger_level_on_remote_node",
+        "get_logger_level_on_remote_node"
+      ],
+      "imports": [
+        "argparse",
+        "threading",
+        "time",
+        "example_interfaces.msg.String",
+        "rcl_interfaces.msg.LoggerLevel",
+        "rcl_interfaces.srv.GetLoggerLevels",
+        "rcl_interfaces.srv.SetLoggerLevels",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.executors.SingleThreadedExecutor",
+        "rclpy.impl.logging_severity.LoggingSeverity",
+        "rclpy.node.Node"
+      ],
+      "publishers": [
+        {
+          "topic": "output",
+          "message_type_hint": "String"
+        }
+      ],
+      "subscribers": [
+        {
+          "topic": "output",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "Failed to change logger level: ",
+        "Current logger level: ",
+        "Failed to get logger level via logger service !",
+        "Current child logger level: ",
+        "Failed to get child logger level via logger service !",
+        "Started in service-only mode. Use ros2 CLI to interact with this node."
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/parameters/set_parameters_callback.py",
+      "classes": [
+        "SetParametersCallback"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "pre_set_parameter_callback",
+        "on_set_parameter_callback",
+        "post_set_parameter_callback"
+      ],
+      "imports": [
+        "rcl_interfaces.msg.SetParametersResult",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.node.Node",
+        "rclpy.parameter.Parameter"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [
+        "param1",
+        "param2"
+      ],
+      "logger_messages": [],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/parameters/__init__.py",
+      "classes": [],
+      "functions": [],
+      "imports": [],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "demo_nodes_py/parameters/async_param_client.py",
+      "classes": [],
+      "functions": [
+        "main"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.get_package_share_directory",
+        "rclpy",
+        "rclpy.context",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.parameter.Parameter",
+        "rclpy.parameter.parameter_dict_from_yaml_file",
+        "rclpy.parameter.parameter_value_to_python",
+        "rclpy.parameter_client.AsyncParameterClient"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/services/__init__.py",
+      "classes": [],
+      "functions": [],
+      "imports": [],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "demo_nodes_py/services/introspection.py",
+      "classes": [
+        "IntrospectionClientNode",
+        "IntrospectionServiceNode"
+      ],
+      "functions": [
+        "check_parameter",
+        "main",
+        "on_set_parameters_callback",
+        "on_post_set_parameters_callback",
+        "__init__",
+        "timer_callback",
+        "on_set_parameters_callback",
+        "on_post_set_parameters_callback",
+        "__init__",
+        "add_two_ints_callback"
+      ],
+      "imports": [
+        "example_interfaces.srv.AddTwoInts",
+        "rcl_interfaces.msg.SetParametersResult",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.executors.SingleThreadedExecutor",
+        "rclpy.node.Node",
+        "rclpy.parameter.Parameter",
+        "rclpy.qos.qos_profile_system_default",
+        "rclpy.service_introspection.ServiceIntrospectionState"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [
+        "0.5"
+      ],
+      "parameters": [
+        "client_configure_introspection",
+        "service_configure_introspection"
+      ],
+      "logger_messages": [
+        "Result of add_two_ints: %d",
+        "Exception calling service: %r",
+        "Incoming request\\na: %d b: %d"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/services/add_two_ints_client.py",
+      "classes": [],
+      "functions": [
+        "main"
+      ],
+      "imports": [
+        "example_interfaces.srv.AddTwoInts",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "Result of add_two_ints: %d",
+        "Exception while calling service: %r"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/services/add_two_ints_server.py",
+      "classes": [
+        "AddTwoIntsServer"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "add_two_ints_callback"
+      ],
+      "imports": [
+        "example_interfaces.srv.AddTwoInts",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.node.Node"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "Incoming request\\na: %d b: %d"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/services/add_two_ints_client_async.py",
+      "classes": [],
+      "functions": [
+        "main"
+      ],
+      "imports": [
+        "example_interfaces.srv.AddTwoInts",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/events/__init__.py",
+      "classes": [],
+      "functions": [],
+      "imports": [],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "demo_nodes_py/events/matched_event_detect.py",
+      "classes": [
+        "MatchedEventDetectNode",
+        "MultiSubNode",
+        "MultiPubNode"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "__pub_matched_event_callback",
+        "__sub_matched_event_callback",
+        "get_future",
+        "__init__",
+        "create_one_sub",
+        "destroy_one_sub",
+        "__init__",
+        "create_one_pub",
+        "destroy_one_pub"
+      ],
+      "imports": [
+        "example_interfaces.msg.String",
+        "rclpy",
+        "rclpy.event_handler.PublisherEventCallbacks",
+        "rclpy.event_handler.QoSPublisherMatchedInfo",
+        "rclpy.event_handler.QoSSubscriptionMatchedInfo",
+        "rclpy.event_handler.SubscriptionEventCallbacks",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.executors.SingleThreadedExecutor",
+        "rclpy.node.Node",
+        "rclpy.publisher.Publisher",
+        "rclpy.subscription.Subscription",
+        "rclpy.task.Future"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "Last subscription is disconnected.",
+        "The changed number of connected subscription is ",
+        "First subscription is connected.",
+        "Last publisher is disconnected.",
+        "The changed number of connected publisher is ",
+        "First publisher is connected.",
+        "Create a new subscription.",
+        "Destroy a subscription.",
+        "Create a new publisher.",
+        "Destroy a publisher."
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/topics/listener_qos.py",
+      "classes": [
+        "ListenerQos"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "chatter_callback"
+      ],
+      "imports": [
+        "argparse",
+        "sys",
+        "example_interfaces.msg.String",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.node.Node",
+        "rclpy.qos.qos_profile_sensor_data",
+        "rclpy.qos.QoSProfile",
+        "rclpy.qos.QoSReliabilityPolicy",
+        "rclpy.utilities.remove_ros_args"
+      ],
+      "publishers": [],
+      "subscribers": [
+        {
+          "topic": "chatter",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "Reliable listener",
+        "Best effort listener",
+        "I heard: [%s]"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/topics/listener.py",
+      "classes": [
+        "Listener"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "chatter_callback"
+      ],
+      "imports": [
+        "example_interfaces.msg.String",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.node.Node"
+      ],
+      "publishers": [],
+      "subscribers": [
+        {
+          "topic": "chatter",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "I heard: [%s]"
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/topics/talker.py",
+      "classes": [
+        "Talker"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "timer_callback"
+      ],
+      "imports": [
+        "example_interfaces.msg.String",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.node.Node"
+      ],
+      "publishers": [
+        {
+          "topic": "chatter",
+          "message_type_hint": "String"
+        }
+      ],
+      "subscribers": [],
+      "timers": [
+        "timer_period"
+      ],
+      "parameters": [],
+      "logger_messages": [
+        "Publishing: "
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/topics/__init__.py",
+      "classes": [],
+      "functions": [],
+      "imports": [],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "demo_nodes_py/topics/listener_serialized.py",
+      "classes": [
+        "SerializedSubscriber"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "listener_callback"
+      ],
+      "imports": [
+        "example_interfaces.msg.String",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.node.Node"
+      ],
+      "publishers": [],
+      "subscribers": [
+        {
+          "topic": "chatter",
+          "message_type_hint": "String"
+        }
+      ],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [
+        "I heard: "
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    },
+    {
+      "file": "demo_nodes_py/topics/talker_qos.py",
+      "classes": [
+        "TalkerQos"
+      ],
+      "functions": [
+        "main",
+        "__init__",
+        "timer_callback"
+      ],
+      "imports": [
+        "argparse",
+        "sys",
+        "example_interfaces.msg.String",
+        "rclpy",
+        "rclpy.executors.ExternalShutdownException",
+        "rclpy.node.Node",
+        "rclpy.qos.qos_profile_sensor_data",
+        "rclpy.qos.QoSProfile",
+        "rclpy.qos.QoSReliabilityPolicy",
+        "rclpy.utilities.remove_ros_args"
+      ],
+      "publishers": [
+        {
+          "topic": "chatter",
+          "message_type_hint": "String"
+        }
+      ],
+      "subscribers": [],
+      "timers": [
+        "timer_period"
+      ],
+      "parameters": [],
+      "logger_messages": [
+        "Reliable talker",
+        "Best effort talker",
+        "Publishing: "
+      ],
+      "has_main": true,
+      "uses_rclpy": true
+    }
+  ],
+  "launch_files": [],
+  "config_files": [
+    {
+      "file": "demo_nodes_py/parameters/params.yaml",
+      "extension": ".yaml",
+      "line_count": 7,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": [
+        "/parameter_blackboard"
+      ]
+    },
+    {
+      "file": "setup.cfg",
+      "extension": ".cfg",
+      "line_count": 4,
+      "has_ros_parameters": false,
+      "top_level_keys_hint": []
+    }
+  ],
+  "topic_contracts": [
+    {
+      "topic": "chatter",
+      "message_type_hints": [
+        "String"
+      ],
+      "publishers": [
+        "talker",
+        "talker_qos"
+      ],
+      "subscribers": [
+        "listener",
+        "listener_qos",
+        "listener_serialized"
+      ]
+    },
+    {
+      "topic": "output",
+      "message_type_hints": [
+        "String"
+      ],
+      "publishers": [
+        "use_logger_service"
+      ],
+      "subscribers": [
+        "use_logger_service"
+      ]
+    }
+  ],
+  "structure_features": {
+    "has_package_xml": true,
+    "has_setup_py": true,
+    "has_setup_cfg": true,
+    "has_launch_folder": false,
+    "has_config_folder": false,
+    "has_param_folder": false,
+    "has_urdf_folder": false,
+    "has_rviz_folder": false,
+    "has_resource_marker": true,
+    "has_test_folder": true
+  },
+  "omni_lessons": [
+    "A ROS2 package should include package.xml with dependencies and build type.",
+    "A Python ROS2 package should include setup.py with console_scripts entry points.",
+    "A Python ROS2 package should include setup.cfg so ros2 launch can find executables in lib/<package_name>.",
+    "Ament Python packages need a resource/<package_name> marker file.",
+    "Topic contracts should identify publishers, subscribers, and message type hints."
+  ]
+}

@@ -1,0 +1,311 @@
+{
+  "analyzer": "OMNI ROS2 Package Analyzer",
+  "analyzed_at": "2026-05-01T20:46:38.252158",
+  "package_name": "turtlebot3_bringup",
+  "package_dir": "/home/honri/AI_Avengers_HQ/knowledge/ros2_sources/turtlebot3/turtlebot3_bringup",
+  "package_type": "bringup",
+  "files": [
+    "CHANGELOG.rst",
+    "CMakeLists.txt",
+    "launch/camera.launch.py",
+    "launch/robot.launch.py",
+    "launch/rviz2.launch.py",
+    "launch/turtlebot3_state_publisher.launch.py",
+    "package.xml",
+    "param/burger.yaml",
+    "param/humble/burger.yaml",
+    "param/humble/waffle.yaml",
+    "param/humble/waffle_pi.yaml",
+    "param/waffle.yaml",
+    "param/waffle_pi.yaml",
+    "script/99-turtlebot3-cdc.rules",
+    "script/create_udev_rules"
+  ],
+  "folders": [
+    "launch",
+    "param",
+    "param/humble",
+    "script"
+  ],
+  "package_xml": {
+    "exists": true,
+    "name": "turtlebot3_bringup",
+    "version": "2.3.6",
+    "description": "\n    ROS 2 launch scripts for starting the TurtleBot3\n  ",
+    "maintainers": [
+      {
+        "name": "Pyo",
+        "email": "pyo@robotis.com"
+      }
+    ],
+    "licenses": [
+      "Apache 2.0"
+    ],
+    "buildtool_dependencies": [
+      "ament_cmake"
+    ],
+    "dependencies": [],
+    "test_dependencies": [],
+    "exec_dependencies": [
+      "hls_lfcd_lds_driver",
+      "robot_state_publisher",
+      "rviz2",
+      "turtlebot3_description",
+      "turtlebot3_node"
+    ],
+    "build_dependencies": [],
+    "exports": [
+      {
+        "tag": "build_type",
+        "text": "ament_cmake"
+      }
+    ]
+  },
+  "setup_py": {
+    "exists": false,
+    "console_scripts": [],
+    "packages": [],
+    "data_files": [],
+    "install_requires": [],
+    "raw_package_name": null
+  },
+  "python_nodes": [
+    {
+      "file": "launch/camera.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "ament_index_python.resources.has_resource",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.conditions.IfCondition",
+        "launch.launch_description.LaunchDescription",
+        "launch.substitutions.LaunchConfiguration",
+        "launch_ros.actions.ComposableNodeContainer",
+        "launch_ros.descriptions.ComposableNode"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/robot.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.actions.IncludeLaunchDescription",
+        "launch.launch_description_sources.PythonLaunchDescriptionSource",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.ThisLaunchFileDir",
+        "launch_ros.actions.Node",
+        "launch_ros.actions.PushRosNamespace"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/turtlebot3_state_publisher.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch.actions.DeclareLaunchArgument",
+        "launch.substitutions.Command",
+        "launch.substitutions.LaunchConfiguration",
+        "launch.substitutions.PythonExpression",
+        "launch_ros.actions.Node"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    },
+    {
+      "file": "launch/rviz2.launch.py",
+      "classes": [],
+      "functions": [
+        "generate_launch_description"
+      ],
+      "imports": [
+        "os",
+        "ament_index_python.packages.get_package_share_directory",
+        "launch.LaunchDescription",
+        "launch_ros.actions.Node"
+      ],
+      "publishers": [],
+      "subscribers": [],
+      "timers": [],
+      "parameters": [],
+      "logger_messages": [],
+      "has_main": false,
+      "uses_rclpy": false
+    }
+  ],
+  "launch_files": [
+    {
+      "file": "launch/camera.launch.py",
+      "nodes": [
+        {
+          "package": "camera_ros",
+          "executable": "",
+          "name": ""
+        },
+        {
+          "package": "image_view",
+          "executable": "",
+          "name": ""
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [],
+      "launch_configurations": [],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/robot.launch.py",
+      "nodes": [
+        {
+          "package": "turtlebot3_node",
+          "executable": "turtlebot3_ros",
+          "name": ""
+        }
+      ],
+      "includes": [
+        "PythonLaunchDescriptionSource(\n                [ThisLaunchFileDir(",
+        "PythonLaunchDescriptionSource([lidar_pkg_dir, LDS_LAUNCH_FILE]"
+      ],
+      "declared_arguments": [
+        "namespace",
+        "tb3_param_dir",
+        "usb_port",
+        "use_sim_time"
+      ],
+      "launch_configurations": [
+        "lidar_pkg_dir",
+        "namespace",
+        "tb3_param_dir",
+        "usb_port",
+        "use_sim_time"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/turtlebot3_state_publisher.launch.py",
+      "nodes": [
+        {
+          "package": "robot_state_publisher",
+          "executable": "robot_state_publisher",
+          "name": ""
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [
+        "use_sim_time"
+      ],
+      "launch_configurations": [
+        "namespace",
+        "use_sim_time"
+      ],
+      "uses_launch_description": true
+    },
+    {
+      "file": "launch/rviz2.launch.py",
+      "nodes": [
+        {
+          "package": "rviz2",
+          "executable": "rviz2",
+          "name": "rviz2"
+        }
+      ],
+      "includes": [],
+      "declared_arguments": [],
+      "launch_configurations": [],
+      "uses_launch_description": true
+    }
+  ],
+  "config_files": [
+    {
+      "file": "param/burger.yaml",
+      "extension": ".yaml",
+      "line_count": 37,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": []
+    },
+    {
+      "file": "param/humble/burger.yaml",
+      "extension": ".yaml",
+      "line_count": 37,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": []
+    },
+    {
+      "file": "param/humble/waffle.yaml",
+      "extension": ".yaml",
+      "line_count": 37,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": []
+    },
+    {
+      "file": "param/humble/waffle_pi.yaml",
+      "extension": ".yaml",
+      "line_count": 37,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": []
+    },
+    {
+      "file": "param/waffle.yaml",
+      "extension": ".yaml",
+      "line_count": 37,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": []
+    },
+    {
+      "file": "param/waffle_pi.yaml",
+      "extension": ".yaml",
+      "line_count": 37,
+      "has_ros_parameters": true,
+      "top_level_keys_hint": []
+    }
+  ],
+  "topic_contracts": [],
+  "structure_features": {
+    "has_package_xml": true,
+    "has_setup_py": false,
+    "has_setup_cfg": false,
+    "has_launch_folder": true,
+    "has_config_folder": false,
+    "has_param_folder": true,
+    "has_urdf_folder": false,
+    "has_rviz_folder": false,
+    "has_resource_marker": false,
+    "has_test_folder": false
+  },
+  "omni_lessons": [
+    "A ROS2 package should include package.xml with dependencies and build type.",
+    "Launch files should live in launch/ and start nodes through launch_ros.actions.Node.",
+    "Config or parameter YAML files should be exported when nodes need reusable runtime settings."
+  ]
+}
