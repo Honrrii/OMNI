@@ -1,11 +1,45 @@
 import { useMemo, useState } from "react";
 import "./App.css";
 
+import omniImg from "./assets/agents/omni.png";
+import echoImg from "./assets/agents/echo.png";
+import skyImg from "./assets/agents/sky.png";
+import korvaImg from "./assets/agents/korva.png";
+import isyImg from "./assets/agents/isy.png";
+import oliImg from "./assets/agents/oli.png";
+import plutoImg from "./assets/agents/pluto.png";
+import qazImg from "./assets/agents/qaz.png";
+
 const API_URL = "http://127.0.0.1:8000/api/mission/run";
 const EXPORT_API_URL = "http://127.0.0.1:8000/api/mission/export";
 const INTERPRET_API_URL = "http://127.0.0.1:8000/api/mission/interpret";
 const INTERPRET_AND_RUN_API_URL =
   "http://127.0.0.1:8000/api/mission/interpret-and-run";
+
+const AGENT_IMAGE_MAP = {
+  omni: omniImg,
+  echo: echoImg,
+  sky: skyImg,
+  korva: korvaImg,
+  isy: isyImg,
+  oli: oliImg,
+  pluto: plutoImg,
+  qaz: qazImg,
+};
+
+const JOKE_API_URL =
+  "https://v2.jokeapi.dev/joke/Dark,Pun?blacklistFlags=nsfw,religious,political,racist,sexist,explicit&type=single&lang=en";
+
+const MORBID_LOADING_JOKES = [
+  "Level 1: I asked my code for stability. It opened a support ticket with my therapist.",
+  "Level 2: My deadline smiled at me today. That's how I knew it had teeth.",
+  "Level 3: I told my laptop we were in this together. The fan started laughing in binary.",
+  "Level 4: I asked life for a sign. It gave me a check engine light and lower back pain.",
+  "Level 5: OMNI checked the risk matrix and quietly added my sleep schedule as a known vulnerability.",
+  "Level 6: The build failed so dramatically that even the compiler asked for a moment of silence.",
+  "Level 7: My ambitions are scalable. Unfortunately, so are the consequences.",
+  "Level 8: The robots are not replacing me yet. They're just watching me debug for training data.",
+];
 
 const DEFAULT_TIMELINE = [
   {
@@ -54,7 +88,7 @@ const AGENT_ROLE_MAP = {
     role: "Mission Orchestrator / Systems Intelligence",
     status: "Mission synthesized",
     figure: "omni",
-    colorName: "Red",
+    colorName: "Command Red",
   },
   omni: {
     id: "omni",
@@ -62,7 +96,7 @@ const AGENT_ROLE_MAP = {
     role: "Mission Orchestrator / Systems Intelligence",
     status: "Mission synthesized",
     figure: "omni",
-    colorName: "Red",
+    colorName: "Command Red",
   },
   tony_stark: {
     id: "sky",
@@ -134,7 +168,7 @@ const AGENT_ROLE_MAP = {
     role: "Risk, Failure Analysis, and Safety Gates",
     status: "Risk critique generated",
     figure: "pluto",
-    colorName: "Velvet",
+    colorName: "Velvet Purple",
   },
   pluto: {
     id: "pluto",
@@ -142,7 +176,7 @@ const AGENT_ROLE_MAP = {
     role: "Risk, Failure Analysis, and Safety Gates",
     status: "Risk critique generated",
     figure: "pluto",
-    colorName: "Velvet",
+    colorName: "Velvet Purple",
   },
   vision: {
     id: "qaz",
@@ -172,6 +206,40 @@ const FALLBACK_AGENTS = [
   AGENT_ROLE_MAP.pluto,
   AGENT_ROLE_MAP.qaz,
 ];
+
+function getLocalMorbidJoke() {
+  const randomIndex = Math.floor(Math.random() * MORBID_LOADING_JOKES.length);
+  return MORBID_LOADING_JOKES[randomIndex];
+}
+
+async function fetchMorbidLoadingJoke() {
+  try {
+    const response = await fetch(JOKE_API_URL);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (data?.error) {
+      return null;
+    }
+
+    if (data?.type === "single" && data?.joke) {
+      return data.joke;
+    }
+
+    if (data?.setup && data?.delivery) {
+      return `${data.setup} ${data.delivery}`;
+    }
+
+    return null;
+  } catch (error) {
+    console.warn("Could not fetch online loading joke. Using local fallback.", error);
+    return null;
+  }
+}
 
 function formatTitle(text) {
   if (!text) return "Generated Artifact";
@@ -649,186 +717,46 @@ function BuildVerificationCard({ exportResult }) {
   );
 }
 
-function AgentFigure({ type = "omni", small = false }) {
-  const shellClass = `figure-shell shape-shell ${type} ${
-    small ? "figure-small" : ""
-  }`;
+function AgentFigure({ type = "omni", small = false, hero = false, active = false }) {
+  const normalized = String(type || "omni").toLowerCase();
+  const size = hero ? "hero" : small ? "small" : "large";
+  const imageSrc = AGENT_IMAGE_MAP[normalized] || AGENT_IMAGE_MAP.omni;
 
   return (
-    <div className={shellClass}>
-      <div className="shape-aura"></div>
+    <div
+      className={`agent-portrait-shell ${normalized} ${size} ${
+        active ? "active" : ""
+      }`}
+    >
+      <div className="agent-portrait-orbit" />
+      <img
+        className="agent-portrait-image"
+        src={imageSrc}
+        alt={`${normalized} agent`}
+        draggable="false"
+        loading="lazy"
+      />
+    </div>
+  );
+}
 
-      {type === "echo" && (
-        <svg
-          className="agent-shape agent-shape-echo"
-          viewBox="0 0 180 160"
-          role="img"
-          aria-label="Echo green soundwave"
-        >
-          <circle className="echo-source-core" cx="90" cy="80" r="8" />
-          <circle className="echo-source-ring" cx="90" cy="80" r="18" />
-
-          <path
-            className="echo-wave echo-wave-one left"
-            d="M72 58 C52 66 52 94 72 102"
-          />
-          <path
-            className="echo-wave echo-wave-two left"
-            d="M58 44 C26 58 26 102 58 116"
-          />
-          <path
-            className="echo-wave echo-wave-three left"
-            d="M42 28 C-2 50 -2 110 42 132"
-          />
-
-          <path
-            className="echo-wave echo-wave-one right"
-            d="M108 58 C128 66 128 94 108 102"
-          />
-          <path
-            className="echo-wave echo-wave-two right"
-            d="M122 44 C154 58 154 102 122 116"
-          />
-          <path
-            className="echo-wave echo-wave-three right"
-            d="M138 28 C182 50 182 110 138 132"
-          />
-
-          <line className="echo-center-line" x1="20" y1="80" x2="160" y2="80" />
-        </svg>
-      )}
-
-      {type === "omni" && (
-        <svg
-          className="agent-shape agent-shape-omni"
-          viewBox="0 0 160 160"
-          role="img"
-          aria-label="Omni red command core"
-        >
-          <circle className="shape-outer" cx="80" cy="80" r="54" />
-          <circle className="shape-middle" cx="80" cy="80" r="30" />
-          <circle className="shape-inner" cx="80" cy="80" r="10" />
-          <line className="shape-ray ray-one" x1="80" y1="12" x2="80" y2="34" />
-          <line className="shape-ray ray-two" x1="80" y1="126" x2="80" y2="148" />
-          <line className="shape-ray ray-three" x1="12" y1="80" x2="34" y2="80" />
-          <line className="shape-ray ray-four" x1="126" y1="80" x2="148" y2="80" />
-        </svg>
-      )}
-
-      {type === "sky" && (
-        <svg
-          className="agent-shape agent-shape-sky"
-          viewBox="0 0 160 160"
-          role="img"
-          aria-label="Sky blue navigation glyph"
-        >
-          <polygon className="shape-main" points="80,18 136,132 80,104 24,132" />
-          <path className="shape-detail" d="M80 18 L80 104" />
-          <path className="shape-detail" d="M48 118 L80 78 L112 118" />
-          <circle className="shape-dot dot-one" cx="80" cy="78" r="5" />
-        </svg>
-      )}
-
-      {type === "isy" && (
-        <svg
-          className="agent-shape agent-shape-isy"
-          viewBox="0 0 160 160"
-          role="img"
-          aria-label="Isy orange physics orbit"
-        >
-          <circle className="shape-core" cx="80" cy="80" r="18" />
-          <ellipse className="shape-orbit orbit-one" cx="80" cy="80" rx="58" ry="24" />
-          <ellipse
-            className="shape-orbit orbit-two"
-            cx="80"
-            cy="80"
-            rx="58"
-            ry="24"
-            transform="rotate(60 80 80)"
-          />
-          <ellipse
-            className="shape-orbit orbit-three"
-            cx="80"
-            cy="80"
-            rx="58"
-            ry="24"
-            transform="rotate(120 80 80)"
-          />
-          <circle className="shape-dot particle-one" cx="132" cy="80" r="5" />
-        </svg>
-      )}
-
-      {type === "oli" && (
-        <svg
-          className="agent-shape agent-shape-oli"
-          viewBox="0 0 160 160"
-          role="img"
-          aria-label="Oli silver CAD diamond"
-        >
-          <polygon className="shape-main" points="80,18 136,58 118,132 42,132 24,58" />
-          <polygon className="shape-detail-fill" points="80,38 112,62 102,112 58,112 48,62" />
-          <path className="shape-detail" d="M24 58 L80 92 L136 58" />
-          <path className="shape-detail" d="M80 18 L80 92 L80 142" />
-          <circle className="shape-dot dot-one" cx="80" cy="92" r="5" />
-        </svg>
-      )}
-
-      {type === "pluto" && (
-        <svg
-          className="agent-shape agent-shape-pluto"
-          viewBox="0 0 160 160"
-          role="img"
-          aria-label="Pluto velvet risk hexagon"
-        >
-          <polygon className="shape-main" points="80,14 132,44 132,116 80,146 28,116 28,44" />
-          <polygon className="shape-inner-polygon" points="80,42 108,58 108,102 80,118 52,102 52,58" />
-          <path className="shape-detail" d="M52 58 L108 102" />
-          <path className="shape-detail" d="M108 58 L52 102" />
-          <circle className="shape-dot dot-one" cx="80" cy="80" r="6" />
-        </svg>
-      )}
-
-      {type === "qaz" && (
-        <svg
-          className="agent-shape agent-shape-qaz"
-          viewBox="0 0 160 160"
-          role="img"
-          aria-label="QaZ pink validation prism"
-        >
-          <polygon className="shape-main" points="80,16 132,80 80,144 28,80" />
-          <path className="shape-detail" d="M54 82 L72 100 L110 58" />
-          <circle className="shape-ring" cx="80" cy="80" r="48" />
-          <circle className="shape-dot dot-one" cx="80" cy="16" r="4" />
-          <circle className="shape-dot dot-two" cx="132" cy="80" r="4" />
-          <circle className="shape-dot dot-three" cx="80" cy="144" r="4" />
-          <circle className="shape-dot dot-four" cx="28" cy="80" r="4" />
-        </svg>
-      )}
-
-      {type === "korva" && (
-        <svg
-          className="agent-shape agent-shape-korva"
-          viewBox="0 0 160 160"
-          role="img"
-          aria-label="Korva black hardware module"
-        >
-          <rect className="shape-main" x="34" y="34" width="92" height="92" rx="14" />
-          <rect className="shape-detail-fill" x="56" y="56" width="48" height="48" rx="8" />
-          <path className="shape-detail" d="M20 54 H34" />
-          <path className="shape-detail" d="M20 80 H34" />
-          <path className="shape-detail" d="M20 106 H34" />
-          <path className="shape-detail" d="M126 54 H140" />
-          <path className="shape-detail" d="M126 80 H140" />
-          <path className="shape-detail" d="M126 106 H140" />
-          <path className="shape-detail" d="M54 20 V34" />
-          <path className="shape-detail" d="M80 20 V34" />
-          <path className="shape-detail" d="M106 20 V34" />
-          <path className="shape-detail" d="M54 126 V140" />
-          <path className="shape-detail" d="M80 126 V140" />
-          <path className="shape-detail" d="M106 126 V140" />
-          <circle className="shape-dot dot-one" cx="80" cy="80" r="5" />
-        </svg>
-      )}
+function CommandAttentionAnimation() {
+  return (
+    <div className="command-animation-stage" aria-hidden="true">
+      <div className="command-grid-floor" />
+      <div className="command-scanline" />
+      <div className="command-core-pulse">
+        <span className="command-core-dot" />
+        <span className="command-core-ring ring-one" />
+        <span className="command-core-ring ring-two" />
+        <span className="command-core-ring ring-three" />
+      </div>
+      <div className="command-orbit orbit-one" />
+      <div className="command-orbit orbit-two" />
+      <div className="command-orbit orbit-three" />
+      <div className="command-data-rain rain-one" />
+      <div className="command-data-rain rain-two" />
+      <div className="command-data-rain rain-three" />
     </div>
   );
 }
@@ -875,7 +803,7 @@ function EchoPreview({ echoResult, setMission }) {
   return (
     <div className="echo-preview-card">
       <div className="echo-preview-header">
-        <AgentFigure type="echo" small />
+        <AgentFigure type="echo" small active />
         <div>
           <p className="eyebrow">Echo Interpretation</p>
           <h2>{echoResult.mission_title || "Interpreted OMNI Mission"}</h2>
@@ -944,7 +872,8 @@ function CommandPage({
   return (
     <section className="page command-page">
       <div className="command-hero">
-        <div className="omni-red-glow"></div>
+        <CommandAttentionAnimation />
+        <div className="omni-red-glow" />
 
         <div className="command-copy">
           <p className="eyebrow">Autonomous Engineering Command</p>
@@ -954,13 +883,12 @@ function CommandPage({
           </p>
         </div>
 
-        <div className="command-figure-array">
-          <AgentFigure type="echo" small />
-          <AgentFigure type="sky" small />
-          <AgentFigure type="isy" small />
-          <AgentFigure type="omni" />
-          <AgentFigure type="oli" small />
-          <AgentFigure type="pluto" small />
+        <div className="command-signal-strip" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
         </div>
 
         <div className="mission-console">
@@ -1089,7 +1017,7 @@ function BlueprintPage({ missionResult }) {
         </div>
 
         <div className="header-figure-card">
-          <AgentFigure type="omni" small />
+          <AgentFigure type="omni" small active />
           <span>Blueprint Generated</span>
         </div>
       </div>
@@ -1156,7 +1084,11 @@ function AgentsPage({ missionResult }) {
               }`}
               onClick={() => setActiveAgentId(agent.id)}
             >
-              <AgentFigure type={agent.figure} small />
+              <AgentFigure
+                type={agent.figure}
+                small
+                active={activeAgent?.id === agent.id}
+              />
               <div>
                 <h3>{agent.name}</h3>
                 <p>{agent.role}</p>
@@ -1167,7 +1099,12 @@ function AgentsPage({ missionResult }) {
 
         <div className={`agent-detail-panel ${activeAgent.figure}`}>
           <div className="agent-detail-hero">
-            <AgentFigure type={activeAgent.figure} />
+            <AgentFigure
+              key={activeAgent.id}
+              type={activeAgent.figure}
+              hero
+              active
+            />
             <div>
               <p className="eyebrow">{activeAgent.colorName}</p>
               <h2>{activeAgent.name}</h2>
@@ -1264,8 +1201,8 @@ function ValidationPage({ missionResult }) {
         </div>
 
         <div className="dual-agent-card">
-          <AgentFigure type="qaz" small />
-          <AgentFigure type="pluto" small />
+          <AgentFigure type="qaz" small active />
+          <AgentFigure type="pluto" small active />
         </div>
       </div>
 
@@ -1327,7 +1264,7 @@ function MemoryPage({ missionResult }) {
           </p>
         </div>
 
-        <AgentFigure type="omni" small />
+        <AgentFigure type="omni" small active />
       </div>
 
       <div className="memory-grid">
@@ -1385,7 +1322,7 @@ function EmptyPage({ title, message }) {
   return (
     <section className="page empty-page">
       <div className="empty-card">
-        <AgentFigure type="omni" />
+        <AgentFigure type="omni" hero active />
         <p className="eyebrow">{title}</p>
         <h1>No mission data yet</h1>
         <p>{message}</p>
@@ -1394,13 +1331,25 @@ function EmptyPage({ title, message }) {
   );
 }
 
-function LoadingOverlay({ message = "OMNI is coordinating the intelligence stack..." }) {
+function LoadingOverlay({
+  message = "OMNI is coordinating the intelligence stack...",
+  joke = getLocalMorbidJoke(),
+}) {
   return (
     <div className="loading-overlay">
       <div className="loading-card">
-        <AgentFigure type="omni" />
+        <div className="loading-command-animation" aria-hidden="true">
+          <span className="loading-ring ring-a" />
+          <span className="loading-ring ring-b" />
+          <span className="loading-ring ring-c" />
+          <span className="loading-core" />
+        </div>
         <p className="eyebrow">Executing Mission</p>
         <h2>{message}</h2>
+        <div className="loading-joke-card">
+          <p className="eyebrow">Morbid Runtime Humor</p>
+          <p>{joke}</p>
+        </div>
       </div>
     </div>
   );
@@ -1422,10 +1371,21 @@ function App() {
   const [exportResult, setExportResult] = useState(null);
   const [missionResult, setMissionResult] = useState(null);
   const [error, setError] = useState("");
+  const [loadingJoke, setLoadingJoke] = useState(getLocalMorbidJoke());
 
   const pageTitle = useMemo(() => {
     return PAGE_ITEMS.find((page) => page.id === activePage)?.label || "Command";
   }, [activePage]);
+
+  const prepareLoadingJoke = async () => {
+    setLoadingJoke(getLocalMorbidJoke());
+
+    const onlineJoke = await fetchMorbidLoadingJoke();
+
+    if (onlineJoke) {
+      setLoadingJoke(onlineJoke);
+    }
+  };
 
   const launchMission = async () => {
     if (!mission.trim()) {
@@ -1434,6 +1394,7 @@ function App() {
     }
 
     setLoading(true);
+    prepareLoadingJoke();
     setError("");
     setExportResult(null);
     setMissionResult(null);
@@ -1519,6 +1480,7 @@ function App() {
     }
 
     setLoading(true);
+    prepareLoadingJoke();
     setError("");
     setExportResult(null);
     setMissionResult(null);
@@ -1661,6 +1623,7 @@ function App() {
 
       {loading && (
         <LoadingOverlay
+          joke={loadingJoke}
           message={
             commandMode === "idea"
               ? "Echo is interpreting, OMNI is assembling, and exports are being prepared..."
