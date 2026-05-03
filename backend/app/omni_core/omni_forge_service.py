@@ -7,6 +7,7 @@ from backend.app.cad.workshop_part_cad_planner import generate_workshop_part_cad
 from backend.app.engineering.domains.workshop_parts.workshop_part_schema import WorkshopPartSpec
 from backend.app.engineering.mission_schema import build_engineering_mission
 from backend.app.engineering.validation_engine import validate_mission
+from backend.app.omni_core.forge_artifact_service import create_cad_export_artifact_manifest
 
 
 def run_omni_forge_validation(mission_text: str) -> Dict:
@@ -87,9 +88,10 @@ def run_omni_forge_cad_script_generation(mission_text: str) -> Dict:
 
 def run_omni_forge_cad_script_execution(script_path: str) -> Dict:
     """
-    OMNI Forge Level 4 service.
+    OMNI Forge Level 5 service.
 
-    Executes a previously generated CadQuery script and exports CAD files.
+    Executes a previously generated CadQuery script, exports CAD files,
+    and creates a frontend-ready CAD artifact manifest.
 
     Safety boundaries:
     - Only scripts inside outputs/omni_forge/cad_scripts are allowed.
@@ -101,11 +103,17 @@ def run_omni_forge_cad_script_execution(script_path: str) -> Dict:
 
     execution_result = execute_generated_cad_script(script_path)
 
+    artifact_package = None
+
+    if execution_result.get("exported_files"):
+        artifact_package = create_cad_export_artifact_manifest(execution_result)
+
     return {
         "status": execution_result.get("status"),
-        "forge_level": "level_4_cad_file_export",
+        "forge_level": "level_5_cad_artifact_manifest",
         "message": execution_result.get("message"),
         "execution_result": execution_result,
+        "artifact_package": artifact_package,
     }
 
 
