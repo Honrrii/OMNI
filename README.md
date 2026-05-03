@@ -1,48 +1,60 @@
 # OMNI — Multi-Agent AI Robotics Builder
 
-OMNI is a multi-agent AI robotics engineering system that converts natural-language project ideas into structured robotics artifacts, ROS2 packages, validation reports, and Fusion 360 CAD concept scripts.
+OMNI is a multi-agent AI robotics engineering system designed to speed up personal mechatronics, robotics, CAD, and ROS2 project development.
 
-Instead of only returning a text response, OMNI acts like an early-stage engineering command center. It interprets a mission, expands the requirements, coordinates specialist agents, generates project files, validates build outputs, and exports artifacts that can be tested, reviewed, or developed further.
+Instead of only returning a text response, OMNI acts like an early-stage engineering command center. It takes a rough natural-language idea, expands it into a structured mission, coordinates specialized AI agents, generates project files, validates build outputs, and exports artifacts that can be reviewed, tested, and improved.
 
-<p align="center">
-  <img src="frontend/src/assets/hero.png" alt="OMNI Command Interface" width="850"/>
-</p>
+The purpose of OMNI is to help move personal engineering projects from idea to prototype faster.
 
 ---
 
 ## Why OMNI Matters
 
-Personal robotics and mechatronics projects are difficult because they require several disciplines to work together at the same time: software, mechanical design, electronics, controls, simulation, documentation, and validation. A simple idea like “build a drone,” “design a rover,” or “make a robotic desk assistant” quickly turns into many smaller engineering tasks.
+Personal mechatronics projects are difficult because they combine several engineering disciplines at once:
 
-OMNI was built to speed up that early development process.
+- Software development
+- ROS2 robotics architecture
+- Mechanical design
+- CAD modeling
+- Electronics planning
+- Simulation
+- Testing and validation
+- Documentation
 
-The goal of OMNI is to help a builder move from a rough idea to a structured engineering foundation faster. Instead of manually starting from an empty folder, OMNI can help generate project structure, ROS2 package files, CAD concept scripts, validation plans, test checklists, and documentation that can be reviewed and improved.
+A simple idea like “build a rover,” “design a drone,” or “make a robotic desk assistant” quickly becomes a large system with many moving parts.
 
-OMNI is especially useful for personal mechatronics development because it helps organize the messy early stage of a project. It gives the user a starting point for:
+OMNI was created to reduce that early-stage friction.
 
-- Defining system requirements
-- Planning sensors, actuators, and control logic
-- Creating ROS2 nodes, topics, launch files, and package structure
-- Generating CAD concept scripts for Fusion 360 or related design workflows
-- Producing validation reports and safety notes
-- Creating reviewable artifacts before physical hardware is built
-- Reducing the time between idea, prototype plan, and testable output
+The goal is not to replace engineering judgment. The goal is to give the builder a strong starting point: a structured project plan, generated ROS2 package files, CAD concept logic, validation reports, test checklists, and reviewable artifacts.
 
-OMNI does not replace engineering judgment. Its purpose is to accelerate the design and validation workflow so a human builder can spend more time testing, improving, and understanding the system.
+This makes OMNI useful for students, hobbyists, and early-stage engineers who want to build mechatronics projects faster without starting every subsystem from scratch.
 
 ---
 
 ## Project Vision
 
-OMNI is designed to become a personal AI-assisted mechatronics lab.
+OMNI is being developed as a personal AI-assisted mechatronics lab.
 
-The long-term vision is to let a user describe a robotics or hardware idea in natural language and receive a full engineering starting package. That package may include ROS2 software, CAD design logic, validation steps, simulation planning, wiring assumptions, risk notes, and artifact manifests.
+The long-term vision is to let a user describe a robotics or hardware idea in natural language and receive a complete engineering starting package. That package can include:
 
-The project explores a central question:
+- ROS2 nodes and topic contracts
+- Launch files and configuration files
+- CAD concept scripts
+- Fusion 360 design logic
+- Simulation planning
+- Validation steps
+- Safety notes
+- Artifact manifests
+- Build reports
+- Documentation
 
-> How can AI agents help individuals build, validate, and iterate on complex robotics and mechatronics projects faster?
+The project explores one central question:
 
-For students, hobbyists, and early-stage engineers, OMNI can act as a bridge between an idea and a buildable prototype. It creates momentum by giving the user a structured first version instead of forcing them to start every subsystem from scratch.
+> How can AI agents help individuals design, validate, and iterate on complex robotics and mechatronics projects faster?
+
+For personal robotics development, this matters because the hardest part is often not just writing code or drawing CAD. The hard part is connecting everything into a complete workflow: requirements, design, software, simulation, validation, and iteration.
+
+OMNI is meant to create momentum by turning a rough idea into a structured engineering foundation.
 
 ---
 
@@ -67,11 +79,32 @@ OMNI currently supports:
 
 ---
 
-## Core Workflow
+## AI Avengers Agent Team
 
-OMNI follows a mission-based workflow.
+OMNI is powered by a team of specialized AI agents. Each character represents a different engineering role inside the system. Together, they form a coordinated workflow for turning rough ideas into structured robotics, CAD, ROS2, simulation, and validation artifacts.
 
-A user provides a prompt such as:
+<p align="center">
+  <img src="frontend/src/assets/agents/omni.png" alt="OMNI" width="90"/>
+  <img src="frontend/src/assets/agents/echo.png" alt="Echo" width="90"/>
+  <img src="frontend/src/assets/agents/korva.png" alt="Korva" width="90"/>
+  <img src="frontend/src/assets/agents/sky.png" alt="Sky" width="90"/>
+  <img src="frontend/src/assets/agents/qaz.png" alt="Qaz" width="90"/>
+  <img src="frontend/src/assets/agents/pluto.png" alt="Pluto" width="90"/>
+  <img src="frontend/src/assets/agents/oli.png" alt="Oli" width="90"/>
+  <img src="frontend/src/assets/agents/isy.png" alt="Isy" width="90"/>
+</p>
 
-```text
-Design a ROS2-based robotic desk assistant with a Raspberry Pi, camera module, servo-mounted sensor head, IMU, productivity logging, Fusion 360 enclosure concept, risk matrix, and validation checklist.
+### Agent Roles
+
+| Agent | Role | Importance |
+|---|---|---|
+| **OMNI** | Central Command System | Connects the frontend, backend, agent workflow, artifact generation, and validation process into one robotics builder. |
+| **Echo** | Mission Interpreter | Turns rough ideas into clearer engineering missions before the specialist agents begin. |
+| **Korva** | Robotics Systems Specialist | Focuses on robot structure, sensors, actuators, ROS2 nodes, topics, launch planning, and simulation readiness. |
+| **Sky** | Drone and Autonomous Systems Specialist | Supports drone missions, aerial robotics constraints, payload planning, stability concerns, and autonomous vehicle workflows. |
+| **Qaz** | CAD and Forge Artifact Specialist | Helps convert requirements into CAD parameters, Fusion 360 concepts, CadQuery-style scripts, STEP/STL export plans, and design artifacts. |
+| **Pluto** | Validation and Safety Reviewer | Reviews weak assumptions, missing requirements, unsafe design choices, and incomplete testing plans. |
+| **Oli** | Code and Implementation Specialist | Generates practical project files such as ROS2 Python nodes, launch files, backend routes, frontend logic, configs, and tests. |
+| **Isy** | Research and Documentation Specialist | Expands mission context, organizes requirements, explains design decisions, and improves documentation quality. |
+
+---
