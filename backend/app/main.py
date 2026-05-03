@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from agents.supervisor import SupervisorAgent
 from agents.mission_interpreter_agent import MissionInterpreterAgent
 from memory.memory_manager import get_recent_memory
+from backend.app.ros.ros_status_service import get_ros_status
 from backend.app.export.export_manager import export_mission_files
 from backend.app.omni_core.omni_forge_service import (
     run_omni_forge_validation,
@@ -458,6 +459,23 @@ def read_memory():
         raise HTTPException(
             status_code=500,
             detail=f"Failed to read memory: {str(error)}",
+        )
+    
+@app.get("/ros/status")
+def ros_status():
+    """
+    OMNI Simulation Level 1 endpoint.
+
+    Read-only ROS2 status dashboard data.
+    This does not move robots, launch Gazebo, or control hardware.
+    """
+    try:
+        return get_ros_status()
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"ROS status check failed: {str(error)}",
         )
 
 

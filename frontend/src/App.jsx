@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import "./App.css";
 
+import OmniForgePanel from "./components/OmniForgePanel";
+import OmniSimulationPanel from "./components/OmniSimulationPanel";
+
 import omniImg from "./assets/agents/omni.png";
 import echoImg from "./assets/agents/echo.png";
 import skyImg from "./assets/agents/sky.png";
@@ -66,6 +69,8 @@ const DEFAULT_TIMELINE = [
 
 const PAGE_ITEMS = [
   { id: "command", label: "Command" },
+  { id: "forge", label: "Forge" },
+  { id: "simulation", label: "Simulation" },
   { id: "blueprint", label: "Blueprint" },
   { id: "agents", label: "Agents" },
   { id: "artifacts", label: "Artifacts" },
@@ -999,6 +1004,56 @@ function CommandPage({
   );
 }
 
+function ForgePage() {
+  return (
+    <section className="page forge-page-v2">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">OMNI Forge</p>
+          <h1>Workshop Artifact Pipeline</h1>
+          <p>
+            Convert a workshop prompt into validation data, CAD parameters,
+            generated CadQuery scripts, exported STEP/STL files, and a
+            human-review artifact manifest.
+          </p>
+        </div>
+
+        <div className="header-figure-card">
+          <AgentFigure type="oli" small active />
+          <span>CAD Artifact System</span>
+        </div>
+      </div>
+
+      <OmniForgePanel />
+    </section>
+  );
+}
+
+function SimulationPage() {
+  return (
+    <section className="page simulation-page-v2">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">Simulation</p>
+          <h1>ROS2 Mission Control</h1>
+          <p>
+            Monitor ROS2 nodes, topics, RViz, Gazebo, rosbridge, and Foxglove
+            bridge status from the OMNI dashboard. This page is read-only and
+            does not control physical robots.
+          </p>
+        </div>
+
+        <div className="header-figure-card">
+          <AgentFigure type="sky" small active />
+          <span>ROS2 Status System</span>
+        </div>
+      </div>
+
+      <OmniSimulationPanel />
+    </section>
+  );
+}
+
 function BlueprintPage({ missionResult }) {
   if (!missionResult) {
     return <EmptyPage title="Blueprint" message="Run a mission to generate a blueprint." />;
@@ -1602,6 +1657,10 @@ function App() {
             setActivePage={setActivePage}
           />
         )}
+
+        {activePage === "forge" && <ForgePage />}
+
+        {activePage === "simulation" && <SimulationPage />}
 
         {activePage === "blueprint" && <BlueprintPage missionResult={missionResult} />}
 
