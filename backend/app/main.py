@@ -9,7 +9,10 @@ from agents.supervisor import SupervisorAgent
 from agents.mission_interpreter_agent import MissionInterpreterAgent
 from memory.memory_manager import get_recent_memory
 from backend.app.export.export_manager import export_mission_files
-from backend.app.omni_core.omni_forge_service import run_omni_forge_validation
+from backend.app.omni_core.omni_forge_service import (
+    run_omni_forge_validation,
+    run_omni_forge_cad_script_generation,
+)
 
 
 app = FastAPI(title="OMNI Command API")
@@ -561,9 +564,15 @@ def run_mission(request: MissionRequest):
 @app.post("/forge/validate")
 def forge_validate(request: ForgeMissionRequest):
     """
-    OMNI Forge Level 1 endpoint.
+    OMNI Forge Level 2 endpoint.
 
-    Takes a mission prompt and returns a structured engineering validation report.
+    Takes a mission prompt and returns:
+    - structured mission schema
+    - validation report
+    - CAD parameter plan when supported
+
+    This does not generate a CAD script.
+    This does not execute printer or workshop hardware actions.
     """
     mission = request.mission.strip()
 
@@ -580,6 +589,39 @@ def forge_validate(request: ForgeMissionRequest):
         raise HTTPException(
             status_code=500,
             detail=f"OMNI Forge validation failed: {str(error)}",
+        )
+
+
+@app.post("/forge/generate-cad-script")
+def forge_generate_cad_script(request: ForgeMissionRequest):
+    """
+    OMNI Forge Level 3 endpoint.
+
+    Takes a mission prompt and returns:
+    - structured mission schema
+    - validation report
+    - CAD parameter plan
+    - generated CadQuery script saved to disk
+
+    This does not execute the script.
+    This does not start fabrication.
+    This does not control printers or physical devices.
+    """
+    mission = request.mission.strip()
+
+    if not mission:
+        raise HTTPException(
+            status_code=400,
+            detail="Mission cannot be empty.",
+        )
+
+    try:
+        return run_omni_forge_cad_script_generation(mission)
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"OMNI Forge CAD script generation failed: {str(error)}",
         )
 
 
