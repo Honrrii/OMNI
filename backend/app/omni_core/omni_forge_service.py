@@ -1,9 +1,11 @@
 from typing import Dict, Optional
 
+from backend.app.cad.cadquery_script_generator import generate_cadquery_script_from_plan
+from backend.app.cad.generated_script_writer import write_generated_cad_script
+from backend.app.cad.workshop_part_cad_planner import generate_workshop_part_cad_plan
+from backend.app.engineering.domains.workshop_parts.workshop_part_schema import WorkshopPartSpec
 from backend.app.engineering.mission_schema import build_engineering_mission
 from backend.app.engineering.validation_engine import validate_mission
-from backend.app.engineering.domains.workshop_parts.workshop_part_schema import WorkshopPartSpec
-from backend.app.cad.workshop_part_cad_planner import generate_workshop_part_cad_plan
 
 
 def run_omni_forge_validation(mission_text: str) -> Dict:
@@ -33,6 +35,52 @@ def run_omni_forge_validation(mission_text: str) -> Dict:
         "forge_level": "level_2_cad_parameter_planning" if cad_plan else "level_1_validation",
         "message": "OMNI Forge validation completed.",
         "report": report,
+    }
+
+
+def run_omni_forge_cad_script_generation(mission_text: str) -> Dict:
+    """
+    OMNI Forge Level 3 service.
+
+    Converts a natural-language engineering prompt into:
+    - validation report
+    - CAD parameter plan
+    - generated CadQuery script saved to disk
+
+    This does not execute the CAD script.
+    This does not control printers or physical devices.
+    """
+
+    validation_result = run_omni_forge_validation(mission_text)
+    report = validation_result.get("report", {})
+    cad_plan = report.get("cad_plan")
+
+    if not cad_plan:
+        return {
+            "status": "blocked",
+            "forge_level": "level_3_cadquery_script_generation",
+            "message": "No CAD plan was available. Script generation was skipped.",
+            "report": report,
+            "cad_script": None,
+        }
+
+    script_text = generate_cadquery_script_from_plan(cad_plan)
+
+    write_result = write_generated_cad_script(
+        script_text=script_text,
+        mission_text=mission_text,
+        cad_plan=cad_plan,
+    )
+
+    return {
+        "status": "success",
+        "forge_level": "level_3_cadquery_script_generation",
+        "message": "OMNI Forge generated a CadQuery script for human review.",
+        "report": report,
+        "cad_script": {
+            **write_result,
+            "script_text": script_text,
+        },
     }
 
 
