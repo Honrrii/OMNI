@@ -9,6 +9,7 @@ from agents.supervisor import SupervisorAgent
 from agents.mission_interpreter_agent import MissionInterpreterAgent
 from memory.memory_manager import get_recent_memory
 from backend.app.export.export_manager import export_mission_files
+from backend.app.omni_core.omni_forge_service import run_omni_forge_validation
 
 
 app = FastAPI(title="OMNI Command API")
@@ -42,6 +43,10 @@ interpreter = MissionInterpreterAgent()
 # REQUEST MODELS
 # ---------------------------------------------------------
 class MissionRequest(BaseModel):
+    mission: str
+
+
+class ForgeMissionRequest(BaseModel):
     mission: str
 
 
@@ -207,6 +212,7 @@ def build_default_artifacts(mission: str, final_output: str):
 def sanitize_legacy_names(value: Any) -> Any:
     """
     Recursively removes old Marvel/Avengers naming from API responses.
+
     This gives the frontend OMNI-native data even if older modules still
     return older labels.
     """
@@ -248,6 +254,7 @@ def sanitize_legacy_names(value: Any) -> Any:
 def remove_legacy_agent_keys(agents: Any) -> Any:
     """
     The supervisor may temporarily return both legacy keys and new OMNI keys.
+
     This removes old keys from the API output while preserving the new keys.
     """
     if not isinstance(agents, dict):
@@ -392,6 +399,7 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
 def run_supervisor_mission(mission: str) -> Dict[str, Any]:
     """
     Runs the OMNI supervisor and returns a normalized mission result.
+
     Used by both /api/mission/run and /api/mission/interpret-and-run.
     """
     if hasattr(supervisor, "run_mission_structured"):
@@ -437,6 +445,7 @@ def read_memory():
             "memory": sanitize_legacy_names(memory),
             "timestamp": datetime.now().isoformat(),
         }
+
     except Exception as error:
         raise HTTPException(
             status_code=500,
@@ -546,6 +555,31 @@ def run_mission(request: MissionRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Mission failed: {str(error)}",
+        )
+
+
+@app.post("/forge/validate")
+def forge_validate(request: ForgeMissionRequest):
+    """
+    OMNI Forge Level 1 endpoint.
+
+    Takes a mission prompt and returns a structured engineering validation report.
+    """
+    mission = request.mission.strip()
+
+    if not mission:
+        raise HTTPException(
+            status_code=400,
+            detail="Mission cannot be empty.",
+        )
+
+    try:
+        return run_omni_forge_validation(mission)
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"OMNI Forge validation failed: {str(error)}",
         )
 
 
