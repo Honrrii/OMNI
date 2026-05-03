@@ -4,15 +4,45 @@ OMNI is a multi-agent AI robotics engineering system that converts natural-langu
 
 Instead of only returning a text response, OMNI acts like an early-stage engineering command center. It interprets a mission, expands the requirements, coordinates specialist agents, generates project files, validates build outputs, and exports artifacts that can be tested, reviewed, or developed further.
 
----
-
-## OMNI Dashboard Preview
-
 <p align="center">
-  <img src="docs/screenshots/omni-command-screen.png" alt="OMNI Command Screen" width="900"/>
+  <img src="frontend/src/assets/hero.png" alt="OMNI Command Interface" width="850"/>
 </p>
 
-OMNI provides a mission-control style interface where users can submit full engineering missions or use Echo to translate rough ideas into structured robotics prompts.
+---
+
+## Why OMNI Matters
+
+Personal robotics and mechatronics projects are difficult because they require several disciplines to work together at the same time: software, mechanical design, electronics, controls, simulation, documentation, and validation. A simple idea like “build a drone,” “design a rover,” or “make a robotic desk assistant” quickly turns into many smaller engineering tasks.
+
+OMNI was built to speed up that early development process.
+
+The goal of OMNI is to help a builder move from a rough idea to a structured engineering foundation faster. Instead of manually starting from an empty folder, OMNI can help generate project structure, ROS2 package files, CAD concept scripts, validation plans, test checklists, and documentation that can be reviewed and improved.
+
+OMNI is especially useful for personal mechatronics development because it helps organize the messy early stage of a project. It gives the user a starting point for:
+
+- Defining system requirements
+- Planning sensors, actuators, and control logic
+- Creating ROS2 nodes, topics, launch files, and package structure
+- Generating CAD concept scripts for Fusion 360 or related design workflows
+- Producing validation reports and safety notes
+- Creating reviewable artifacts before physical hardware is built
+- Reducing the time between idea, prototype plan, and testable output
+
+OMNI does not replace engineering judgment. Its purpose is to accelerate the design and validation workflow so a human builder can spend more time testing, improving, and understanding the system.
+
+---
+
+## Project Vision
+
+OMNI is designed to become a personal AI-assisted mechatronics lab.
+
+The long-term vision is to let a user describe a robotics or hardware idea in natural language and receive a full engineering starting package. That package may include ROS2 software, CAD design logic, validation steps, simulation planning, wiring assumptions, risk notes, and artifact manifests.
+
+The project explores a central question:
+
+> How can AI agents help individuals build, validate, and iterate on complex robotics and mechatronics projects faster?
+
+For students, hobbyists, and early-stage engineers, OMNI can act as a bridge between an idea and a buildable prototype. It creates momentum by giving the user a structured first version instead of forcing them to start every subsystem from scratch.
 
 ---
 
@@ -37,35 +67,11 @@ OMNI currently supports:
 
 ---
 
-## ROS2 Mission Control
+## Core Workflow
 
-<p align="center">
-  <img src="docs/screenshots/ros2-mission-control.png" alt="ROS2 Mission Control" width="900"/>
-</p>
+OMNI follows a mission-based workflow.
 
-The ROS2 Mission Control panel is a read-only dashboard for monitoring simulation-related system status. It is designed to help track ROS2 nodes, topics, RViz, Gazebo, rosbridge, and Foxglove bridge availability from inside the OMNI interface.
-
-This page does **not** directly control physical robots. It is intended for monitoring, debugging, and simulation workflow visibility.
-
----
-
-## Workshop Artifact Pipeline
-
-<p align="center">
-  <img src="docs/screenshots/workshop-artifact-pipeline.png" alt="Workshop Artifact Pipeline" width="900"/>
-</p>
-
-The Workshop Artifact Pipeline converts an engineering prompt into structured build artifacts. The goal is to move from a rough idea into reviewable engineering outputs such as validation data, CAD parameters, generated CadQuery scripts, exported STEP/STL files, and a human-review artifact manifest.
-
----
-
-## Overview
-
-OMNI is designed as an AI-assisted robotics development workflow.
-
-The system takes a rough engineering idea, expands it into a structured mission, and generates practical project artifacts that can be inspected, built, validated, and improved.
-
-A user can submit a prompt such as:
+A user provides a prompt such as:
 
 ```text
 Design a ROS2-based robotic desk assistant with a Raspberry Pi, camera module, servo-mounted sensor head, IMU, productivity logging, Fusion 360 enclosure concept, risk matrix, and validation checklist.
