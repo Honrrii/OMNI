@@ -63,3 +63,23 @@ Integrations:
 ## Phase 5: Semi-Autonomous Workshop
 
 OMNI can queue and monitor jobs, but human approval remains required for physical execution.
+
+## Current Progress
+
+### Completed
+
+- Level 1: Mission validation
+- Level 2: CAD parameter planning
+- Level 3: CadQuery script generation
+- Level 4: CadQuery script execution and STEP/STL export
+
+### Current Pipeline
+
+Prompt → EngineeringMission → WorkshopPartSpec → ValidationReport → CADParameterPlan → CadQueryScript → STEP/STL Export
+
+### Safety Status
+
+- No printer control implemented.
+- No physical fabrication started automatically.
+- CAD scripts require generated file review.
+- Human approval remains required before fabrication.
