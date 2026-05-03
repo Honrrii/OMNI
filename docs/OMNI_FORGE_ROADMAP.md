@@ -83,3 +83,25 @@ Prompt → EngineeringMission → WorkshopPartSpec → ValidationReport → CADP
 - No physical fabrication started automatically.
 - CAD scripts require generated file review.
 - Human approval remains required before fabrication.
+
+## Accountability Before Autonomy
+
+OMNI is not being built to act first and explain later.
+
+Before OMNI gains hands, it gets a black box.  
+Before OMNI gains autonomy, it gets memory with consequences.  
+Before OMNI controls anything physical, every action must answer five questions:
+
+1. What did we believe?
+2. What did we try?
+3. What happened?
+4. What did we learn?
+5. What changes now?
+
+OMNI becomes self-improving not because it is alive, but because it is accountable.
+
+Every mission must preserve knowledge, punish bad assumptions, repeat what works, and institutionalize scars. A failed print, broken circuit, rejected design, simulation mismatch, or unsafe command is not wasted effort. It becomes engineering provenance.
+
+**No mission dies as output. Every mission becomes provenance.**
+
+Accountability is the difference between a genius lab assistant and a haunted toaster with Wi-Fi.
