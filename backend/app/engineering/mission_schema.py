@@ -65,7 +65,17 @@ def build_engineering_mission(mission_text: str) -> EngineeringMission:
         target_domain = "robotics"
 
     # Detect requested outputs
-    if any(word in text for word in ["cad", "fusion", "fusion 360", "model", "stl", "step"]):
+    if any(word in text for word in [
+        "cad",
+        "fusion",
+        "fusion 360",
+        "model",
+        "stl",
+        "step",
+        "printable",
+        "3d print",
+        "printer",
+    ]):
         requires_cad = True
         requested_outputs.append("cad_plan")
 
