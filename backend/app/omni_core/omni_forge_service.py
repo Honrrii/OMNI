@@ -1,5 +1,6 @@
 from typing import Dict, Optional
 
+from backend.app.cad.cad_script_runner import execute_generated_cad_script
 from backend.app.cad.cadquery_script_generator import generate_cadquery_script_from_plan
 from backend.app.cad.generated_script_writer import write_generated_cad_script
 from backend.app.cad.workshop_part_cad_planner import generate_workshop_part_cad_plan
@@ -81,6 +82,30 @@ def run_omni_forge_cad_script_generation(mission_text: str) -> Dict:
             **write_result,
             "script_text": script_text,
         },
+    }
+
+
+def run_omni_forge_cad_script_execution(script_path: str) -> Dict:
+    """
+    OMNI Forge Level 4 service.
+
+    Executes a previously generated CadQuery script and exports CAD files.
+
+    Safety boundaries:
+    - Only scripts inside outputs/omni_forge/cad_scripts are allowed.
+    - The script is scanned before execution.
+    - A subprocess timeout is enforced.
+    - This does not control printers.
+    - This does not start fabrication.
+    """
+
+    execution_result = execute_generated_cad_script(script_path)
+
+    return {
+        "status": execution_result.get("status"),
+        "forge_level": "level_4_cad_file_export",
+        "message": execution_result.get("message"),
+        "execution_result": execution_result,
     }
 
 

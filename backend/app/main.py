@@ -12,6 +12,7 @@ from backend.app.export.export_manager import export_mission_files
 from backend.app.omni_core.omni_forge_service import (
     run_omni_forge_validation,
     run_omni_forge_cad_script_generation,
+    run_omni_forge_cad_script_execution,
 )
 
 
@@ -51,6 +52,10 @@ class MissionRequest(BaseModel):
 
 class ForgeMissionRequest(BaseModel):
     mission: str
+
+
+class ForgeScriptExecutionRequest(BaseModel):
+    script_path: str
 
 
 class MissionExportRequest(BaseModel):
@@ -622,6 +627,34 @@ def forge_generate_cad_script(request: ForgeMissionRequest):
         raise HTTPException(
             status_code=500,
             detail=f"OMNI Forge CAD script generation failed: {str(error)}",
+        )
+
+
+@app.post("/forge/execute-cad-script")
+def forge_execute_cad_script(request: ForgeScriptExecutionRequest):
+    """
+    OMNI Forge Level 4 endpoint.
+
+    Executes a previously generated CadQuery script and exports CAD files.
+
+    This does not start fabrication.
+    This does not control printers or physical devices.
+    """
+    script_path = request.script_path.strip()
+
+    if not script_path:
+        raise HTTPException(
+            status_code=400,
+            detail="script_path cannot be empty.",
+        )
+
+    try:
+        return run_omni_forge_cad_script_execution(script_path)
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"OMNI Forge CAD script execution failed: {str(error)}",
         )
 
 
