@@ -79,7 +79,7 @@ OMNI currently supports:
 
 ---
 
-## AI Avengers Agent Team
+## OMNI Agent Council
 
 OMNI is powered by a team of specialized AI agents. Each character represents a different engineering role inside the system. Together, they form a coordinated workflow for turning rough ideas into structured robotics, CAD, ROS2, simulation, and validation artifacts.
 
