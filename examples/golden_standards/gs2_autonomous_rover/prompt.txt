@@ -1,0 +1,20 @@
+Design a small autonomous ground rover for indoor robotics experimentation.
+
+The system should include:
+- ROS2 node architecture
+- differential-drive mechanical layout
+- wheel radius assumption
+- motor torque estimate
+- target speed estimate
+- battery runtime estimate
+- sensor layout plan
+- KiCad electronics planning artifact
+- chassis material recommendation
+- URDF or simulation plan
+- CAD concept script
+- validation report
+- provenance record
+
+The design must clearly separate verified calculations, assumptions, missing information, and safety limitations.
+
+This is an educational robotics benchmark intended for simulation and prototype planning.

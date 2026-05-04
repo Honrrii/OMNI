@@ -1,0 +1,19 @@
+Design a small educational quadcopter drone concept for engineering planning and simulation.
+
+The system should include:
+- ROS2 architecture plan
+- KiCad electronics planning artifact
+- mass budget
+- thrust-to-weight calculation
+- motor and propeller assumptions
+- battery and estimated flight time calculation
+- payload margin
+- center-of-mass assessment
+- material recommendation
+- CAD concept script
+- validation report
+- provenance record
+
+The design must clearly separate verified calculations, assumptions, missing information, and safety limitations.
+
+This is not a flight-certified drone design. It is an educational engineering benchmark.
