@@ -7,6 +7,9 @@ from backend.app.engineering.golden_standards.golden_standard_registry import ge
 from backend.app.engineering.golden_standards.golden_standard_validator import (
     validate_against_golden_standard,
 )
+from backend.app.engineering.golden_standards.golden_standard_report_formatter import (
+    format_golden_standard_report,
+)
 
 
 def detect_golden_standard_id(mission: EngineeringMission) -> Optional[str]:
@@ -86,6 +89,7 @@ def validate_mission(
     domain_report = None
     derived_spec = None
     golden_standard_report = None
+    golden_standard_summary = None
 
     # General mission validation
     if mission.mission_text.strip():
@@ -138,6 +142,7 @@ def validate_mission(
                 mission_result=mission_result,
                 standard_id=golden_standard_id,
             ).to_dict()
+            golden_standard_summary = format_golden_standard_report(golden_standard_report)
 
             if golden_standard_report["status"] == "passed":
                 passed_checks.append(
@@ -185,4 +190,5 @@ def validate_mission(
         "derived_spec": derived_spec.dict() if derived_spec else None,
         "golden_standard_id": golden_standard_id,
         "golden_standard_report": golden_standard_report,
+        "golden_standard_summary": golden_standard_summary
     }
