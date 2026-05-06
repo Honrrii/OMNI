@@ -24,15 +24,43 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
 
 def _collect_exported_files(export_dir: Path) -> list[str]:
     """
-    Collect all files already generated inside a mission export folder.
+    Collect human-relevant exported files inside a mission export folder.
+
+    This intentionally skips generated build/cache artifacts so the
+    mission report stays readable and professional.
     """
     if not export_dir.exists():
         return []
 
+    ignored_parts = {
+        "__pycache__",
+        ".pytest_cache",
+        "build",
+        "install",
+        "log",
+    }
+
+    ignored_suffixes = {
+        ".pyc",
+        ".pyo",
+        ".log",
+    }
+
     files = []
+
     for file_path in export_dir.rglob("*"):
-        if file_path.is_file():
-            files.append(str(file_path.relative_to(export_dir)))
+        if not file_path.is_file():
+            continue
+
+        relative_path = file_path.relative_to(export_dir)
+
+        if any(part in ignored_parts for part in relative_path.parts):
+            continue
+
+        if file_path.suffix in ignored_suffixes:
+            continue
+
+        files.append(str(relative_path))
 
     return sorted(files)
 

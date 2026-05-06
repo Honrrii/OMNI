@@ -9,6 +9,7 @@ from backend.app.generators.fusion360_script_generator import (
     generate_fusion360_export,
     should_generate_fusion360_script,
 )
+from backend.app.generators.mission_report_generator import generate_mission_report
 from backend.app.validators.ros2_build_validator import validate_ros2_package
 
 
@@ -513,6 +514,43 @@ def export_mission_files(
         else "none"
     )
 
+    # ---------------------------------------------------------
+    # OMNI Mission Report / Engineering Provenance Dossier
+    # ---------------------------------------------------------
+    mission_report = None
+
+    try:
+        report_validation = {
+            "status": validation.get("verdict", mission_result.get("status", "unknown")),
+            "summary": "Mission export completed with generated artifacts, validation data, and engineering review notes.",
+            "validation": validation,
+            "ros2_validation": ros2_validation,
+            "fusion360_generation": fusion360_generation,
+        }
+
+        mission_report = generate_mission_report(
+            mission_text=mission,
+            mission_result=mission_result,
+            validation_result=report_validation,
+            output_root=OUTPUT_ROOT,
+            mission_slug=folder_name,
+        )
+
+        for report_key in ["report_file", "artifact_manifest", "provenance_record"]:
+            report_path_value = mission_report.get(report_key)
+
+            if report_path_value:
+                report_path = Path(report_path_value)
+
+                if report_path.exists():
+                    record(report_path)
+
+    except Exception as error:
+        mission_report = {
+            "status": "failed",
+            "error": str(error),
+        }
+
     readme = f"""# OMNI Mission Export
 
 ## Mission
@@ -558,4 +596,5 @@ def export_mission_files(
         "ros2_generation": ros2_generation,
         "ros2_validation": ros2_validation,
         "fusion360_generation": fusion360_generation,
+        "mission_report": mission_report,
     }
