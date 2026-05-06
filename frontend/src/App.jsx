@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import "./App.css";
+import MissionReportPanel from "./components/MissionReportPanel.jsx";
 
 import OmniForgePanel from "./components/OmniForgePanel";
 import OmniSimulationPanel from "./components/OmniSimulationPanel";
@@ -1219,6 +1220,8 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
           </div>
         </div>
       </div>
+
+      <MissionReportPanel exportResult={exportResult} />
 
       <BuildVerificationCard exportResult={exportResult} />
 

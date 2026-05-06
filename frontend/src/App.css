@@ -3025,3 +3025,128 @@ pre {
     width: 100%;
   }
 }
+
+.mission-report-panel {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(210, 220, 255, 0.18);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(210, 220, 255, 0.11), rgba(90, 110, 150, 0.08)),
+    rgba(8, 12, 22, 0.82);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+}
+
+.mission-report-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.mission-report-kicker {
+  display: inline-flex;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(210, 225, 255, 0.72);
+}
+
+.mission-report-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: #f5f7ff;
+}
+
+.mission-report-header p {
+  margin: 0.45rem 0 0;
+  max-width: 720px;
+  color: rgba(235, 240, 255, 0.72);
+  line-height: 1.55;
+}
+
+.mission-report-status-pill {
+  flex: 0 0 auto;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid rgba(140, 255, 190, 0.35);
+  border-radius: 999px;
+  background: rgba(40, 180, 110, 0.12);
+  color: #bfffd7;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mission-report-summary-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.45fr;
+  gap: 0.85rem;
+  margin: 1rem 0;
+}
+
+.mission-report-stat-card,
+.mission-report-file-card {
+  padding: 0.9rem;
+  border: 1px solid rgba(220, 230, 255, 0.13);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.mission-report-stat-card span,
+.mission-report-file-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: rgba(230, 236, 255, 0.64);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mission-report-stat-card strong {
+  color: #ffffff;
+  font-size: 1.45rem;
+}
+
+.mission-report-panel code {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: #dfe8ff;
+  font-size: 0.82rem;
+}
+
+.mission-report-file-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.mission-report-file-card p {
+  margin: 0 0 0.75rem;
+  color: rgba(235, 240, 255, 0.68);
+  line-height: 1.45;
+}
+
+.mission-report-note {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 210, 120, 0.25);
+  border-radius: 16px;
+  background: rgba(255, 190, 90, 0.08);
+  color: rgba(255, 240, 210, 0.88);
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .mission-report-header {
+    flex-direction: column;
+  }
+
+  .mission-report-summary-grid,
+  .mission-report-file-grid {
+    grid-template-columns: 1fr;
+  }
+}
