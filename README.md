@@ -29,6 +29,8 @@ The goal is not to replace engineering judgment. The goal is to give the builder
 
 This makes OMNI useful for students, hobbyists, and early-stage engineers who want to build mechatronics projects faster without starting every subsystem from scratch.
 
+OMNI is designed to preserve engineering context, not just generate outputs. Each exported mission now includes a mission report and provenance record so users can review what was generated, what assumptions were made, what still needs validation, and which artifacts require human approval before hardware use!
+
 ---
 
 ## Project Vision
@@ -76,6 +78,7 @@ OMNI currently supports:
 - FastAPI backend for mission execution and export workflows
 - ROS2 simulation status monitoring from the dashboard
 - CAD artifact pipeline for generated engineering outputs
+- Automatic Mission Report Exports: OMNI now generates structured mission dossiers containing mission summaries, generated artifacts, validation results, engineering provenance, exported file manifests, and human approval gates.
 
 ---
 
