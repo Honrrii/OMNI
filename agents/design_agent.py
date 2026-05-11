@@ -5,7 +5,7 @@ from agents.llm_clients import call_gemini
 class DesignAgent(BaseAgent):
     def __init__(self):
         super().__init__(
-            name="Gemini Design Agent",
+            name="Vega",
             role="Creative design expansion, unconventional morphology, and concept alternatives",
             system_prompt=(
                 "You are OMNI's Gemini-powered creative design expansion agent. "

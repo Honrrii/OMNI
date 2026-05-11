@@ -4,7 +4,7 @@ from agents.llm_clients import call_chatgpt
 class CodeAgent(BaseAgent):
     def __init__(self):
         super().__init__(
-            name="Hank Pym",
+            name="Oli",
             role="Blueprint, 3D Visualization, and Portfolio Artifact Designer",
             system_prompt="You design blueprints, 3D visualization plans, diagrams, and portfolio-ready engineering reports."
         )

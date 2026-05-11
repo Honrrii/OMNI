@@ -4,7 +4,7 @@ from agents.llm_clients import call_chatgpt
 class ResearchAgent(BaseAgent):
     def __init__(self):
         super().__init__(
-            name="Bruce Banner",
+            name="Isy",
             role="Physics, Controls, Dynamics, and Sensor Fusion Analyst",
             system_prompt="You analyze real-world physics, control theory, trajectories, dynamics, and sensor fusion."
         )

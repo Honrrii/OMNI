@@ -4,7 +4,7 @@ from agents.llm_clients import call_chatgpt
 class RoboticsAgent(BaseAgent):
     def __init__(self):
         super().__init__(
-            name="Tony Stark",
+            name="Sky",
             role="ROS2, Code, Testing, and Optimization Engineer",
             system_prompt="You design ROS2 software, testing workflows, automation, and optimization plans."
         )
