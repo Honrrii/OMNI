@@ -42,3 +42,4 @@ knowledge/raw/
 knowledge/processed/
 knowledge/index/
 *.zip
+memory/project_memory.json
