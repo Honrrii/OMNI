@@ -1,5 +1,5 @@
 from agents.base_agent import BaseAgent
-from agents.llm_clients import call_chatgpt
+from backend.app.omni_core.llm_router import call_llm
 
 class CodeAgent(BaseAgent):
     def __init__(self):
@@ -67,4 +67,4 @@ Provide visualization-ready items:
 - portfolio sections
 - next visual artifacts to generate
 """
-        return call_chatgpt(prompt)
+        return call_llm(prompt, role="Oli")
