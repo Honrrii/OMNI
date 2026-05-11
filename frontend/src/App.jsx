@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import "./App.css";
+import { initSpaceBg } from "./space-bg";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
 
 import OmniForgePanel from "./components/OmniForgePanel";
@@ -13,6 +14,7 @@ import isyImg from "./assets/agents/isy.png";
 import oliImg from "./assets/agents/oli.png";
 import plutoImg from "./assets/agents/pluto.png";
 import qazImg from "./assets/agents/qaz.png";
+import vegaImg from "./assets/agents/vega.png";
 
 const API_URL = "http://127.0.0.1:8000/api/mission/run";
 const EXPORT_API_URL = "http://127.0.0.1:8000/api/mission/export";
@@ -23,6 +25,8 @@ const INTERPRET_AND_RUN_API_URL =
 const AGENT_IMAGE_MAP = {
   omni: omniImg,
   echo: echoImg,
+  vega: vegaImg,
+  design: vegaImg,
   sky: skyImg,
   korva: korvaImg,
   isy: isyImg,
@@ -76,6 +80,7 @@ const PAGE_ITEMS = [
   { id: "agents", label: "Agents" },
   { id: "artifacts", label: "Artifacts" },
   { id: "validation", label: "Validation" },
+  { id: "knowledge", label: "Knowledge" },
   { id: "memory", label: "Memory" },
 ];
 
@@ -86,7 +91,21 @@ const AGENT_ROLE_MAP = {
     role: "Mission Interpreter / Prompt Expansion Agent",
     status: "Idea interpreted",
     figure: "echo",
-    colorName: "Calm Green",
+  },
+    vega: {
+    id: "design",
+    name: "Vega",
+    role: "Creative Design, Morphology, and Concept Expansion",
+    status: "Design alternatives generated",
+    figure: "vega",
+  },
+    design: {
+    id: "design",
+    name: "Vega",
+    role: "Creative Design, Morphology, and Concept Expansion",
+    status: "Design alternatives generated",
+    figure: "vega",
+    colorName: "Bio-Cyber Teal",
   },
   reed_richards: {
     id: "omni",
@@ -94,7 +113,6 @@ const AGENT_ROLE_MAP = {
     role: "Mission Orchestrator / Systems Intelligence",
     status: "Mission synthesized",
     figure: "omni",
-    colorName: "Command Red",
   },
   omni: {
     id: "omni",
@@ -102,7 +120,6 @@ const AGENT_ROLE_MAP = {
     role: "Mission Orchestrator / Systems Intelligence",
     status: "Mission synthesized",
     figure: "omni",
-    colorName: "Command Red",
   },
   tony_stark: {
     id: "sky",
@@ -110,7 +127,6 @@ const AGENT_ROLE_MAP = {
     role: "Robotics, ROS2, Drones, and Autonomy",
     status: "Robotics report generated",
     figure: "sky",
-    colorName: "Blue",
   },
   sky: {
     id: "sky",
@@ -118,7 +134,6 @@ const AGENT_ROLE_MAP = {
     role: "Robotics, ROS2, Drones, and Autonomy",
     status: "Robotics report generated",
     figure: "sky",
-    colorName: "Blue",
   },
   shuri: {
     id: "korva",
@@ -126,7 +141,6 @@ const AGENT_ROLE_MAP = {
     role: "Hardware, Electronics, Embedded Systems, and PCB",
     status: "Hardware architecture generated",
     figure: "korva",
-    colorName: "Black / White Outline",
   },
   korva: {
     id: "korva",
@@ -134,7 +148,6 @@ const AGENT_ROLE_MAP = {
     role: "Hardware, Electronics, Embedded Systems, and PCB",
     status: "Hardware architecture generated",
     figure: "korva",
-    colorName: "Black / White Outline",
   },
   bruce_banner: {
     id: "isy",
@@ -142,7 +155,6 @@ const AGENT_ROLE_MAP = {
     role: "Physics, Controls, Dynamics, and Feasibility",
     status: "Physics analysis generated",
     figure: "isy",
-    colorName: "Sunset Orange",
   },
   isy: {
     id: "isy",
@@ -150,7 +162,6 @@ const AGENT_ROLE_MAP = {
     role: "Physics, Controls, Dynamics, and Feasibility",
     status: "Physics analysis generated",
     figure: "isy",
-    colorName: "Sunset Orange",
   },
   hank_pym: {
     id: "oli",
@@ -158,7 +169,6 @@ const AGENT_ROLE_MAP = {
     role: "CAD, Fusion 360, 3D Concepts, and Visual Artifacts",
     status: "Design report generated",
     figure: "oli",
-    colorName: "White / Silver",
   },
   oli: {
     id: "oli",
@@ -166,7 +176,6 @@ const AGENT_ROLE_MAP = {
     role: "CAD, Fusion 360, 3D Concepts, and Visual Artifacts",
     status: "Design report generated",
     figure: "oli",
-    colorName: "White / Silver",
   },
   ultron: {
     id: "pluto",
@@ -174,7 +183,6 @@ const AGENT_ROLE_MAP = {
     role: "Risk, Failure Analysis, and Safety Gates",
     status: "Risk critique generated",
     figure: "pluto",
-    colorName: "Velvet Purple",
   },
   pluto: {
     id: "pluto",
@@ -182,7 +190,6 @@ const AGENT_ROLE_MAP = {
     role: "Risk, Failure Analysis, and Safety Gates",
     status: "Risk critique generated",
     figure: "pluto",
-    colorName: "Velvet Purple",
   },
   vision: {
     id: "qaz",
@@ -190,7 +197,6 @@ const AGENT_ROLE_MAP = {
     role: "Validation, Scoring, and Requirements Verification",
     status: "Validation complete",
     figure: "qaz",
-    colorName: "Light Pink",
   },
   qaz: {
     id: "qaz",
@@ -198,12 +204,12 @@ const AGENT_ROLE_MAP = {
     role: "Validation, Scoring, and Requirements Verification",
     status: "Validation complete",
     figure: "qaz",
-    colorName: "Light Pink",
   },
 };
 
 const FALLBACK_AGENTS = [
   AGENT_ROLE_MAP.echo,
+  AGENT_ROLE_MAP.vega,
   AGENT_ROLE_MAP.omni,
   AGENT_ROLE_MAP.sky,
   AGENT_ROLE_MAP.korva,
@@ -472,6 +478,7 @@ function normalizeMissionResultFromData(data, fallbackMission) {
     timeline: Array.isArray(data.timeline) ? data.timeline : DEFAULT_TIMELINE,
     createdAt: data.created_at || null,
     validation: data.validation || null,
+    knowledge_context: data.knowledge_context || null,
     raw: data,
   };
 }
@@ -1309,6 +1316,106 @@ function ValidationPage({ missionResult }) {
   );
 }
 
+function KnowledgeContextPage({ missionResult }) {
+  if (!missionResult) {
+    return (
+      <EmptyPage
+        title="Knowledge Context"
+        message="Run a mission to see which OMNI knowledge domains were used."
+      />
+    );
+  }
+
+  const knowledge = missionResult.knowledge_context;
+
+  if (!knowledge) {
+    return (
+      <EmptyPage
+        title="Knowledge Context"
+        message="No local knowledge context was returned for this mission."
+      />
+    );
+  }
+
+  const selectedDomains = knowledge.selected_domains || [];
+  const domainSummaries = knowledge.domain_summaries || {};
+  const retrievedKnowledge = knowledge.retrieved_knowledge || [];
+
+  return (
+    <section className="page knowledge-page-v2">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">OMNI Local Knowledge</p>
+          <h1>Knowledge Context</h1>
+          <p>
+            Local reference domains and retrieved source chunks OMNI used to ground this mission.
+          </p>
+        </div>
+      </div>
+
+      <div className="knowledge-grid-v2">
+        <div className="panel">
+          <p className="eyebrow">Selected Domains</p>
+          <h2>Knowledge routing</h2>
+
+          <div className="domain-pill-list">
+            {selectedDomains.length > 0 ? (
+              selectedDomains.map((domain) => (
+                <div className="domain-pill" key={domain}>
+                  <strong>{domain.replaceAll("_", " ")}</strong>
+                  <span>{domainSummaries[domain] || "No summary returned."}</span>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No domains selected.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="panel wide-panel">
+          <p className="eyebrow">Retrieved Sources</p>
+          <h2>Reference chunks</h2>
+
+          <div className="knowledge-hit-list">
+            {retrievedKnowledge.length > 0 ? (
+              retrievedKnowledge.map((item, index) => (
+                <article
+                  className="knowledge-hit-card"
+                  key={`${item.source_file}-${item.chunk_id}-${index}`}
+                >
+                  <div className="knowledge-hit-topline">
+                    <span>Hit {index + 1}</span>
+                    <span>Score {item.score ?? "—"}</span>
+                  </div>
+
+                  <h3>{item.source_file || "Unknown source"}</h3>
+
+                  <p className="knowledge-meta">
+                    Domain: <strong>{item.domain || "unknown"}</strong> · Chunk:{" "}
+                    <strong>{item.chunk_id ?? "unknown"}</strong>
+                  </p>
+
+                  {(item.matched_terms || []).length > 0 && (
+                    <p className="knowledge-terms">
+                      Matched terms: {(item.matched_terms || []).join(", ")}
+                    </p>
+                  )}
+
+                  <p className="knowledge-excerpt">
+                    {item.text || "No excerpt returned."}
+                  </p>
+                </article>
+              ))
+            ) : (
+              <p className="muted">No retrieved knowledge chunks returned.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function MemoryPage({ missionResult }) {
   return (
     <section className="page memory-page-v2">
@@ -1430,6 +1537,11 @@ function App() {
   const [missionResult, setMissionResult] = useState(null);
   const [error, setError] = useState("");
   const [loadingJoke, setLoadingJoke] = useState(getLocalMorbidJoke());
+
+  // ── Space background ──────────────────────────────────────────────
+  useEffect(() => {
+    return initSpaceBg();
+  }, []);
 
   const pageTitle = useMemo(() => {
     return PAGE_ITEMS.find((page) => page.id === activePage)?.label || "Command";
@@ -1624,76 +1736,89 @@ function App() {
   };
 
   return (
-    <main className="omni-app-shell">
-      <TopNav
-        activePage={activePage}
-        setActivePage={setActivePage}
-        missionResult={missionResult}
-      />
+    <>
+      {/* Space background layers — rendered behind everything */}
+      <canvas id="space-canvas" />
+      <div className="space-grid" />
+      <div className="space-scanline" />
+      <div className="space-scanline" />
+      <div className="space-scanline" />
 
-      <section className="omni-main">
-        <header className="mobile-topbar">
-          <div>
-            <p className="eyebrow">OMNI</p>
-            <h2>{pageTitle}</h2>
-          </div>
-        </header>
-
-        {activePage === "command" && (
-          <CommandPage
-            mission={mission}
-            setMission={setMission}
-            quickIdea={quickIdea}
-            setQuickIdea={setQuickIdea}
-            ideaContext={ideaContext}
-            setIdeaContext={setIdeaContext}
-            commandMode={commandMode}
-            setCommandMode={setCommandMode}
-            interpreting={interpreting}
-            echoResult={echoResult}
-            loading={loading}
-            error={error}
-            launchMission={launchMission}
-            interpretIdea={interpretIdea}
-            interpretAndRun={interpretAndRun}
-            missionResult={missionResult}
-            setActivePage={setActivePage}
-          />
-        )}
-
-        {activePage === "forge" && <ForgePage />}
-
-        {activePage === "simulation" && <SimulationPage />}
-
-        {activePage === "blueprint" && <BlueprintPage missionResult={missionResult} />}
-
-        {activePage === "agents" && <AgentsPage missionResult={missionResult} />}
-
-        {activePage === "artifacts" && (
-          <ArtifactsPage
-            missionResult={missionResult}
-            exportMission={exportMission}
-            exporting={exporting}
-            exportResult={exportResult}
-          />
-        )}
-
-        {activePage === "validation" && <ValidationPage missionResult={missionResult} />}
-
-        {activePage === "memory" && <MemoryPage missionResult={missionResult} />}
-      </section>
-
-      {loading && (
-        <LoadingOverlay
-          joke={loadingJoke}
-          message={
-            commandMode === "idea"
-              ? "Echo is interpreting, OMNI is assembling, and exports are being prepared..."
-              : "OMNI is coordinating the intelligence stack..."
-          }
+      <main className="omni-app-shell">
+        <TopNav
+          activePage={activePage}
+          setActivePage={setActivePage}
+          missionResult={missionResult}
         />
-      )}
-    </main>
+
+        <section className="omni-main">
+          <header className="mobile-topbar">
+            <div>
+              <p className="eyebrow">OMNI</p>
+              <h2>{pageTitle}</h2>
+            </div>
+          </header>
+
+          {activePage === "command" && (
+            <CommandPage
+              mission={mission}
+              setMission={setMission}
+              quickIdea={quickIdea}
+              setQuickIdea={setQuickIdea}
+              ideaContext={ideaContext}
+              setIdeaContext={setIdeaContext}
+              commandMode={commandMode}
+              setCommandMode={setCommandMode}
+              interpreting={interpreting}
+              echoResult={echoResult}
+              loading={loading}
+              error={error}
+              launchMission={launchMission}
+              interpretIdea={interpretIdea}
+              interpretAndRun={interpretAndRun}
+              missionResult={missionResult}
+              setActivePage={setActivePage}
+            />
+          )}
+
+          {activePage === "forge" && <ForgePage />}
+
+          {activePage === "simulation" && <SimulationPage />}
+
+          {activePage === "blueprint" && <BlueprintPage missionResult={missionResult} />}
+
+          {activePage === "agents" && <AgentsPage missionResult={missionResult} />}
+
+          {activePage === "artifacts" && (
+            <ArtifactsPage
+              missionResult={missionResult}
+              exportMission={exportMission}
+              exporting={exporting}
+              exportResult={exportResult}
+            />
+          )}
+
+          {activePage === "validation" && <ValidationPage missionResult={missionResult} />}
+
+          {activePage === "knowledge" && (
+          <KnowledgeContextPage missionResult={missionResult} />
+          )}
+
+          {activePage === "memory" && <MemoryPage missionResult={missionResult} />}
+        </section>
+
+        {loading && (
+          <LoadingOverlay
+            joke={loadingJoke}
+            message={
+              commandMode === "idea"
+                ? "Echo is interpreting, OMNI is assembling, and exports are being prepared..."
+                : "OMNI is coordinating the intelligence stack..."
+            }
+          />
+        )}
+      </main>
+    </>
   );
 }
 

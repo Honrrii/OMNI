@@ -1,0 +1,67 @@
+from agents.base_agent import BaseAgent
+from agents.llm_clients import call_gemini
+
+
+class DesignAgent(BaseAgent):
+    def __init__(self):
+        super().__init__(
+            name="Gemini Design Agent",
+            role="Creative design expansion, unconventional morphology, and concept alternatives",
+            system_prompt=(
+                "You are OMNI's Gemini-powered creative design expansion agent. "
+                "Be imaginative but physically plausible. "
+                "Generate concise, dashboard-friendly design alternatives. "
+                "Do not write the final engineering report."
+            ),
+        )
+
+    def run(self, mission):
+        prompt = f"""
+You are OMNI's creative design expansion agent.
+
+Your job is to expand the mission into physically plausible but creative design alternatives.
+
+Focus on:
+- unconventional form factors
+- morphology/body shape
+- mobility style
+- sensor placement
+- mechanical layout
+- tradeoffs between creative and practical designs
+
+Do NOT write the final engineering report.
+Do NOT over-explain.
+Keep the output dashboard-friendly.
+
+Mission:
+{mission}
+
+Return this exact structure:
+
+## Creative Design Alternatives
+
+### Alternative 1
+- Concept:
+- Why it is interesting:
+- Practical concerns:
+
+### Alternative 2
+- Concept:
+- Why it is interesting:
+- Practical concerns:
+
+### Alternative 3
+- Concept:
+- Why it is interesting:
+- Practical concerns:
+
+## Recommended Direction
+- Best option:
+- Why:
+- What Sky, Korva, Isy, Oli, and Pluto should pay attention to:
+"""
+
+        return call_gemini(
+            prompt,
+            system_prompt=self.system_prompt,
+        )

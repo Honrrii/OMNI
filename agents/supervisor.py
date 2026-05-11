@@ -5,6 +5,7 @@ from agents.robotics_agent import RoboticsAgent
 from agents.research_agent import ResearchAgent
 from agents.code_agent import CodeAgent
 from agents.critic_agent import CriticAgent
+from agents.design_agent import DesignAgent
 from agents.artifact_synthesizer import synthesize_artifacts
 from agents.llm_clients import call_chatgpt
 from agents.validator_agent import ValidatorAgent
@@ -16,13 +17,15 @@ class SupervisorAgent:
     def __init__(self):
         self.name = "Omni"
 
-        # Existing specialist agent classes.
         # Frontend-facing OMNI identities:
+        # Omni -> mission orchestration and final system integration
+        # DesignAgent -> Gemini-powered creative design expansion
         # RoboticsAgent -> Sky
         # ResearchAgent -> Isy
         # CodeAgent -> Oli
         # CriticAgent -> Pluto
         # ValidatorAgent -> QaZ
+        self.design_agent = DesignAgent()
         self.robotics_agent = RoboticsAgent()
         self.research_agent = ResearchAgent()
         self.code_agent = CodeAgent()
@@ -81,6 +84,36 @@ class SupervisorAgent:
 
         return payload
 
+    def safe_agent_run(self, agent_label, fn, fallback_message):
+        """
+        Keeps the whole mission pipeline from crashing if one external model
+        or agent call fails. The frontend still gets a complete structured result.
+        """
+        try:
+            result = fn()
+            return self.sanitize_legacy_names(result or fallback_message)
+        except Exception as exc:
+            return self.sanitize_legacy_names(
+                f"# {agent_label} — Error / Fallback\n\n"
+                f"{fallback_message}\n\n"
+                f"Technical detail: {type(exc).__name__}: {exc}"
+            )
+
+    def compact_context(self, text, limit=9000):
+        """
+        Prevents later prompts from becoming massive after Gemini/design output.
+        Keeps the beginning and end, which usually preserve mission intent and key conclusions.
+        """
+        if not isinstance(text, str):
+            text = str(text)
+
+        if len(text) <= limit:
+            return text
+
+        head = text[: limit // 2]
+        tail = text[-limit // 2 :]
+        return f"{head}\n\n...[context compacted for prompt efficiency]...\n\n{tail}"
+
     # ---------------------------------------------------------
     # Mission planning
     # ---------------------------------------------------------
@@ -115,6 +148,7 @@ Relevant Previous Memory:
 
 Use the following OMNI agent names:
 - Omni: mission orchestration and system integration
+- Gemini Design: creative design expansion and unconventional concept alternatives
 - Sky: robotics, ROS2, drones, autonomy, software architecture
 - Korva: electronics, embedded systems, wiring, PCB, hardware architecture
 - Isy: physics, controls, dynamics, feasibility
@@ -145,7 +179,7 @@ Break the mission into phases:
 List what Henry must approve before moving forward.
 
 ## Specialist Assignments
-Explain what Sky, Korva, Isy, Oli, Pluto, and QaZ should each produce.
+Explain what Gemini Design, Sky, Korva, Isy, Oli, Pluto, and QaZ should each produce.
 
 ## Dashboard Artifacts Needed
 List the visual artifacts the OMNI dashboard should generate.
@@ -166,6 +200,13 @@ Give the next best action before specialist work begins.
                 "role": "Mission Orchestrator / Systems Intelligence",
                 "color": "red",
                 "responsibility": "Defines the mission strategy, connects specialist outputs, and produces the revised final blueprint.",
+            },
+            {
+                "id": "design",
+                "name": "Gemini Design",
+                "role": "Creative Design Expansion / Concept Alternatives",
+                "color": "green",
+                "responsibility": "Generates unconventional but physically plausible design alternatives before the engineering agents produce structured outputs.",
             },
             {
                 "id": "sky",
@@ -221,30 +262,36 @@ Give the next best action before specialist work begins.
             },
             {
                 "step": "2",
-                "actor": "Sky / Korva / Isy / Oli",
-                "event": "Specialist drafts generated",
-                "description": "Core engineering agents generate first-pass domain reports.",
+                "actor": "Gemini Design",
+                "event": "Creative design alternatives generated",
+                "description": "Gemini Design expands the mission into unconventional but physically plausible morphology and design options.",
             },
             {
                 "step": "3",
+                "actor": "Sky / Korva / Isy / Oli",
+                "event": "Specialist drafts generated",
+                "description": "Core engineering agents generate first-pass domain reports using Omni strategy and Gemini Design context.",
+            },
+            {
+                "step": "4",
                 "actor": "Pluto",
                 "event": "Critique generated",
                 "description": "Pluto reviews the drafts for unsafe assumptions, failure modes, and missing requirements.",
             },
             {
-                "step": "4",
+                "step": "5",
                 "actor": "Omni",
                 "event": "Revision pass completed",
                 "description": "Omni revises the final blueprint using the specialist reports and Pluto critique.",
             },
             {
-                "step": "5",
+                "step": "6",
                 "actor": "QaZ",
                 "event": "Validation completed",
                 "description": "QaZ validates the revised mission report and artifacts.",
             },
             {
-                "step": "6",
+                "step": "7",
                 "actor": "Omni",
                 "event": "Final package assembled",
                 "description": "Omni returns reports, critique, validation, artifacts, and export-ready mission data.",
@@ -254,7 +301,7 @@ Give the next best action before specialist work begins.
     # ---------------------------------------------------------
     # Korva hardware report
     # ---------------------------------------------------------
-    def run_korva_hardware_report(self, mission, memory_context, omni_strategy):
+    def run_korva_hardware_report(self, mission, memory_context, omni_strategy, design_report=""):
         """
         Temporary Korva implementation until we create agents/hardware_agent.py.
         """
@@ -272,6 +319,9 @@ Relevant Previous Memory:
 
 Omni Strategy:
 {omni_strategy}
+
+Gemini Design Context:
+{design_report}
 
 Return your output in this exact format:
 
@@ -360,6 +410,7 @@ Rules:
         mission,
         memory_context,
         omni_strategy,
+        design_report,
         sky_report,
         korva_report,
         isy_report,
@@ -374,6 +425,7 @@ You are Omni, the mission orchestrator.
 
 Your job is to produce the revised final blueprint after reading:
 - Omni's initial strategy
+- Gemini Design's creative alternatives
 - Sky's robotics/ROS2 report
 - Korva's hardware/electronics report
 - Isy's physics/control report
@@ -383,6 +435,7 @@ Your job is to produce the revised final blueprint after reading:
 
 You must revise the mission output. Do not merely summarize the reports.
 You must explicitly incorporate Pluto's critique into the final recommendations.
+You must use Gemini Design's ideas only when they are practical enough to validate.
 
 Current Mission:
 {mission}
@@ -392,6 +445,9 @@ Relevant Previous Memory:
 
 Omni Initial Strategy:
 {omni_strategy}
+
+Gemini Design Creative Expansion:
+{design_report}
 
 Sky Report:
 {sky_report}
@@ -421,6 +477,9 @@ Briefly restate what is being built.
 ## Final System Direction
 Describe the recommended system architecture after specialist review.
 
+## Creative Direction Selected
+State which Gemini Design concept/direction should be kept, modified, or rejected.
+
 ## Key Revisions From Pluto's Critique
 List the changes made because of Pluto's critique.
 
@@ -446,6 +505,7 @@ Give the final go/no-go style decision.
             "status": "revised",
             "revised_by": "Omni",
             "based_on": [
+                "Gemini Design creative expansion",
                 "Sky report",
                 "Korva report",
                 "Isy report",
@@ -536,6 +596,7 @@ Give the final go/no-go style decision.
                 "mission.json",
                 "mission_report.md",
                 "agent_reports/omni.md",
+                "agent_reports/design.md",
                 "agent_reports/sky.md",
                 "agent_reports/korva.md",
                 "agent_reports/isy.md",
@@ -550,6 +611,7 @@ Give the final go/no-go style decision.
                 "artifacts/fusion360_concept.md",
                 "artifacts/ros2_package_plan.md",
                 "artifacts/hardware_architecture.json",
+                "artifacts/design_alternatives.md",
                 "artifacts/export_files.json",
             ],
             "status": "planned",
@@ -564,6 +626,7 @@ Give the final go/no-go style decision.
 
         created_at = datetime.now().isoformat()
         result_id = created_at.replace(":", "-").replace(".", "-")
+        export_manifest = self.build_export_manifest(mission, result_id)
 
         memory_context = get_recent_memory()
 
@@ -576,30 +639,78 @@ Relevant Previous Memory:
 """
 
         # 1. Omni creates mission strategy.
-        omni_strategy = self.run_omni_strategy(mission, memory_context)
-
-        # 2. Specialist agents generate first-pass domain outputs.
-        sky_report = self.sanitize_legacy_names(
-            self.robotics_agent.run(mission_with_memory)
-        )
-        isy_report = self.sanitize_legacy_names(
-            self.research_agent.run(mission_with_memory)
-        )
-        oli_report = self.sanitize_legacy_names(
-            self.code_agent.run(mission_with_memory)
+        omni_strategy = self.safe_agent_run(
+            "Omni",
+            lambda: self.run_omni_strategy(mission, memory_context),
+            "Omni could not generate a strategy. Continue with direct specialist review.",
         )
 
-        # 3. Korva hardware report.
-        korva_report = self.run_korva_hardware_report(
-            mission=mission,
-            memory_context=memory_context,
-            omni_strategy=omni_strategy,
-        )
+        # 2. Gemini Design creates creative alternatives before specialists run.
+        design_input = f"""
+{mission_with_memory}
 
-        # 4. Combine outputs for Pluto critique.
-        combined_outputs = f"""
 Omni Strategy:
 {omni_strategy}
+"""
+        design_report = self.safe_agent_run(
+            "Gemini Design",
+            lambda: self.design_agent.run(design_input),
+            "Gemini Design could not generate creative alternatives. Continue with standard practical design assumptions.",
+        )
+
+        # Keep specialist context useful, but avoid runaway prompt size.
+        mission_with_design_context = self.compact_context(
+            f"""
+{mission_with_memory}
+
+Omni Strategy:
+{omni_strategy}
+
+Gemini Design Creative Expansion:
+{design_report}
+""",
+            limit=12000,
+        )
+
+        # 3. Specialist agents generate first-pass domain outputs.
+        sky_report = self.safe_agent_run(
+            "Sky",
+            lambda: self.robotics_agent.run(mission_with_design_context),
+            "Sky could not generate a robotics/ROS2 report.",
+        )
+
+        isy_report = self.safe_agent_run(
+            "Isy",
+            lambda: self.research_agent.run(mission_with_design_context),
+            "Isy could not generate a physics/controls/feasibility report.",
+        )
+
+        oli_report = self.safe_agent_run(
+            "Oli",
+            lambda: self.code_agent.run(mission_with_design_context),
+            "Oli could not generate a CAD/code/artifact report.",
+        )
+
+        # 4. Korva hardware report.
+        korva_report = self.safe_agent_run(
+            "Korva",
+            lambda: self.run_korva_hardware_report(
+                mission=mission,
+                memory_context=memory_context,
+                omni_strategy=omni_strategy,
+                design_report=design_report,
+            ),
+            "Korva could not generate a hardware/electronics report.",
+        )
+
+        # 5. Combine outputs for Pluto critique.
+        combined_outputs = self.compact_context(
+            f"""
+Omni Strategy:
+{omni_strategy}
+
+Gemini Design Creative Expansion:
+{design_report}
 
 Sky Report:
 {sky_report}
@@ -612,30 +723,52 @@ Isy Report:
 
 Oli Report:
 {oli_report}
-"""
-
-        # 5. Pluto performs failure/risk critique.
-        pluto_report = self.sanitize_legacy_names(
-            self.critic_agent.run(mission_with_memory, combined_outputs)
+""",
+            limit=18000,
         )
 
-        # 6. Convert Pluto critique into structured JSON.
-        critique_payload = self.build_structured_critique(
-            mission=mission,
-            critic_output=pluto_report,
+        # 6. Pluto performs failure/risk critique.
+        pluto_report = self.safe_agent_run(
+            "Pluto",
+            lambda: self.critic_agent.run(mission_with_design_context, combined_outputs),
+            "Pluto could not generate a risk critique. Treat mission as yellow-risk until manually reviewed.",
         )
 
-        # 7. Omni revises final blueprint using Pluto critique.
-        revised_blueprint = self.revise_final_blueprint(
-            mission=mission,
-            memory_context=memory_context,
-            omni_strategy=omni_strategy,
-            sky_report=sky_report,
-            korva_report=korva_report,
-            isy_report=isy_report,
-            oli_report=oli_report,
-            pluto_report=pluto_report,
-            structured_critique=critique_payload,
+        # 7. Convert Pluto critique into structured JSON.
+        critique_payload = self.safe_agent_run(
+            "Critique JSON Builder",
+            lambda: self.build_structured_critique(
+                mission=mission,
+                critic_output=pluto_report,
+            ),
+            "Could not structure Pluto critique.",
+        )
+
+        if not isinstance(critique_payload, dict):
+            critique_payload = {
+                "risk_level": "yellow",
+                "issues_found": ["Critique could not be converted into structured JSON."],
+                "required_fixes": ["Manually review Pluto critique."],
+                "stop_conditions": ["Do not perform hardware tests without manual review."],
+                "revision_priorities": ["Convert critique into explicit requirements."],
+            }
+
+        # 8. Omni revises final blueprint using Pluto critique and Gemini Design.
+        revised_blueprint = self.safe_agent_run(
+            "Omni Revision",
+            lambda: self.revise_final_blueprint(
+                mission=mission,
+                memory_context=memory_context,
+                omni_strategy=omni_strategy,
+                design_report=design_report,
+                sky_report=sky_report,
+                korva_report=korva_report,
+                isy_report=isy_report,
+                oli_report=oli_report,
+                pluto_report=pluto_report,
+                structured_critique=critique_payload,
+            ),
+            "Omni could not generate a revised blueprint. Use agent reports and Pluto critique as the decision basis.",
         )
 
         revision_payload = self.build_revision_payload(
@@ -643,7 +776,7 @@ Oli Report:
             structured_critique=critique_payload,
         )
 
-        # 8. Artifact synthesizer creates dashboard-ready and export-ready artifacts.
+        # 9. Artifact synthesizer creates dashboard-ready and export-ready artifacts.
         artifacts = synthesize_artifacts(
             mission=mission,
             omni_output=omni_strategy,
@@ -656,23 +789,29 @@ Oli Report:
 
         artifacts = self.sanitize_payload(artifacts)
 
-        # 9. Add revision-aware artifact planning without breaking artifact schema.
-        if isinstance(artifacts, dict):
-            artifacts["revision_summary"] = revision_payload
-            artifacts["export_manifest"] = self.build_export_manifest(mission, result_id)
+        # 10. Add design/revision/export planning without breaking existing artifact schema.
+        if not isinstance(artifacts, dict):
+            artifacts = {}
 
-            if "hardware_architecture" not in artifacts or not artifacts["hardware_architecture"]:
-                artifacts["hardware_architecture"] = [
-                    {
-                        "subsystem": "Hardware Architecture",
-                        "components": [],
-                        "power_or_signal_notes": korva_report,
-                        "interfaces": ["unknown"],
-                        "owner": "Korva",
-                    }
-                ]
+        artifacts["design_alternatives"] = {
+            "owner": "Gemini Design",
+            "content": design_report,
+        }
+        artifacts["revision_summary"] = revision_payload
+        artifacts["export_manifest"] = export_manifest
 
-        # 10. Build final report before QaZ validation.
+        if "hardware_architecture" not in artifacts or not artifacts["hardware_architecture"]:
+            artifacts["hardware_architecture"] = [
+                {
+                    "subsystem": "Hardware Architecture",
+                    "components": [],
+                    "power_or_signal_notes": korva_report,
+                    "interfaces": ["unknown"],
+                    "owner": "Korva",
+                }
+            ]
+
+        # 11. Build final report before QaZ validation.
         final_report = f"""
 # OMNI Mission Report
 
@@ -683,6 +822,11 @@ Oli Report:
 
 ## Omni — Mission Strategy / System Integration
 {omni_strategy}
+
+---
+
+## Gemini Design — Creative Design Expansion
+{design_report}
 
 ---
 
@@ -717,7 +861,7 @@ Oli Report:
 
         final_report = self.sanitize_legacy_names(final_report)
 
-        # 11. QaZ validates revised report + artifacts.
+        # 12. QaZ validates revised report + artifacts.
         validation_input = self.build_validation_input(
             final_report=final_report,
             artifacts=artifacts,
@@ -733,7 +877,7 @@ Oli Report:
 
         validation_payload = self.build_validation_payload(validation_report)
 
-        # 12. Attach QaZ validation to final report.
+        # 13. Attach QaZ validation to final report.
         final_report_with_validation = f"""
 {final_report}
 
@@ -748,9 +892,11 @@ Oli Report:
             final_report_with_validation
         )
 
-        # 13. Save memory summary.
+        # 14. Save memory summary.
         memory_summary = f"""
 Omni: {omni_strategy[:500]}
+
+Gemini Design: {design_report[:500]}
 
 Sky: {sky_report[:500]}
 
@@ -773,7 +919,7 @@ QaZ Required Next Tests: {validation_report.required_next_tests[:5]}
 
         add_mission_to_memory(mission, self.sanitize_legacy_names(memory_summary))
 
-        # 14. Return structured payload for frontend/dashboard.
+        # 15. Return structured payload for frontend/dashboard.
         return {
             "mission": mission,
             "created_at": created_at,
@@ -785,6 +931,7 @@ QaZ Required Next Tests: {validation_report.required_next_tests[:5]}
             # OMNI-native agent keys only.
             "agents": {
                 "omni": omni_strategy,
+                "design": design_report,
                 "sky": sky_report,
                 "korva": korva_report,
                 "isy": isy_report,
@@ -799,7 +946,7 @@ QaZ Required Next Tests: {validation_report.required_next_tests[:5]}
             "final_report": final_report_with_validation,
             "artifacts": artifacts,
             "validation": validation_payload,
-            "export_manifest": self.build_export_manifest(mission, result_id),
+            "export_manifest": export_manifest,
             "timeline": self.build_council_events(),
             "status": "complete",
         }

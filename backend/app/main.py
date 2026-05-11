@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from agents.supervisor import SupervisorAgent
+from backend.app.knowledge.knowledge_context_builder import build_omni_knowledge_context
 from agents.mission_interpreter_agent import MissionInterpreterAgent
 from memory.memory_manager import get_recent_memory
 from backend.app.ros.ros_status_service import get_ros_status
@@ -405,24 +406,93 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
     }
 
 
+
+def format_knowledge_context_for_prompt(knowledge_context: Dict[str, Any]) -> str:
+    """
+    Converts OMNI's retrieved local knowledge into a compact prompt block.
+
+    This lets the Agent Council use the knowledge without flooding the prompt.
+    """
+    selected_domains = knowledge_context.get("selected_domains", [])
+    domain_summaries = knowledge_context.get("domain_summaries", {})
+    retrieved_knowledge = knowledge_context.get("retrieved_knowledge", [])
+
+    lines = [
+        "OMNI LOCAL KNOWLEDGE CONTEXT",
+        "",
+        "Selected knowledge domains:",
+    ]
+
+    if selected_domains:
+        for domain in selected_domains:
+            summary = domain_summaries.get(domain, "")
+            lines.append(f"- {domain}: {summary}")
+    else:
+        lines.append("- None selected")
+
+    lines.extend([
+        "",
+        "Relevant retrieved knowledge excerpts:",
+    ])
+
+    if retrieved_knowledge:
+        for i, item in enumerate(retrieved_knowledge, start=1):
+            excerpt = item.get("text", "")[:700].replace("\n", " ")
+            matched_terms = ", ".join(item.get("matched_terms", []))
+
+            lines.extend([
+                f"",
+                f"[Knowledge Hit {i}]",
+                f"Domain: {item.get('domain', 'unknown')}",
+                f"Source: {item.get('source_file', 'unknown')}",
+                f"Chunk: {item.get('chunk_id', 'unknown')}",
+                f"Matched terms: {matched_terms}",
+                f"Excerpt: {excerpt}",
+            ])
+    else:
+        lines.append("- No local knowledge chunks retrieved.")
+
+    return "\n".join(lines)
+
+
 def run_supervisor_mission(mission: str) -> Dict[str, Any]:
     """
     Runs the OMNI supervisor and returns a normalized mission result.
 
     Used by both /api/mission/run and /api/mission/interpret-and-run.
+
+    This also attaches OMNI's local knowledge context so missions can be
+    influenced by the local PDF knowledge library.
     """
+    knowledge_context = build_omni_knowledge_context(mission_text=mission, top_k=8)
+    knowledge_prompt_block = format_knowledge_context_for_prompt(knowledge_context)
+
+    mission_with_knowledge = f"""
+{mission}
+
+{knowledge_prompt_block}
+
+Instruction to OMNI Agent Council:
+Use the local knowledge context as grounding material when it is relevant.
+Do not copy it blindly. Apply it as engineering reference material for CAD,
+ROS2 architecture, autonomy planning, fabrication decisions, and validation.
+"""
+
     if hasattr(supervisor, "run_mission_structured"):
-        raw_result = supervisor.run_mission_structured(mission)
+        raw_result = supervisor.run_mission_structured(mission_with_knowledge)
 
     elif hasattr(supervisor, "run"):
-        raw_result = supervisor.run(mission)
+        raw_result = supervisor.run(mission_with_knowledge)
 
     else:
         raise AttributeError(
             "SupervisorAgent must have either run_mission_structured() or run()."
         )
 
-    return normalize_mission_result(mission, raw_result)
+    normalized_result = normalize_mission_result(mission, raw_result)
+    normalized_result["knowledge_context"] = knowledge_context
+
+    return normalized_result
 
 
 # ---------------------------------------------------------

@@ -9,6 +9,7 @@ from backend.app.generators.fusion360_script_generator import (
     generate_fusion360_export,
     should_generate_fusion360_script,
 )
+from backend.app.generators.kicad_project_generator import KiCadProjectGenerator
 from backend.app.generators.mission_report_generator import generate_mission_report
 from backend.app.validators.ros2_build_validator import validate_ros2_package
 
@@ -105,6 +106,149 @@ def should_generate_ros2_package(artifacts: Dict[str, Any]) -> bool:
             return True
 
     return False
+
+
+def should_generate_kicad_package(mission_result: Dict[str, Any]) -> bool:
+    """
+    Decide whether OMNI should generate a starter KiCAD electronics package.
+
+    This intentionally scans the full mission result because electronics-related
+    language may appear in the mission text, agent outputs, artifacts, or final report.
+    """
+    if not isinstance(mission_result, dict):
+        return False
+
+    text_blob = json.dumps(mission_result, default=str).lower()
+
+    keywords = [
+        "kicad",
+        "pcb",
+        "electronics",
+        "electrical",
+        "circuit",
+        "schematic",
+        "battery",
+        "sensor",
+        "sensors",
+        "motor driver",
+        "controller board",
+        "power budget",
+        "connector",
+        "connectors",
+        "imu",
+        "microcontroller",
+        "raspberry pi",
+        "esp32",
+        "stm32",
+        "rp2040",
+    ]
+
+    return any(keyword in text_blob for keyword in keywords)
+
+
+def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build a conservative starter electronics plan for KiCAD export.
+
+    This creates useful electronics artifacts but does not claim the design is
+    fabrication-ready. It should be reviewed and refined before real PCB work.
+    """
+    mission_text = (
+        mission_result.get("mission")
+        or mission_result.get("mission_text")
+        or mission_result.get("user_prompt")
+        or mission_result.get("summary")
+        or "OMNI mission"
+    )
+
+    artifacts = mission_result.get("artifacts", {}) or {}
+
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+
+    hardware_architecture = artifacts.get("hardware_architecture", [])
+    component_tree = artifacts.get("component_tree", [])
+    ros2_node_graph = artifacts.get("ros2_node_graph", {})
+    blueprint_plan = artifacts.get("blueprint_plan", [])
+
+    return {
+        "summary": f"Starter electronics package generated from mission: {mission_text}",
+        "source_context": {
+            "hardware_architecture": hardware_architecture,
+            "component_tree": component_tree,
+            "ros2_node_graph": ros2_node_graph,
+            "blueprint_plan": blueprint_plan,
+        },
+        "power_budget": {
+            "battery": "TBD",
+            "logic_voltage": "3.3V",
+            "actuator_voltage": "TBD",
+            "estimated_peak_current_a": "TBD",
+            "notes": [
+                "This is a starter electronics package.",
+                "Battery chemistry, regulator sizing, and peak current must be validated before fabrication.",
+                "Actuator stall current must be checked before selecting connectors and trace widths.",
+                "PCB dimensions should be checked against the CAD electronics bay before layout.",
+            ],
+        },
+        "connector_map": {
+            "J1": "Battery or external power input",
+            "J2": "Programming/debug header",
+            "J3": "Primary sensor header",
+            "J4": "Secondary sensor/I2C/SPI header",
+            "J5": "Actuator or motor driver connector bank",
+        },
+        "bom": [
+            {
+                "reference": "U1",
+                "quantity": 1,
+                "component": "Main controller",
+                "value": "TBD microcontroller or companion computer",
+                "footprint": "TBD",
+                "notes": "Select based on required I/O, compute, ROS2 bridge needs, and power budget.",
+            },
+            {
+                "reference": "U2",
+                "quantity": 1,
+                "component": "Voltage regulator",
+                "value": "5V or 3.3V TBD",
+                "footprint": "TBD",
+                "notes": "Must be sized against sensor, logic, and actuator current loads.",
+            },
+            {
+                "reference": "J1",
+                "quantity": 1,
+                "component": "Power input connector",
+                "value": "TBD",
+                "footprint": "TBD",
+                "notes": "Add fuse, reverse-polarity protection, and power switch before fabrication.",
+            },
+            {
+                "reference": "J2",
+                "quantity": 1,
+                "component": "Programming/debug header",
+                "value": "SWD/UART/USB TBD",
+                "footprint": "TBD",
+                "notes": "Depends on selected controller.",
+            },
+            {
+                "reference": "J3",
+                "quantity": 1,
+                "component": "Sensor connector",
+                "value": "I2C/SPI/UART TBD",
+                "footprint": "TBD",
+                "notes": "Map to mission-specific sensors after component selection.",
+            },
+            {
+                "reference": "J5",
+                "quantity": 1,
+                "component": "Actuator connector bank",
+                "value": "Motor/servo outputs TBD",
+                "footprint": "TBD",
+                "notes": "Connector current rating must match actuator peak current.",
+            },
+        ],
+    }
 
 
 def compact_validation_result(
@@ -259,6 +403,7 @@ def export_mission_files(
 
     If a ROS2 package is generated, this can also auto-run the ROS2 build validator.
     If CAD/Fusion content is detected, this can generate a Fusion 360 Python script.
+    If electronics/PCB content is detected, this can generate a starter KiCAD package.
     """
 
     if not isinstance(mission_result, dict):
@@ -473,6 +618,54 @@ def export_mission_files(
             record(path)
 
     # ---------------------------------------------------------
+    # Generated KiCAD electronics package
+    # ---------------------------------------------------------
+    kicad_generation = None
+
+    if should_generate_kicad_package(mission_result):
+        try:
+            electronics_plan = build_starter_electronics_plan(mission_result)
+
+            kicad_files = KiCadProjectGenerator(
+                output_root=export_dir.parent,
+            ).generate(
+                mission_slug=export_dir.name,
+                electronics_plan=electronics_plan,
+            )
+
+            kicad_generation = {
+                "status": "generated",
+                "package_type": "starter_kicad_electronics_package",
+                "files": list(kicad_files.values()),
+                "file_map": kicad_files,
+            }
+
+            path = artifact_dir / "kicad_generation_summary.json"
+            write_json(path, kicad_generation)
+            record(path)
+
+            for generated_file in kicad_generation.get("files", []):
+                try:
+                    generated_path = Path(generated_file)
+
+                    if generated_path.exists():
+                        record(generated_path)
+                    else:
+                        record_generated_file(generated_file)
+                except Exception:
+                    record_generated_file(generated_file)
+
+        except Exception as error:
+            kicad_generation = {
+                "status": "failed",
+                "error": str(error),
+            }
+
+            path = artifact_dir / "kicad_generation_summary.json"
+            write_json(path, kicad_generation)
+            record(path)
+
+    # ---------------------------------------------------------
     # Human-readable README
     # ---------------------------------------------------------
     validation = mission_result.get("validation", {}) or {}
@@ -514,6 +707,17 @@ def export_mission_files(
         else "none"
     )
 
+    kicad_generation_status = (
+        kicad_generation.get("status", "not_generated")
+        if isinstance(kicad_generation, dict)
+        else "not_generated"
+    )
+    kicad_package_type = (
+        kicad_generation.get("package_type", "none")
+        if isinstance(kicad_generation, dict)
+        else "none"
+    )
+
     # ---------------------------------------------------------
     # OMNI Mission Report / Engineering Provenance Dossier
     # ---------------------------------------------------------
@@ -526,6 +730,7 @@ def export_mission_files(
             "validation": validation,
             "ros2_validation": ros2_validation,
             "fusion360_generation": fusion360_generation,
+            "kicad_generation": kicad_generation,
         }
 
         mission_report = generate_mission_report(
@@ -579,6 +784,10 @@ def export_mission_files(
 - Project Type: {fusion360_project_type}
 - Model Name: {fusion360_model_name}
 
+## KiCAD Electronics Package
+- Status: {kicad_generation_status}
+- Package Type: {kicad_package_type}
+
 ## Files
 {chr(10).join(f"- {file}" for file in written_files)}
 """
@@ -596,5 +805,6 @@ def export_mission_files(
         "ros2_generation": ros2_generation,
         "ros2_validation": ros2_validation,
         "fusion360_generation": fusion360_generation,
+        "kicad_generation": kicad_generation,
         "mission_report": mission_report,
     }

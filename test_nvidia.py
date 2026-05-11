@@ -1,16 +1,39 @@
-from backend.app.nvidia_client import ask_nvidia
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+from openai import OpenAI
 
-system_prompt = """
-You are Reed Richards, the supervisor of the AI Avengers system.
-You break a mission into expert subtasks and synthesize a final response.
-"""
+load_dotenv(dotenv_path=Path.cwd() / ".env")
 
-mission = """
-Design a level 1 mission router for my AI Avengers robotics-focused multi-agent assistant.
-Keep it practical and backend-focused.
-"""
+client = OpenAI(
+    base_url=os.getenv("NVIDIA_BASE_URL"),
+    api_key=os.getenv("NVIDIA_API_KEY"),
+)
 
-response = ask_nvidia(system_prompt, mission)
+response = client.chat.completions.create(
+    model=os.getenv("NVIDIA_MODEL"),
+    messages=[
+        {
+            "role": "system",
+            "content": "/no_think"
+        },
+        {
+            "role": "user",
+            "content": "Reply with exactly this sentence and nothing else: NVIDIA route online."
+        }
+    ],
+    max_tokens=512,
+    temperature=0,
+    top_p=1,
+    stream=False,
+)
 
-print("\n===== NVIDIA RESPONSE =====\n")
-print(response)
+choice = response.choices[0]
+msg = choice.message
+
+print("finish_reason:", choice.finish_reason)
+print("content:", repr(msg.content))
+
+if not msg.content:
+    print("No final content returned.")
+    print("extra fields:", getattr(msg, "model_extra", {}))

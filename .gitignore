@@ -36,3 +36,9 @@ memory/project_memory.json
 # Python cache
 __pycache__/
 *.pyc
+
+# OMNI local knowledge library
+knowledge/raw/
+knowledge/processed/
+knowledge/index/
+*.zip
