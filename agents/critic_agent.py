@@ -1,7 +1,7 @@
 from typing import Any
 
 from agents.base_agent import BaseAgent
-from agents.llm_clients import call_chatgpt
+from backend.app.omni_core.llm_router import call_llm
 from backend.app.omni_core.formatters import (
     sanitize_legacy_names as format_sanitize_legacy_names,
 )
@@ -124,5 +124,5 @@ Provide visualization-ready items:
 - required measurements
 """
 
-        result = call_chatgpt(prompt)
+        result = call_llm(prompt, role="Pluto")
         return self.sanitize_legacy_names(result)
