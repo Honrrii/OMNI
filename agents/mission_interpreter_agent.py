@@ -1,7 +1,7 @@
 import json
 from typing import Any, Dict
 
-from agents.llm_clients import call_chatgpt
+from backend.app.omni_core.llm_router import call_llm
 from backend.app.knowledge.ros2_pattern_library import build_ros2_context_block
 
 
@@ -111,7 +111,7 @@ ROS2 knowledge base rules:
 """
 
         try:
-            raw = call_chatgpt(prompt)
+            raw = call_llm(prompt, role="Echo")
             data = json.loads(raw)
 
             return self._normalize_response(data, clean_idea, ros2_context)
