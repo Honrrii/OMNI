@@ -2,18 +2,24 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
 class AgentRole(str, Enum):
     ECHO = "Echo"
     SUPERVISOR = "Omni"
+
+    DESIGN = "Vega"
     ROBOTICS = "Sky"
-    CAD = "Isy"
-    ELECTRONICS = "Oli"
-    RESEARCH = "Pluto"
+    HARDWARE = "Korva"
+    PHYSICS = "Isy"
+    CAD = "Oli"
+
+    CRITIQUE = "Pluto"
     VALIDATION = "QaZ"
-    SYNTHESIS = "Korva"
+
+    # Final packaging / artifact synthesis role.
 
 
 class MessageType(str, Enum):
@@ -60,5 +66,3 @@ class AgentContribution(BaseModel):
     risks: List[str] = Field(default_factory=list)
     open_questions: List[str] = Field(default_factory=list)
     requested_reviews: List[AgentRole] = Field(default_factory=list)
-
-    confidence: float = 0.75
