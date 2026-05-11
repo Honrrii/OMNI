@@ -8,7 +8,7 @@ from agents.code_agent import CodeAgent
 from agents.critic_agent import CriticAgent
 from agents.design_agent import DesignAgent
 from agents.artifact_synthesizer import synthesize_artifacts
-from agents.llm_clients import call_chatgpt
+from backend.app.omni_core.llm_router import call_llm
 from agents.validator_agent import ValidatorAgent
 
 from backend.app.omni_core.formatters import (
@@ -192,7 +192,7 @@ List the visual artifacts the OMNI dashboard should generate.
 ## Omni's Initial Strategic Recommendation
 Give the next best action before specialist work begins.
 """
-        return self.sanitize_legacy_names(call_chatgpt(omni_prompt))
+        return self.sanitize_legacy_names(call_llm(omni_prompt, role="Omni"))
 
     # ---------------------------------------------------------
     # Agent council metadata
@@ -356,7 +356,7 @@ List hardware-specific risks.
 ## Missing Hardware Information
 List what Henry still needs to measure, choose, or confirm.
 """
-        return self.sanitize_legacy_names(call_chatgpt(korva_prompt))
+        return self.sanitize_legacy_names(call_llm(korva_prompt, role="Korva"))
 
     # ---------------------------------------------------------
     # Critique normalization
@@ -387,7 +387,7 @@ Rules:
 - Do not include explanations outside JSON.
 - Keep each list item short and actionable.
 """
-        raw_json = call_chatgpt(prompt)
+        raw_json = call_llm(prompt, role="Omni")
         parsed = self.parse_json_object(raw_json)
 
         if parsed:
@@ -503,7 +503,7 @@ State what must be true before hardware, CAD automation, ROS2 code generation, o
 ## OMNI Final Decision
 Give the final go/no-go style decision.
 """
-        return self.sanitize_legacy_names(call_chatgpt(revision_prompt))
+        return self.sanitize_legacy_names(call_llm(revision_prompt, role="Omni"))
 
     def build_revision_payload(self, revised_blueprint, structured_critique):
         return {
