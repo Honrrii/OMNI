@@ -1,5 +1,5 @@
 from agents.base_agent import BaseAgent
-from agents.llm_clients import call_gemini
+from backend.app.omni_core.llm_router import call_llm
 
 
 class DesignAgent(BaseAgent):
@@ -61,7 +61,7 @@ Return this exact structure:
 - What Sky, Korva, Isy, Oli, and Pluto should pay attention to:
 """
 
-        return call_gemini(
+        return call_llm(
             prompt,
-            system_prompt=self.system_prompt,
+            role="Vega", system_prompt=self.system_prompt,
         )
