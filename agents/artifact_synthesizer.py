@@ -1,9 +1,12 @@
 import json
 import re
+from typing import Any, Dict, List
+
 from agents.llm_clients import openai_client
+from backend.app.omni_core.formatters import sanitize_payload
 
 
-def get_empty_artifacts():
+def get_empty_artifacts() -> Dict[str, Any]:
     return {
         "ros2_node_graph": {
             "nodes": [],
@@ -37,73 +40,83 @@ def get_empty_artifacts():
     }
 
 
-def sanitize_legacy_names(value):
-    replacements = {
-        "Reed Richards": "Omni",
-        "Tony Stark": "Sky",
-        "Bruce Banner": "Isy",
-        "Hank Pym": "Oli",
-        "Ultron": "Pluto",
-        "Vision": "QaZ",
-        "Shuri": "Korva",
-        "AI Avengers": "OMNI",
-        "Marvel Geniuses HQ": "OMNI Command",
-        "Marvel Geniuses": "OMNI",
-        "Reed": "Omni",
-        "Tony": "Sky",
-        "Bruce": "Isy",
-        "Hank": "Oli",
-    }
+def sanitize_legacy_names(value: Any) -> Any:
+    """
+    Compatibility wrapper.
 
-    if isinstance(value, str):
-        cleaned = value
-        for old, new in replacements.items():
-            cleaned = cleaned.replace(old, new)
-        return cleaned
-
-    if isinstance(value, list):
-        return [sanitize_legacy_names(item) for item in value]
-
-    if isinstance(value, dict):
-        return {
-            key: sanitize_legacy_names(item)
-            for key, item in value.items()
-        }
-
-    return value
+    Older code in this file still calls sanitize_legacy_names(), but the real
+    centralized implementation now lives in backend.app.omni_core.formatters.
+    """
+    return sanitize_payload(value)
 
 
-def mission_mentions_ros2(mission, sky_report):
-    combined = f"{mission}\n{sky_report}".lower()
-    return any(term in combined for term in ["ros2", "ros 2", "node", "topic", "launch"])
+def as_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
-def mission_mentions_cad(mission, oli_report):
-    combined = f"{mission}\n{oli_report}".lower()
+def mission_mentions_ros2(mission: Any, sky_report: Any) -> bool:
+    combined = f"{as_text(mission)}\n{as_text(sky_report)}".lower()
     return any(
         term in combined
-        for term in ["fusion 360", "fusion360", "cad", "3d", "chassis", "enclosure", "modeling"]
+        for term in [
+            "ros2",
+            "ros 2",
+            "node",
+            "topic",
+            "launch",
+            "rviz",
+            "gazebo",
+            "nav2",
+            "robot_state_publisher",
+            "cmd_vel",
+        ]
     )
 
 
-def safe_id(text):
-    value = re.sub(r"[^a-zA-Z0-9_]+", "_", text.strip().lower())
+def mission_mentions_cad(mission: Any, oli_report: Any) -> bool:
+    combined = f"{as_text(mission)}\n{as_text(oli_report)}".lower()
+    return any(
+        term in combined
+        for term in [
+            "fusion 360",
+            "fusion360",
+            "cad",
+            "3d",
+            "chassis",
+            "enclosure",
+            "modeling",
+            "model",
+            "mount",
+            "bracket",
+            "frame",
+            "body",
+        ]
+    )
+
+
+def safe_id(text: Any) -> str:
+    value = re.sub(r"[^a-zA-Z0-9_]+", "_", as_text(text).strip().lower())
     value = re.sub(r"_+", "_", value).strip("_")
     return value or "item"
 
 
-def extract_ros2_nodes_from_report(sky_report):
+def extract_ros2_nodes_from_report(sky_report: Any) -> List[str]:
     """
-    Extracts common ROS2 node names from Sky's report.
+    Extract common ROS2 node names from Sky's report.
+
     Looks for names like:
     - rover_control_node
     - distance_sensor_node
     - camera_node
     """
-    if not sky_report:
+    report = as_text(sky_report)
+
+    if not report:
         return []
 
-    matches = re.findall(r"\b[a-zA-Z][a-zA-Z0-9_]*_node\b", sky_report)
+    matches = re.findall(r"\b[a-zA-Z][a-zA-Z0-9_]*_node\b", report)
     unique = []
 
     for match in matches:
@@ -114,33 +127,85 @@ def extract_ros2_nodes_from_report(sky_report):
     return unique
 
 
-def infer_node_type(node_name):
-    name = node_name.lower()
+def infer_node_type(node_name: Any) -> str:
+    name = as_text(node_name).lower()
 
-    if any(term in name for term in ["camera", "imu", "distance", "ultrasonic", "sensor", "lidar"]):
+    if any(
+        term in name
+        for term in [
+            "camera",
+            "imu",
+            "distance",
+            "ultrasonic",
+            "sensor",
+            "lidar",
+            "range",
+        ]
+    ):
         return "sensor"
 
-    if any(term in name for term in ["control", "controller", "cmd", "motor", "actuator"]):
+    if any(
+        term in name
+        for term in [
+            "control",
+            "controller",
+            "cmd",
+            "motor",
+            "actuator",
+            "drive",
+        ]
+    ):
         return "control"
 
-    if any(term in name for term in ["battery", "telemetry", "monitor", "logger"]):
+    if any(
+        term in name
+        for term in [
+            "battery",
+            "telemetry",
+            "monitor",
+            "logger",
+            "status",
+        ]
+    ):
         return "telemetry"
 
-    if any(term in name for term in ["planning", "nav", "path"]):
+    if any(
+        term in name
+        for term in [
+            "planning",
+            "planner",
+            "nav",
+            "path",
+            "mission",
+        ]
+    ):
         return "planning"
+
+    if any(
+        term in name
+        for term in [
+            "visualization",
+            "viz",
+            "rviz",
+        ]
+    ):
+        return "visualization"
 
     return "utility"
 
 
-def extract_ros2_topics_from_report(sky_report):
+def extract_ros2_topics_from_report(sky_report: Any) -> List[str]:
     """
-    Extracts ROS2 topic names from Sky's report.
+    Extract ROS2 topic names from Sky's report.
+
     Looks for /cmd_vel, /imu_data, /camera/image_raw, etc.
     """
-    if not sky_report:
+    report = as_text(sky_report)
+
+    if not report:
         return []
 
-    matches = re.findall(r"\/[a-zA-Z0-9_\/]+", sky_report)
+    matches = re.findall(r"\/[a-zA-Z0-9_\/]+", report)
     ignored = {"/", "/10"}
     unique = []
 
@@ -152,8 +217,8 @@ def extract_ros2_topics_from_report(sky_report):
     return unique
 
 
-def infer_message_type(topic):
-    lower = topic.lower()
+def infer_message_type(topic: Any) -> str:
+    lower = as_text(topic).lower()
 
     if "cmd_vel" in lower:
         return "geometry_msgs/Twist"
@@ -170,14 +235,23 @@ def infer_message_type(topic):
     if "distance" in lower or "range" in lower or "ultrasonic" in lower:
         return "std_msgs/Float32"
 
+    if "odom" in lower:
+        return "nav_msgs/Odometry"
+
+    if "scan" in lower or "lidar" in lower:
+        return "sensor_msgs/LaserScan"
+
+    if "status" in lower:
+        return "std_msgs/String"
+
     return "unknown"
 
 
-def infer_topic_purpose(topic):
-    lower = topic.lower()
+def infer_topic_purpose(topic: Any) -> str:
+    lower = as_text(topic).lower()
 
     if "cmd_vel" in lower:
-        return "Velocity command topic for rover motion control."
+        return "Velocity command topic for rover or robot motion control."
 
     if "imu" in lower:
         return "Publishes orientation and motion data from the IMU."
@@ -191,22 +265,59 @@ def infer_topic_purpose(topic):
     if "distance" in lower or "range" in lower or "ultrasonic" in lower:
         return "Publishes obstacle distance readings."
 
+    if "odom" in lower:
+        return "Publishes robot odometry estimate."
+
+    if "scan" in lower or "lidar" in lower:
+        return "Publishes range scan data for navigation or obstacle detection."
+
+    if "status" in lower:
+        return "Publishes system status information."
+
     return "ROS2 communication topic inferred from Sky report."
 
 
-def repair_ros2_artifacts(artifacts, mission, sky_report):
+def repair_ros2_artifacts(
+    artifacts: Dict[str, Any],
+    mission: Any,
+    sky_report: Any,
+) -> Dict[str, Any]:
     """
-    Repairs weak ROS2 artifacts when the LLM produced empty node graph/package plan
+    Repair weak ROS2 artifacts when the LLM produced an empty node graph/package plan
     even though Sky's report contains useful node/topic details.
     """
     if not mission_mentions_ros2(mission, sky_report):
         return artifacts
 
-    ros2_graph = artifacts.setdefault("ros2_node_graph", {"nodes": [], "edges": []})
-    ros2_plan = artifacts.setdefault("ros2_package_plan", get_empty_artifacts()["ros2_package_plan"])
+    ros2_graph = artifacts.setdefault(
+        "ros2_node_graph",
+        {
+            "nodes": [],
+            "edges": [],
+        },
+    )
+    ros2_plan = artifacts.setdefault(
+        "ros2_package_plan",
+        get_empty_artifacts()["ros2_package_plan"],
+    )
+
+    if not isinstance(ros2_graph, dict):
+        ros2_graph = {
+            "nodes": [],
+            "edges": [],
+        }
+
+    if not isinstance(ros2_plan, dict):
+        ros2_plan = get_empty_artifacts()["ros2_package_plan"]
 
     nodes = ros2_graph.get("nodes", [])
     edges = ros2_graph.get("edges", [])
+
+    if not isinstance(nodes, list):
+        nodes = []
+
+    if not isinstance(edges, list):
+        edges = []
 
     extracted_nodes = extract_ros2_nodes_from_report(sky_report)
     extracted_topics = extract_ros2_topics_from_report(sky_report)
@@ -242,13 +353,19 @@ def repair_ros2_artifacts(artifacts, mission, sky_report):
 
     if not edges:
         control_id = safe_id("rover_control_node")
-        node_ids = {node["id"] for node in nodes}
+        node_ids = {
+            node.get("id")
+            for node in nodes
+            if isinstance(node, dict)
+        }
 
         topic_sources = {
             "/distance_data": "distance_sensor_node",
             "/imu_data": "imu_sensor_node",
             "/camera/image_raw": "camera_node",
             "/battery_status": "battery_monitor_node",
+            "/odom": "rover_control_node",
+            "/scan": "lidar_sensor_node",
         }
 
         for topic in extracted_topics:
@@ -273,8 +390,15 @@ def repair_ros2_artifacts(artifacts, mission, sky_report):
     artifacts["ros2_node_graph"] = ros2_graph
 
     if not ros2_plan.get("package_name"):
-        package_match = re.search(r"\b([a-zA-Z][a-zA-Z0-9_]*rover[a-zA-Z0-9_]*)\b", sky_report)
-        ros2_plan["package_name"] = package_match.group(1).lower() if package_match else "smart_rover"
+        package_match = re.search(
+            r"\b([a-zA-Z][a-zA-Z0-9_]*rover[a-zA-Z0-9_]*)\b",
+            as_text(sky_report),
+        )
+        ros2_plan["package_name"] = (
+            package_match.group(1).lower()
+            if package_match
+            else "smart_rover"
+        )
 
     if not ros2_plan.get("nodes"):
         ros2_plan["nodes"] = [
@@ -283,7 +407,8 @@ def repair_ros2_artifacts(artifacts, mission, sky_report):
                 "language": "python",
                 "purpose": f"ROS2 node inferred from Sky report: {node_name}.",
                 "publishes": [
-                    topic for topic in extracted_topics
+                    topic
+                    for topic in extracted_topics
                     if safe_id(node_name).replace("_node", "") in topic.replace("/", "_")
                 ],
                 "subscribes": [],
@@ -302,12 +427,15 @@ def repair_ros2_artifacts(artifacts, mission, sky_report):
             for topic in extracted_topics
         ]
 
+    if not ros2_plan.get("services"):
+        ros2_plan["services"] = []
+
     if not ros2_plan.get("launch_files"):
         package_name = ros2_plan.get("package_name") or "smart_rover"
         ros2_plan["launch_files"] = [
             {
                 "name": f"{package_name}_launch.py",
-                "purpose": "Launches the core ROS2 rover nodes for integration testing.",
+                "purpose": "Launches the core ROS2 robot nodes for integration testing.",
                 "nodes_started": extracted_nodes,
             }
         ]
@@ -336,7 +464,7 @@ def repair_ros2_artifacts(artifacts, mission, sky_report):
             },
             {
                 "path": f"{package_name}/launch/{package_name}_launch.py",
-                "purpose": "Launches the rover ROS2 nodes.",
+                "purpose": "Launches the robot ROS2 nodes.",
             },
         ]
 
@@ -345,21 +473,31 @@ def repair_ros2_artifacts(artifacts, mission, sky_report):
             "Confirm exact sensor drivers and ROS2 packages.",
             "Confirm whether nodes should be Python or C++.",
             "Confirm topic names before generating package files.",
-            "Confirm simulation target: Gazebo, RViz-only, or physical rover first.",
+            "Confirm simulation target: Gazebo, RViz-only, or physical robot first.",
         ]
 
     artifacts["ros2_package_plan"] = ros2_plan
     return artifacts
 
 
-def repair_fusion360_artifacts(artifacts, mission, oli_report):
+def repair_fusion360_artifacts(
+    artifacts: Dict[str, Any],
+    mission: Any,
+    oli_report: Any,
+) -> Dict[str, Any]:
     """
-    Repairs weak Fusion 360 artifacts when the LLM leaves parameters/components empty.
+    Repair weak Fusion 360 artifacts when the LLM leaves parameters/components empty.
     """
     if not mission_mentions_cad(mission, oli_report):
         return artifacts
 
-    concept = artifacts.setdefault("fusion360_concept", get_empty_artifacts()["fusion360_concept"])
+    concept = artifacts.setdefault(
+        "fusion360_concept",
+        get_empty_artifacts()["fusion360_concept"],
+    )
+
+    if not isinstance(concept, dict):
+        concept = get_empty_artifacts()["fusion360_concept"]
 
     if not concept.get("parameters"):
         concept["parameters"] = [
@@ -367,13 +505,13 @@ def repair_fusion360_artifacts(artifacts, mission, oli_report):
                 "name": "chassis_length",
                 "value": "unknown",
                 "unit": "mm",
-                "reason": "Henry must confirm final rover length before CAD modeling.",
+                "reason": "Henry must confirm final robot length before CAD modeling.",
             },
             {
                 "name": "chassis_width",
                 "value": "unknown",
                 "unit": "mm",
-                "reason": "Henry must confirm final rover width before CAD modeling.",
+                "reason": "Henry must confirm final robot width before CAD modeling.",
             },
             {
                 "name": "wheel_diameter",
@@ -394,19 +532,19 @@ def repair_fusion360_artifacts(artifacts, mission, oli_report):
             {
                 "name": "Main Chassis Plate",
                 "body_or_component": "component",
-                "purpose": "Base structure for mounting rover electronics, motors, sensors, and battery.",
+                "purpose": "Base structure for mounting electronics, motors, sensors, and battery.",
                 "mounting_or_clearance_notes": "Requires confirmed component footprints, screw sizes, and cable clearances.",
             },
             {
                 "name": "Motor Mounts",
                 "body_or_component": "component",
-                "purpose": "Secure the two DC gear motors to the chassis.",
+                "purpose": "Secure the drive motors or actuator modules to the chassis.",
                 "mounting_or_clearance_notes": "Requires actual motor dimensions and shaft alignment.",
             },
             {
                 "name": "Sensor Front Bracket",
                 "body_or_component": "component",
-                "purpose": "Holds ultrasonic sensor and optional camera/front-facing module.",
+                "purpose": "Holds ultrasonic sensor, camera, or front-facing perception module.",
                 "mounting_or_clearance_notes": "Requires sensor field-of-view and height clearance checks.",
             },
             {
@@ -422,7 +560,7 @@ def repair_fusion360_artifacts(artifacts, mission, oli_report):
             {
                 "step": "Create chassis base sketch",
                 "fusion360_action": "sketch",
-                "details": "Sketch a rectangular chassis using confirmed length and width parameters.",
+                "details": "Sketch a base chassis using confirmed length and width parameters.",
             },
             {
                 "step": "Extrude chassis plate",
@@ -437,7 +575,7 @@ def repair_fusion360_artifacts(artifacts, mission, oli_report):
             {
                 "step": "Add electronics mounting holes",
                 "fusion360_action": "sketch",
-                "details": "Add Raspberry Pi, sensor, IMU, and battery mounting features.",
+                "details": "Add controller, sensor, IMU, and battery mounting features.",
             },
             {
                 "step": "Add edge fillets",
@@ -460,12 +598,15 @@ def repair_fusion360_artifacts(artifacts, mission, oli_report):
         ]
 
     missing = concept.get("missing_cad_inputs", [])
+    if not isinstance(missing, list):
+        missing = []
+
     required_missing = [
         "Final chassis length, width, and thickness.",
-        "Exact DC gear motor dimensions and mounting pattern.",
+        "Exact motor dimensions and mounting pattern.",
         "Wheel diameter and axle/shaft geometry.",
         "Battery dimensions and weight.",
-        "Raspberry Pi mounting hole pattern and standoff height.",
+        "Controller board mounting hole pattern and standoff height.",
         "Material choice: PLA, PETG, acrylic, aluminum, or other.",
     ]
 
@@ -478,9 +619,9 @@ def repair_fusion360_artifacts(artifacts, mission, oli_report):
     return artifacts
 
 
-def repair_export_files(artifacts):
+def repair_export_files(artifacts: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Ensures the export_files artifact is useful even when the LLM returns only 1-2 files.
+    Ensure the export_files artifact is useful even when the LLM returns only 1-2 files.
     """
     standard_files = [
         {
@@ -493,6 +634,12 @@ def repair_export_files(artifacts):
             "path": "mission_report.md",
             "file_type": "md",
             "purpose": "Readable mission report with agent outputs and validation.",
+            "generated_from": "Omni",
+        },
+        {
+            "path": "agent_reports/omni.md",
+            "file_type": "md",
+            "purpose": "Omni orchestration and mission synthesis report.",
             "generated_from": "Omni",
         },
         {
@@ -538,6 +685,24 @@ def repair_export_files(artifacts):
             "generated_from": "Artifact Synthesizer",
         },
         {
+            "path": "artifacts/component_tree.json",
+            "file_type": "json",
+            "purpose": "Component hierarchy for frontend visualization.",
+            "generated_from": "Artifact Synthesizer",
+        },
+        {
+            "path": "artifacts/blueprint_plan.json",
+            "file_type": "json",
+            "purpose": "Physical layout and subsystem placement plan.",
+            "generated_from": "Artifact Synthesizer",
+        },
+        {
+            "path": "artifacts/hardware_architecture.json",
+            "file_type": "json",
+            "purpose": "Hardware, electronics, power, and interface architecture.",
+            "generated_from": "Korva",
+        },
+        {
             "path": "artifacts/fusion360_concept.json",
             "file_type": "json",
             "purpose": "Fusion 360 concept parameters, components, and modeling steps.",
@@ -547,7 +712,7 @@ def repair_export_files(artifacts):
             "path": "artifacts/ros2_package_plan.json",
             "file_type": "json",
             "purpose": "ROS2 package scaffold plan.",
-            "generated_from": "Artifact Synthesizer",
+            "generated_from": "Sky",
         },
         {
             "path": "artifacts/risk_matrix.csv",
@@ -561,9 +726,19 @@ def repair_export_files(artifacts):
             "purpose": "Validation and safety test checklist.",
             "generated_from": "QaZ",
         },
+        {
+            "path": "artifacts/approval_gates.md",
+            "file_type": "md",
+            "purpose": "Human approval gates before fabrication, testing, or hardware control.",
+            "generated_from": "QaZ",
+        },
     ]
 
     existing = artifacts.get("export_files", [])
+
+    if not isinstance(existing, list):
+        existing = []
+
     existing_paths = {
         item.get("path")
         for item in existing
@@ -578,7 +753,7 @@ def repair_export_files(artifacts):
     return artifacts
 
 
-def repair_next_artifacts(artifacts):
+def repair_next_artifacts(artifacts: Dict[str, Any]) -> Dict[str, Any]:
     required = [
         {
             "name": "ROS2 Node Graph",
@@ -613,6 +788,10 @@ def repair_next_artifacts(artifacts):
     ]
 
     existing = artifacts.get("next_artifacts", [])
+
+    if not isinstance(existing, list):
+        existing = []
+
     existing_names = {
         item.get("name")
         for item in existing
@@ -627,7 +806,12 @@ def repair_next_artifacts(artifacts):
     return artifacts
 
 
-def repair_artifacts(artifacts, mission, sky_report, oli_report):
+def repair_artifacts(
+    artifacts: Dict[str, Any],
+    mission: Any,
+    sky_report: Any,
+    oli_report: Any,
+) -> Dict[str, Any]:
     artifacts = repair_ros2_artifacts(artifacts, mission, sky_report)
     artifacts = repair_fusion360_artifacts(artifacts, mission, oli_report)
     artifacts = repair_export_files(artifacts)
@@ -650,13 +834,12 @@ def synthesize_artifacts(
     pluto_output=None,
 ):
     """
-    Converts OMNI agent reports into visualization-ready and export-ready artifacts.
+    Convert OMNI agent reports into visualization-ready and export-ready artifacts.
 
     Backward compatibility:
     - supervisor.py may still call this with reed_output, tony_output, etc.
     - Newer code can call it with omni_output, sky_output, korva_output, etc.
     """
-
     omni_report = sanitize_legacy_names(omni_output or reed_output or "")
     sky_report = sanitize_legacy_names(sky_output or tony_output or "")
     korva_report = sanitize_legacy_names(korva_output or "")
@@ -892,6 +1075,9 @@ Rules:
 """
 
     try:
+        if openai_client is None:
+            raise RuntimeError("OpenAI client is not configured.")
+
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -937,11 +1123,13 @@ Rules:
         return normalize_artifacts(sanitize_legacy_names(artifacts))
 
 
-def normalize_artifacts(artifacts):
+def normalize_artifacts(artifacts: Any) -> Dict[str, Any]:
     default = get_empty_artifacts()
 
     if not isinstance(artifacts, dict):
         return default
+
+    artifacts = sanitize_legacy_names(artifacts)
 
     for key, value in default.items():
         if key not in artifacts:
@@ -954,6 +1142,12 @@ def normalize_artifacts(artifacts):
         artifacts["ros2_node_graph"]["nodes"] = []
 
     if "edges" not in artifacts["ros2_node_graph"]:
+        artifacts["ros2_node_graph"]["edges"] = []
+
+    if not isinstance(artifacts["ros2_node_graph"].get("nodes"), list):
+        artifacts["ros2_node_graph"]["nodes"] = []
+
+    if not isinstance(artifacts["ros2_node_graph"].get("edges"), list):
         artifacts["ros2_node_graph"]["edges"] = []
 
     list_keys = [
@@ -988,7 +1182,13 @@ def normalize_artifacts(artifacts):
         if key not in artifacts["ros2_package_plan"]:
             artifacts["ros2_package_plan"][key] = value
 
-        if isinstance(value, list) and not isinstance(artifacts["ros2_package_plan"].get(key), list):
+        if isinstance(value, list) and not isinstance(
+            artifacts["ros2_package_plan"].get(key),
+            list,
+        ):
             artifacts["ros2_package_plan"][key] = value
+
+    if not isinstance(artifacts["ros2_package_plan"].get("package_name"), str):
+        artifacts["ros2_package_plan"]["package_name"] = ""
 
     return sanitize_legacy_names(artifacts)

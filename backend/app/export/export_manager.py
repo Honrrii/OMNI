@@ -12,17 +12,10 @@ from backend.app.generators.fusion360_script_generator import (
 from backend.app.generators.kicad_project_generator import KiCadProjectGenerator
 from backend.app.generators.mission_report_generator import generate_mission_report
 from backend.app.validators.ros2_build_validator import validate_ros2_package
+from backend.app.omni_core.formatters import safe_folder_name, sanitize_payload
 
 
 OUTPUT_ROOT = Path("outputs") / "omni_missions"
-
-
-def safe_folder_name(text: str) -> str:
-    value = str(text or "omni_mission").lower()
-    value = value.replace("/", "_").replace("\\", "_").replace(" ", "_")
-    value = "".join(ch for ch in value if ch.isalnum() or ch in ["_", "-"])
-    value = "_".join(part for part in value.split("_") if part)
-    return value[:90] or "omni_mission"
 
 
 def write_text(path: Path, content: str) -> None:
@@ -33,7 +26,7 @@ def write_text(path: Path, content: str) -> None:
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False),
+        json.dumps(data, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
 
@@ -88,6 +81,14 @@ def markdown_list(title: str, items: List[Any]) -> str:
     return "\n".join(lines)
 
 
+def as_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def as_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
 def should_generate_ros2_package(artifacts: Dict[str, Any]) -> bool:
     if not isinstance(artifacts, dict):
         return False
@@ -112,8 +113,8 @@ def should_generate_kicad_package(mission_result: Dict[str, Any]) -> bool:
     """
     Decide whether OMNI should generate a starter KiCAD electronics package.
 
-    This intentionally scans the full mission result because electronics-related
-    language may appear in the mission text, agent outputs, artifacts, or final report.
+    This scans the full mission result because electronics-related language may
+    appear in mission text, agent outputs, artifacts, validation, or reports.
     """
     if not isinstance(mission_result, dict):
         return False
@@ -161,10 +162,7 @@ def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, 
         or "OMNI mission"
     )
 
-    artifacts = mission_result.get("artifacts", {}) or {}
-
-    if not isinstance(artifacts, dict):
-        artifacts = {}
+    artifacts = as_dict(mission_result.get("artifacts", {}))
 
     hardware_architecture = artifacts.get("hardware_architecture", [])
     component_tree = artifacts.get("component_tree", [])
@@ -255,7 +253,8 @@ def compact_validation_result(
     validation_report: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     """
-    Returns a compact frontend/API-friendly summary of the full ROS2 validation report.
+    Return a compact frontend/API-friendly summary of the full ROS2 validation report.
+
     The full report is still written into the generated package build_reports folder.
     """
     if not isinstance(validation_report, dict):
@@ -316,7 +315,7 @@ def run_ros2_validation(
     run_launch_check: bool = True,
 ) -> Dict[str, Any]:
     """
-    Validates the generated ROS2 package after export.
+    Validate the generated ROS2 package after export.
 
     This runs:
     - expected file check
@@ -389,7 +388,7 @@ def export_mission_files(
     ros2_launch_check: bool = True,
 ) -> Dict[str, Any]:
     """
-    Writes a completed OMNI mission result into an export folder.
+    Write a completed OMNI mission result into an export folder.
 
     Expected mission_result fields:
     - mission
@@ -405,41 +404,69 @@ def export_mission_files(
     If CAD/Fusion content is detected, this can generate a Fusion 360 Python script.
     If electronics/PCB content is detected, this can generate a starter KiCAD package.
     """
-
     if not isinstance(mission_result, dict):
         raise ValueError("mission_result must be a dictionary.")
 
-    mission = mission_result.get("mission", "omni_mission")
+    # Centralized cleanup: remove legacy names before writing mission exports.
+    mission_result = sanitize_payload(mission_result)
+
+    mission = (
+        mission_result.get("mission")
+        or mission_result.get("mission_text")
+        or mission_result.get("user_prompt")
+        or "omni_mission"
+    )
+
     result_id = mission_result.get("result_id") or datetime.now().isoformat().replace(
         ":",
         "-",
     )
+
     folder_name = safe_folder_name(f"{mission}_{result_id}")
 
     export_dir = OUTPUT_ROOT / folder_name
     agent_dir = export_dir / "agent_reports"
     artifact_dir = export_dir / "artifacts"
 
-    agents = mission_result.get("agents", {}) or {}
-    artifacts = mission_result.get("artifacts", {}) or {}
+    agents = as_dict(mission_result.get("agents", {}))
+    artifacts = as_dict(mission_result.get("artifacts", {}))
 
-    if not isinstance(agents, dict):
-        agents = {}
-
-    if not isinstance(artifacts, dict):
-        artifacts = {}
-
-    written_files = []
+    written_files: List[str] = []
 
     def record(path: Path) -> None:
-        relative_path = str(path.relative_to(export_dir))
+        """
+        Record a written file path relative to export_dir whenever possible.
+
+        If a generator returns an absolute path outside export_dir, fall back to
+        recording the string path instead of crashing.
+        """
+        try:
+            path = Path(path)
+            relative_path = str(path.relative_to(export_dir))
+        except Exception:
+            relative_path = str(path)
 
         if relative_path not in written_files:
             written_files.append(relative_path)
 
-    def record_generated_file(relative_path: str) -> None:
-        if relative_path and relative_path not in written_files:
-            written_files.append(relative_path)
+    def record_generated_file(path_value: Any) -> None:
+        if not path_value:
+            return
+
+        try:
+            generated_path = Path(str(path_value))
+
+            if generated_path.exists():
+                record(generated_path)
+            else:
+                path_string = str(path_value)
+                if path_string not in written_files:
+                    written_files.append(path_string)
+
+        except Exception:
+            path_string = str(path_value)
+            if path_string not in written_files:
+                written_files.append(path_string)
 
     # ---------------------------------------------------------
     # Core mission files
@@ -509,20 +536,20 @@ def export_mission_files(
     # CSV / Markdown artifacts
     # ---------------------------------------------------------
     path = artifact_dir / "risk_matrix.csv"
-    write_csv(path, artifacts.get("risk_matrix", []))
+    write_csv(path, as_list(artifacts.get("risk_matrix", [])))
     record(path)
 
     path = artifact_dir / "test_checklist.md"
     write_text(
         path,
-        markdown_list("Test Checklist", artifacts.get("test_checklist", [])),
+        markdown_list("Test Checklist", as_list(artifacts.get("test_checklist", []))),
     )
     record(path)
 
     path = artifact_dir / "approval_gates.md"
     write_text(
         path,
-        markdown_list("Approval Gates", artifacts.get("approval_gates", [])),
+        markdown_list("Approval Gates", as_list(artifacts.get("approval_gates", []))),
     )
     record(path)
 
@@ -561,12 +588,7 @@ def export_mission_files(
                 )
 
                 for report_path in report_paths.values():
-                    try:
-                        report_file = Path(report_path)
-                        if report_file.exists():
-                            record(report_file)
-                    except Exception:
-                        pass
+                    record_generated_file(report_path)
 
         except Exception as error:
             ros2_generation = {
@@ -645,15 +667,7 @@ def export_mission_files(
             record(path)
 
             for generated_file in kicad_generation.get("files", []):
-                try:
-                    generated_path = Path(generated_file)
-
-                    if generated_path.exists():
-                        record(generated_path)
-                    else:
-                        record_generated_file(generated_file)
-                except Exception:
-                    record_generated_file(generated_file)
+                record_generated_file(generated_file)
 
         except Exception as error:
             kicad_generation = {
@@ -666,9 +680,9 @@ def export_mission_files(
             record(path)
 
     # ---------------------------------------------------------
-    # Human-readable README
+    # Human-readable README values
     # ---------------------------------------------------------
-    validation = mission_result.get("validation", {}) or {}
+    validation = as_dict(mission_result.get("validation", {}))
 
     ros2_generation_status = (
         ros2_generation.get("status", "not_generated")
@@ -725,8 +739,14 @@ def export_mission_files(
 
     try:
         report_validation = {
-            "status": validation.get("verdict", mission_result.get("status", "unknown")),
-            "summary": "Mission export completed with generated artifacts, validation data, and engineering review notes.",
+            "status": validation.get(
+                "verdict",
+                mission_result.get("status", "unknown"),
+            ),
+            "summary": (
+                "Mission export completed with generated artifacts, validation data, "
+                "and engineering review notes."
+            ),
             "validation": validation,
             "ros2_validation": ros2_validation,
             "fusion360_generation": fusion360_generation,
@@ -745,10 +765,7 @@ def export_mission_files(
             report_path_value = mission_report.get(report_key)
 
             if report_path_value:
-                report_path = Path(report_path_value)
-
-                if report_path.exists():
-                    record(report_path)
+                record_generated_file(report_path_value)
 
     except Exception as error:
         mission_report = {

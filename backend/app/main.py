@@ -6,16 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from agents.supervisor import SupervisorAgent
-from backend.app.knowledge.knowledge_context_builder import build_omni_knowledge_context
 from agents.mission_interpreter_agent import MissionInterpreterAgent
 from memory.memory_manager import get_recent_memory
-from backend.app.ros.ros_status_service import get_ros_status
+
 from backend.app.export.export_manager import export_mission_files
+from backend.app.knowledge.knowledge_context_builder import build_omni_knowledge_context
+from backend.app.omni_core.formatters import sanitize_payload
 from backend.app.omni_core.omni_forge_service import (
     run_omni_forge_validation,
     run_omni_forge_cad_script_generation,
     run_omni_forge_cad_script_execution,
 )
+from backend.app.ros.ros_status_service import get_ros_status
 
 
 app = FastAPI(title="OMNI Command API")
@@ -73,6 +75,19 @@ class InterpretAndRunRequest(BaseModel):
     idea: str
     context: str = ""
     auto_export: bool = False
+
+
+# ---------------------------------------------------------
+# SHARED SANITIZER WRAPPER
+# ---------------------------------------------------------
+def sanitize_legacy_names(value: Any) -> Any:
+    """
+    Compatibility wrapper.
+
+    Older code in main.py still calls sanitize_legacy_names(), but the actual
+    implementation now lives in backend.app.omni_core.formatters.
+    """
+    return sanitize_payload(value)
 
 
 # ---------------------------------------------------------
@@ -168,6 +183,13 @@ def default_agent_council():
             "color": "light_pink",
             "responsibility": "Scores the output, identifies missing evidence, and recommends validation tests.",
         },
+        {
+            "id": "vega",
+            "name": "Vega",
+            "role": "Design Morphology, Aesthetics, and Form Exploration",
+            "color": "violet",
+            "responsibility": "Explores creative design language, morphology, and visual engineering concepts.",
+        },
     ]
 
 
@@ -180,6 +202,7 @@ def default_agents_from_text(final_output: str):
         "oli": "No Oli report returned.",
         "pluto": "No Pluto critique returned.",
         "qaz": "No QaZ validation returned.",
+        "vega": "No Vega design report returned.",
     }
 
 
@@ -219,48 +242,6 @@ def build_default_artifacts(mission: str, final_output: str):
     }
 
 
-def sanitize_legacy_names(value: Any) -> Any:
-    """
-    Recursively removes old Marvel/Avengers naming from API responses.
-
-    This gives the frontend OMNI-native data even if older modules still
-    return older labels.
-    """
-    replacements = {
-        "Reed Richards": "Omni",
-        "Tony Stark": "Sky",
-        "Bruce Banner": "Isy",
-        "Hank Pym": "Oli",
-        "Ultron": "Pluto",
-        "Vision": "QaZ",
-        "Shuri": "Korva",
-        "AI Avengers": "OMNI",
-        "Marvel Geniuses HQ": "OMNI Command",
-        "Marvel Geniuses": "OMNI",
-        "Bruce": "Isy",
-        "Tony": "Sky",
-        "Hank": "Oli",
-        "Reed": "Omni",
-    }
-
-    if isinstance(value, str):
-        cleaned = value
-        for old, new in replacements.items():
-            cleaned = cleaned.replace(old, new)
-        return cleaned
-
-    if isinstance(value, list):
-        return [sanitize_legacy_names(item) for item in value]
-
-    if isinstance(value, dict):
-        return {
-            key: sanitize_legacy_names(item)
-            for key, item in value.items()
-        }
-
-    return value
-
-
 def remove_legacy_agent_keys(agents: Any) -> Any:
     """
     The supervisor may temporarily return both legacy keys and new OMNI keys.
@@ -270,7 +251,16 @@ def remove_legacy_agent_keys(agents: Any) -> Any:
     if not isinstance(agents, dict):
         return agents
 
-    preferred_keys = ["omni", "sky", "korva", "isy", "oli", "pluto", "qaz"]
+    preferred_keys = [
+        "omni",
+        "sky",
+        "korva",
+        "isy",
+        "oli",
+        "pluto",
+        "qaz",
+        "vega",
+    ]
 
     if any(key in agents for key in preferred_keys):
         return {
@@ -306,8 +296,8 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
     entire dict into final_synthesis. Return the structured payload and
     add frontend-friendly aliases.
     """
-
     created_at = datetime.now().isoformat()
+    result_id = created_at.replace(":", "-").replace(".", "-")
 
     # Case 1: supervisor returns plain text.
     if isinstance(raw_result, str):
@@ -316,7 +306,7 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
         return {
             "mission": mission,
             "created_at": created_at,
-            "result_id": created_at.replace(":", "-").replace(".", "-"),
+            "result_id": result_id,
             "agent_council": default_agent_council(),
             "council_events": [],
             "agents": default_agents_from_text(final_output),
@@ -336,11 +326,15 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
     if isinstance(raw_result, dict):
         result = sanitize_legacy_names(raw_result.copy())
 
+        revision = result.get("revision", {})
+        if not isinstance(revision, dict):
+            revision = {}
+
         final_output = (
             result.get("final_decision")
             or result.get("final_report")
             or result.get("final_synthesis")
-            or result.get("revision", {}).get("final_blueprint")
+            or revision.get("final_blueprint")
             or result.get("response")
             or result.get("result")
             or result.get("message")
@@ -355,10 +349,7 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
             # Stable top-level fields for frontend.
             "mission": result.get("mission", mission),
             "created_at": result.get("created_at", created_at),
-            "result_id": result.get(
-                "result_id",
-                created_at.replace(":", "-").replace(".", "-"),
-            ),
+            "result_id": result.get("result_id", result_id),
             "agent_council": result.get("agent_council", default_agent_council()),
             "council_events": result.get("council_events", []),
             "agents": agents,
@@ -389,7 +380,7 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
     return {
         "mission": mission,
         "created_at": created_at,
-        "result_id": created_at.replace(":", "-").replace(".", "-"),
+        "result_id": result_id,
         "agent_council": default_agent_council(),
         "council_events": [],
         "agents": default_agents_from_text(final_output),
@@ -404,7 +395,6 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
         "timeline": default_timeline(),
         "status": "complete",
     }
-
 
 
 def format_knowledge_context_for_prompt(knowledge_context: Dict[str, Any]) -> str:
@@ -430,25 +420,29 @@ def format_knowledge_context_for_prompt(knowledge_context: Dict[str, Any]) -> st
     else:
         lines.append("- None selected")
 
-    lines.extend([
-        "",
-        "Relevant retrieved knowledge excerpts:",
-    ])
+    lines.extend(
+        [
+            "",
+            "Relevant retrieved knowledge excerpts:",
+        ]
+    )
 
     if retrieved_knowledge:
         for i, item in enumerate(retrieved_knowledge, start=1):
-            excerpt = item.get("text", "")[:700].replace("\n", " ")
+            excerpt = str(item.get("text", ""))[:700].replace("\n", " ")
             matched_terms = ", ".join(item.get("matched_terms", []))
 
-            lines.extend([
-                f"",
-                f"[Knowledge Hit {i}]",
-                f"Domain: {item.get('domain', 'unknown')}",
-                f"Source: {item.get('source_file', 'unknown')}",
-                f"Chunk: {item.get('chunk_id', 'unknown')}",
-                f"Matched terms: {matched_terms}",
-                f"Excerpt: {excerpt}",
-            ])
+            lines.extend(
+                [
+                    "",
+                    f"[Knowledge Hit {i}]",
+                    f"Domain: {item.get('domain', 'unknown')}",
+                    f"Source: {item.get('source_file', 'unknown')}",
+                    f"Chunk: {item.get('chunk_id', 'unknown')}",
+                    f"Matched terms: {matched_terms}",
+                    f"Excerpt: {excerpt}",
+                ]
+            )
     else:
         lines.append("- No local knowledge chunks retrieved.")
 
@@ -490,9 +484,9 @@ ROS2 architecture, autonomy planning, fabrication decisions, and validation.
         )
 
     normalized_result = normalize_mission_result(mission, raw_result)
-    normalized_result["knowledge_context"] = knowledge_context
+    normalized_result["knowledge_context"] = sanitize_legacy_names(knowledge_context)
 
-    return normalized_result
+    return sanitize_legacy_names(normalized_result)
 
 
 # ---------------------------------------------------------
@@ -530,7 +524,8 @@ def read_memory():
             status_code=500,
             detail=f"Failed to read memory: {str(error)}",
         )
-    
+
+
 @app.get("/ros/status")
 def ros_status():
     """
@@ -622,8 +617,8 @@ def interpret_and_run_mission(request: InterpretAndRunRequest):
             "status": "success",
             "message": "Echo interpreted the idea and OMNI completed the mission.",
             "interpretation": interpretation,
-            "mission_result": mission_result,
-            "export": export_result,
+            "mission_result": sanitize_legacy_names(mission_result),
+            "export": sanitize_legacy_names(export_result),
             "timestamp": datetime.now().isoformat(),
         }
 
@@ -676,7 +671,7 @@ def forge_validate(request: ForgeMissionRequest):
         )
 
     try:
-        return run_omni_forge_validation(mission)
+        return sanitize_legacy_names(run_omni_forge_validation(mission))
 
     except Exception as error:
         raise HTTPException(
@@ -709,7 +704,7 @@ def forge_generate_cad_script(request: ForgeMissionRequest):
         )
 
     try:
-        return run_omni_forge_cad_script_generation(mission)
+        return sanitize_legacy_names(run_omni_forge_cad_script_generation(mission))
 
     except Exception as error:
         raise HTTPException(
@@ -737,7 +732,7 @@ def forge_execute_cad_script(request: ForgeScriptExecutionRequest):
         )
 
     try:
-        return run_omni_forge_cad_script_execution(script_path)
+        return sanitize_legacy_names(run_omni_forge_cad_script_execution(script_path))
 
     except Exception as error:
         raise HTTPException(
@@ -768,7 +763,7 @@ def export_mission(request: MissionExportRequest):
         return {
             "status": "success",
             "message": "Mission files exported successfully.",
-            "export": export_result,
+            "export": sanitize_legacy_names(export_result),
             "timestamp": datetime.now().isoformat(),
         }
 

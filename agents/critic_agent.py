@@ -1,5 +1,10 @@
+from typing import Any
+
 from agents.base_agent import BaseAgent
 from agents.llm_clients import call_chatgpt
+from backend.app.omni_core.formatters import (
+    sanitize_legacy_names as format_sanitize_legacy_names,
+)
 
 
 class CriticAgent(BaseAgent):
@@ -14,29 +19,19 @@ class CriticAgent(BaseAgent):
             ),
         )
 
-    def sanitize_legacy_names(self, text):
-        if not isinstance(text, str):
-            return text
+    def sanitize_legacy_names(self, text: Any) -> Any:
+        """
+        Compatibility wrapper.
 
-        return (
-            text
-            .replace("Ultron", "Pluto")
-            .replace("Reed Richards", "Omni")
-            .replace("Tony Stark", "Sky")
-            .replace("Bruce Banner", "Isy")
-            .replace("Hank Pym", "Oli")
-            .replace("Vision", "QaZ")
-            .replace("Shuri", "Korva")
-            .replace("AI Avengers", "OMNI")
-            .replace("Marvel Geniuses HQ", "OMNI Command")
-            .replace("Marvel Geniuses", "OMNI")
-            .replace("Reed", "Omni")
-            .replace("Tony", "Sky")
-            .replace("Bruce", "Isy")
-            .replace("Hank", "Oli")
-        )
+        The real legacy-name cleanup now lives in:
+        backend.app.omni_core.formatters
+        """
+        return format_sanitize_legacy_names(text)
 
-    def run(self, mission, previous_outputs):
+    def run(self, mission: str, previous_outputs: str) -> str:
+        mission = self.sanitize_legacy_names(mission or "")
+        previous_outputs = self.sanitize_legacy_names(previous_outputs or "")
+
         prompt = f"""
 You are Pluto, the risk, failure-analysis, and safety-gate critic inside OMNI Command.
 
@@ -128,4 +123,6 @@ Provide visualization-ready items:
 - stop conditions
 - required measurements
 """
-        return self.sanitize_legacy_names(call_chatgpt(prompt))
+
+        result = call_chatgpt(prompt)
+        return self.sanitize_legacy_names(result)
