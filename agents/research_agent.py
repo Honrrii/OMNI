@@ -1,5 +1,5 @@
 from agents.base_agent import BaseAgent
-from agents.llm_clients import call_chatgpt
+from backend.app.omni_core.llm_router import call_llm
 
 class ResearchAgent(BaseAgent):
     def __init__(self):
@@ -73,4 +73,4 @@ Provide visualization-ready items:
 - sensor fusion diagram elements
 - physics risk items
 """
-        return call_chatgpt(prompt)
+        return call_llm(prompt, role="Isy")
