@@ -1,5 +1,5 @@
 from agents.base_agent import BaseAgent
-from agents.llm_clients import call_chatgpt
+from backend.app.omni_core.llm_router import call_llm
 
 class RoboticsAgent(BaseAgent):
     def __init__(self):
@@ -76,4 +76,4 @@ class RoboticsAgent(BaseAgent):
     - test checklist items
     - next code artifacts to generate
 """
-        return call_chatgpt(prompt)
+        return call_llm(prompt, role="Sky")
