@@ -1,49 +1,122 @@
+# backend/app/core/mission_state.py
+
 from __future__ import annotations
 
-from typing import Any, Dict, List
-from pydantic import BaseModel, Field
-
-from backend.app.omni_core.agent_protocol import (
-    AgentContribution,
-    AgentMessage,
-    AgentRole,
-)
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 
-class MissionState(BaseModel):
-    mission_id: str
-    user_prompt: str
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-    interpreted_goal: str = ""
-    project_type: str = "unknown"
-    target_domain: str = "robotics"
 
-    requirements: List[str] = Field(default_factory=list)
-    constraints: List[str] = Field(default_factory=list)
-    decisions: List[str] = Field(default_factory=list)
-    risks: List[str] = Field(default_factory=list)
-    blockers: List[str] = Field(default_factory=list)
-    open_questions: List[str] = Field(default_factory=list)
+@dataclass
+class AgentRecord:
+    agent_id: str
+    agent_name: str
+    raw_output: Optional[str] = None
+    parsed_output: Dict[str, Any] = field(default_factory=dict)
+    status: str = "pending"
+    errors: List[str] = field(default_factory=list)
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
 
-    contributions: Dict[str, AgentContribution] = Field(default_factory=dict)
-    messages: List[AgentMessage] = Field(default_factory=list)
 
-    artifacts: Dict[str, Any] = Field(default_factory=dict)
-    final_report: Dict[str, Any] = Field(default_factory=dict)
+@dataclass
+class MissionState:
+    mission_text: str
+    mission_id: str = field(default_factory=lambda: str(uuid4()))
+    status: str = "created"
 
-    def add_contribution(self, contribution: AgentContribution) -> None:
-        self.contributions[contribution.agent.value] = contribution
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
 
-        self.risks.extend(contribution.risks)
-        self.constraints.extend(contribution.constraints)
-        self.open_questions.extend(contribution.open_questions)
+    agent_records: Dict[str, AgentRecord] = field(default_factory=dict)
 
-    def add_message(self, message: AgentMessage) -> None:
-        self.messages.append(message)
+    structured_outputs: Dict[str, Any] = field(default_factory=dict)
+    synthesis_input: Dict[str, Any] = field(default_factory=dict)
+    synthesized_artifacts: Dict[str, Any] = field(default_factory=dict)
 
-        self.risks.extend(message.risks)
-        self.constraints.extend(message.constraints)
-        self.blockers.extend(message.blockers)
+    warnings: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
 
-    def get_contribution(self, agent: AgentRole) -> AgentContribution | None:
-        return self.contributions.get(agent.value)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def touch(self) -> None:
+        self.updated_at = utc_now_iso()
+
+    def set_status(self, status: str) -> None:
+        self.status = status
+        self.touch()
+
+    def start_agent(self, agent_id: str, agent_name: str) -> None:
+        self.agent_records[agent_id] = AgentRecord(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            status="running",
+            started_at=utc_now_iso(),
+        )
+        self.touch()
+
+    def finish_agent(
+        self,
+        agent_id: str,
+        raw_output: str,
+        parsed_output: Dict[str, Any],
+    ) -> None:
+        record = self.agent_records.get(agent_id)
+
+        if record is None:
+            record = AgentRecord(agent_id=agent_id, agent_name=agent_id)
+
+        record.raw_output = raw_output
+        record.parsed_output = parsed_output
+        record.status = "completed"
+        record.finished_at = utc_now_iso()
+
+        self.agent_records[agent_id] = record
+        self.structured_outputs[agent_id] = parsed_output
+        self.touch()
+
+    def fail_agent(self, agent_id: str, error: str, raw_output: Optional[str] = None) -> None:
+        record = self.agent_records.get(agent_id)
+
+        if record is None:
+            record = AgentRecord(agent_id=agent_id, agent_name=agent_id)
+
+        record.status = "failed"
+        record.errors.append(error)
+        record.raw_output = raw_output
+        record.finished_at = utc_now_iso()
+
+        self.agent_records[agent_id] = record
+        self.errors.append(f"{agent_id}: {error}")
+        self.touch()
+
+    def add_warning(self, warning: str) -> None:
+        self.warnings.append(warning)
+        self.touch()
+
+    def add_error(self, error: str) -> None:
+        self.errors.append(error)
+        self.touch()
+
+    def build_synthesis_input(self) -> Dict[str, Any]:
+        """
+        The ArtifactSynthesizer should eventually consume this instead of loose agent strings.
+        """
+        self.synthesis_input = {
+            "mission_id": self.mission_id,
+            "mission_text": self.mission_text,
+            "agent_outputs": self.structured_outputs,
+            "warnings": self.warnings,
+            "errors": self.errors,
+            "metadata": self.metadata,
+        }
+        self.touch()
+        return self.synthesis_input
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
