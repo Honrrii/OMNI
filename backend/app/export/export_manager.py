@@ -14,6 +14,7 @@ from backend.app.generators.mission_report_generator import generate_mission_rep
 from backend.app.validators.ros2_build_validator import validate_ros2_package
 from backend.app.omni_core.formatters import safe_folder_name, sanitize_payload
 from backend.app.engineering.kicad_knowledge_gate_validator import validate_kicad_package
+from backend.app.engineering.morphology_planner import plan_morphology_dict
 
 
 OUTPUT_ROOT = Path("outputs") / "omni_missions"
@@ -559,6 +560,10 @@ def export_mission_files(
 
     agents = as_dict(mission_result.get("agents", {}))
     artifacts = as_dict(mission_result.get("artifacts", {}))
+    morphology_plan = plan_morphology_dict(mission)
+
+    artifacts["morphology_plan"] = morphology_plan
+    mission_result["artifacts"] = artifacts
 
     written_files: List[str] = []
 
@@ -649,6 +654,7 @@ def export_mission_files(
     # ---------------------------------------------------------
 
     artifact_json_files = {
+        "morphology_plan.json": artifacts.get("morphology_plan", {}),
         "ros2_node_graph.json": artifacts.get("ros2_node_graph", {}),
         "component_tree.json": artifacts.get("component_tree", []),
         "blueprint_plan.json": artifacts.get("blueprint_plan", []),
