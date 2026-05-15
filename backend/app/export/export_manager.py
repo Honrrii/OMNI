@@ -13,6 +13,7 @@ from backend.app.generators.kicad_project_generator import KiCadProjectGenerator
 from backend.app.generators.mission_report_generator import generate_mission_report
 from backend.app.validators.ros2_build_validator import validate_ros2_package
 from backend.app.omni_core.formatters import safe_folder_name, sanitize_payload
+from backend.app.engineering.kicad_knowledge_gate_validator import validate_kicad_package
 
 
 OUTPUT_ROOT = Path("outputs") / "omni_missions"
@@ -475,6 +476,42 @@ def run_ros2_validation(
 
 
 # -------------------------------------------------------------------------
+# KiCad validation helper
+# -------------------------------------------------------------------------
+
+
+def run_kicad_knowledge_gate(export_dir: Path) -> Dict[str, Any]:
+    """
+    Validate the generated KiCad starter package.
+
+    This checks the generated_kicad folder for required project files, support
+    artifacts, placeholder warnings, manufacturing-readiness notes, and the
+    KiCad knowledge context file.
+    """
+    try:
+        return validate_kicad_package(export_dir)
+    except Exception as error:
+        return {
+            "validator": "kicad_knowledge_gate_validator",
+            "status": "failed",
+            "summary": {
+                "blockers": 1,
+                "warnings": 0,
+                "info": 0,
+                "total_issues": 1,
+            },
+            "issues": [
+                {
+                    "rule_id": "KICAD.VALIDATOR.001",
+                    "severity": "blocker",
+                    "message": f"KiCad knowledge gate validator failed: {error}",
+                    "file": None,
+                }
+            ],
+        }
+
+
+# -------------------------------------------------------------------------
 # Main export function
 # -------------------------------------------------------------------------
 
@@ -499,7 +536,8 @@ def export_mission_files(
 
     If a ROS2 package is generated, this can also auto-run the ROS2 build validator.
     If CAD/Fusion content is detected, this can generate a Fusion 360 Python script.
-    If electronics/PCB content is detected, this can generate a starter KiCad package.
+    If electronics/PCB content is detected, this can generate a starter KiCad package
+    and run the KiCad Knowledge Gate validator.
     """
     if not isinstance(mission_result, dict):
         raise ValueError("mission_result must be a dictionary.")
@@ -737,10 +775,11 @@ def export_mission_files(
             record(path)
 
     # ---------------------------------------------------------
-    # Generated KiCad electronics package
+    # Generated KiCad electronics package + Knowledge Gate
     # ---------------------------------------------------------
 
     kicad_generation = None
+    kicad_validation = None
 
     if should_generate_kicad_package(mission_result):
         try:
@@ -761,17 +800,41 @@ def export_mission_files(
                 "file_map": kicad_files,
             }
 
+            for generated_file in kicad_generation.get("files", []):
+                record_generated_file(generated_file)
+
+            kicad_validation = run_kicad_knowledge_gate(export_dir)
+
+            kicad_validation_path = (
+                export_dir / "generated_kicad" / "kicad_knowledge_gate_report.json"
+            )
+            write_json(kicad_validation_path, kicad_validation)
+            record(kicad_validation_path)
+
+            kicad_generation["knowledge_gate"] = kicad_validation
+            kicad_generation["knowledge_gate_report"] = str(kicad_validation_path)
+
             path = artifact_dir / "kicad_generation_summary.json"
             write_json(path, kicad_generation)
             record(path)
-
-            for generated_file in kicad_generation.get("files", []):
-                record_generated_file(generated_file)
 
         except Exception as error:
             kicad_generation = {
                 "status": "failed",
                 "error": str(error),
+            }
+
+            kicad_validation = {
+                "validator": "kicad_knowledge_gate_validator",
+                "status": "skipped",
+                "summary": {
+                    "blockers": 0,
+                    "warnings": 0,
+                    "info": 0,
+                    "total_issues": 0,
+                },
+                "issues": [],
+                "reason": "KiCad package generation failed, so KiCad validation was skipped.",
             }
 
             path = artifact_dir / "kicad_generation_summary.json"
@@ -831,6 +894,11 @@ def export_mission_files(
         if isinstance(kicad_generation, dict)
         else "none"
     )
+    kicad_validation_status = (
+        kicad_validation.get("status", "not_run")
+        if isinstance(kicad_validation, dict)
+        else "not_run"
+    )
 
     # ---------------------------------------------------------
     # OMNI Mission Report / Engineering Provenance Dossier
@@ -852,6 +920,7 @@ def export_mission_files(
             "ros2_validation": ros2_validation,
             "fusion360_generation": fusion360_generation,
             "kicad_generation": kicad_generation,
+            "kicad_validation": kicad_validation,
         }
 
         mission_report = generate_mission_report(
@@ -905,6 +974,7 @@ def export_mission_files(
 ## KiCad Electronics Package
 - Status: {kicad_generation_status}
 - Package Type: {kicad_package_type}
+- Knowledge Gate: {kicad_validation_status}
 
 ## Files
 {chr(10).join(f"- {file}" for file in written_files)}
@@ -924,5 +994,6 @@ def export_mission_files(
         "ros2_validation": ros2_validation,
         "fusion360_generation": fusion360_generation,
         "kicad_generation": kicad_generation,
+        "kicad_validation": kicad_validation,
         "mission_report": mission_report,
     }
