@@ -15,6 +15,21 @@ except ModuleNotFoundError:
     except ModuleNotFoundError:
         summarize_cad_context = None
 
+try:
+    from backend.app.knowledge.aircraft_aerospace_cad_pattern_library import (
+        get_aircraft_cad_context,
+        mission_matches_aircraft_cad,
+    )
+except Exception:
+    try:
+        from knowledge.aircraft_aerospace_cad_pattern_library import (
+            get_aircraft_cad_context,
+            mission_matches_aircraft_cad,
+        )
+    except Exception:
+        get_aircraft_cad_context = None
+        mission_matches_aircraft_cad = None
+
 
 # ---------------------------------------------------------
 # Naming Helpers
