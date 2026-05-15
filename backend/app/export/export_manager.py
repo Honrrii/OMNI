@@ -15,6 +15,7 @@ from backend.app.validators.ros2_build_validator import validate_ros2_package
 from backend.app.omni_core.formatters import safe_folder_name, sanitize_payload
 from backend.app.engineering.kicad_knowledge_gate_validator import validate_kicad_package
 from backend.app.engineering.morphology_planner import plan_morphology_dict
+from backend.app.engineering.morphology_gate_validator import validate_morphology_export
 
 
 OUTPUT_ROOT = Path("outputs") / "omni_missions"
@@ -513,6 +514,41 @@ def run_kicad_knowledge_gate(export_dir: Path) -> Dict[str, Any]:
 
 
 # -------------------------------------------------------------------------
+# Morphology validation helper
+# -------------------------------------------------------------------------
+
+
+def run_morphology_gate(export_dir: Path) -> Dict[str, Any]:
+    """
+    Validate whether generated artifacts obey artifacts/morphology_plan.json.
+
+    This checks morphology identity, Fusion PROJECT_TYPE/MODEL_NAME/MORPHOLOGY_ID,
+    required body terms, morphology leakage, and light KiCad/ROS2 morphology intent.
+    """
+    try:
+        return validate_morphology_export(export_dir)
+    except Exception as error:
+        return {
+            "validator": "morphology_gate_validator",
+            "status": "failed",
+            "summary": {
+                "blockers": 1,
+                "warnings": 0,
+                "info": 0,
+                "total_issues": 1,
+            },
+            "issues": [
+                {
+                    "rule_id": "MORPH.VALIDATOR.001",
+                    "severity": "blocker",
+                    "message": f"Morphology Gate validator failed: {error}",
+                    "file": None,
+                }
+            ],
+        }
+
+
+# -------------------------------------------------------------------------
 # Main export function
 # -------------------------------------------------------------------------
 
@@ -539,6 +575,7 @@ def export_mission_files(
     If CAD/Fusion content is detected, this can generate a Fusion 360 Python script.
     If electronics/PCB content is detected, this can generate a starter KiCad package
     and run the KiCad Knowledge Gate validator.
+    Every export also receives a morphology_plan.json and Morphology Gate report.
     """
     if not isinstance(mission_result, dict):
         raise ValueError("mission_result must be a dictionary.")
@@ -560,8 +597,8 @@ def export_mission_files(
 
     agents = as_dict(mission_result.get("agents", {}))
     artifacts = as_dict(mission_result.get("artifacts", {}))
-    morphology_plan = plan_morphology_dict(mission)
 
+    morphology_plan = plan_morphology_dict(mission)
     artifacts["morphology_plan"] = morphology_plan
     mission_result["artifacts"] = artifacts
 
@@ -848,6 +885,16 @@ def export_mission_files(
             record(path)
 
     # ---------------------------------------------------------
+    # Morphology Gate validation
+    # ---------------------------------------------------------
+
+    morphology_validation = run_morphology_gate(export_dir)
+
+    path = artifact_dir / "morphology_gate_report.json"
+    write_json(path, morphology_validation)
+    record(path)
+
+    # ---------------------------------------------------------
     # Human-readable README values
     # ---------------------------------------------------------
 
@@ -905,6 +952,11 @@ def export_mission_files(
         if isinstance(kicad_validation, dict)
         else "not_run"
     )
+    morphology_validation_status = (
+        morphology_validation.get("status", "not_run")
+        if isinstance(morphology_validation, dict)
+        else "not_run"
+    )
 
     # ---------------------------------------------------------
     # OMNI Mission Report / Engineering Provenance Dossier
@@ -927,6 +979,7 @@ def export_mission_files(
             "fusion360_generation": fusion360_generation,
             "kicad_generation": kicad_generation,
             "kicad_validation": kicad_validation,
+            "morphology_validation": morphology_validation,
         }
 
         mission_report = generate_mission_report(
@@ -963,6 +1016,9 @@ def export_mission_files(
 ## Validation
 - Verdict: {validation.get("verdict", "unknown")}
 - Score: {validation.get("score", "unknown")}
+
+## Morphology Gate
+- Status: {morphology_validation_status}
 
 ## ROS2 Package Generation
 - Status: {ros2_generation_status}
@@ -1001,5 +1057,6 @@ def export_mission_files(
         "fusion360_generation": fusion360_generation,
         "kicad_generation": kicad_generation,
         "kicad_validation": kicad_validation,
+        "morphology_validation": morphology_validation,
         "mission_report": mission_report,
     }
