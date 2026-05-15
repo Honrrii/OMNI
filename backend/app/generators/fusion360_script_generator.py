@@ -332,9 +332,58 @@ def merge_parameters(base: Dict[str, Any], cad_artifact: Dict[str, Any]) -> Dict
     return merged
 
 
-def build_cad_context(project_type: str) -> Dict[str, Any]:
+def extract_morphology_plan(mission_result: Dict[str, Any]) -> Dict[str, Any]:
+    artifacts = mission_result.get("artifacts", {})
+    if not isinstance(artifacts, dict):
+        return {}
+
+    morphology_plan = artifacts.get("morphology_plan", {})
+    return morphology_plan if isinstance(morphology_plan, dict) else {}
+
+
+def fusion_project_type_from_morphology(
+    fallback_project_type: str,
+    morphology_plan: Dict[str, Any],
+) -> str:
+    morphology_id = str(morphology_plan.get("morphology_id", "")).lower()
+    project_family = str(morphology_plan.get("project_family", "")).lower()
+
+    if morphology_id == "segmented_insect_robot":
+        return "insect_robot"
+
+    if morphology_id == "wheeled_rover" or project_family == "wheeled_rover":
+        return "rover"
+
+    if morphology_id == "quadcopter_drone" or project_family == "quadcopter_drone":
+        return "drone"
+
+    if morphology_id == "robot_arm" or project_family == "robot_arm":
+        return "robot_arm"
+
+    if morphology_id in {"sensor_module", "enclosure"}:
+        return "enclosure"
+
+    return fallback_project_type or "concept"
+
+
+def model_name_from_morphology(
+    fallback_model_name: str,
+    morphology_plan: Dict[str, Any],
+) -> str:
+    morphology_id = str(morphology_plan.get("morphology_id", "")).strip()
+
+    if morphology_id:
+        return f"omni_{morphology_id}"
+
+    return fallback_model_name
+
+
+def build_cad_context(
+    project_type: str,
+    morphology_plan: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     if summarize_cad_context is None:
-        return {
+        cad_context: Dict[str, Any] = {
             "project_type": project_type,
             "recommended_features": [],
             "design_rules": [],
@@ -343,20 +392,58 @@ def build_cad_context(project_type: str) -> Dict[str, Any]:
             ],
             "default_dimensions_mm": {},
         }
+    else:
+        try:
+            cad_context = summarize_cad_context(project_type)
+        except Exception as exc:
+            cad_context = {
+                "project_type": project_type,
+                "recommended_features": [],
+                "design_rules": [],
+                "reference_lessons": [
+                    f"CAD pattern library failed safely: {exc}",
+                    "Procedural CAD generation will still run.",
+                ],
+                "default_dimensions_mm": {},
+            }
 
-    try:
-        return summarize_cad_context(project_type)
-    except Exception as exc:
-        return {
-            "project_type": project_type,
-            "recommended_features": [],
-            "design_rules": [],
-            "reference_lessons": [
-                f"CAD pattern library failed safely: {exc}",
-                "Procedural CAD generation will still run.",
-            ],
-            "default_dimensions_mm": {},
-        }
+    morphology_plan = morphology_plan or {}
+
+    if morphology_plan:
+        body_plan = morphology_plan.get("body_plan", {})
+        body_segments = body_plan.get("segments", [])
+        required_features = body_plan.get("required_features", [])
+        avoid_features = body_plan.get("avoid_features", [])
+        mounting_points = body_plan.get("mounting_points", [])
+
+        cad_context["morphology_plan"] = morphology_plan
+        cad_context["morphology_id"] = morphology_plan.get("morphology_id", "")
+        cad_context["project_family"] = morphology_plan.get("project_family", "")
+        cad_context["project_type"] = project_type
+
+        cad_context.setdefault("recommended_features", [])
+        cad_context.setdefault("design_rules", [])
+        cad_context.setdefault("reference_lessons", [])
+        cad_context.setdefault("default_dimensions_mm", {})
+
+        cad_context["recommended_features"].extend(body_segments)
+        cad_context["recommended_features"].extend(required_features)
+        cad_context["recommended_features"].extend(mounting_points)
+
+        cad_context["design_rules"].extend(
+            [
+                f"Use morphology_id: {morphology_plan.get('morphology_id', '')}",
+                f"Use project_family: {morphology_plan.get('project_family', '')}",
+                "Generated CAD must follow morphology_plan body segments.",
+                "Generated CAD must include morphology_plan required_features.",
+                "Generated CAD must avoid morphology_plan avoid_features.",
+            ]
+        )
+
+        for avoid in avoid_features:
+            cad_context["design_rules"].append(f"AVOID: {avoid}")
+
+    return cad_context
 
 
 def cad_context_to_brief(cad_context: Dict[str, Any]) -> str:
@@ -392,6 +479,7 @@ def generate_fusion360_script(
     project_type: str,
     parameters: Dict[str, Any],
     cad_reference_brief: str = "",
+    morphology_id: str = "",
 ) -> str:
     params_json = json.dumps(parameters, indent=4)
     cad_reference_json = json.dumps(cad_reference_brief, indent=4)
@@ -401,6 +489,7 @@ Generated by OMNI Command.
 
 Model: {model_name}
 Project type: {project_type}
+Morphology ID: {morphology_id}
 
 How to use:
 1. Open Autodesk Fusion 360.
@@ -427,6 +516,7 @@ import adsk.fusion
 
 MODEL_NAME = "{model_name}"
 PROJECT_TYPE = "{project_type}"
+MORPHOLOGY_ID = "{morphology_id}"
 
 PARAMS = {params_json}
 
@@ -1419,7 +1509,19 @@ def generate_fusion360_export(
     project_type = infer_project_type(mission_result)
     model_name = f"omni_{project_type}_fusion_concept"
 
-    cad_context = build_cad_context(project_type)
+    morphology_plan = extract_morphology_plan(mission_result)
+
+    project_type = fusion_project_type_from_morphology(
+        fallback_project_type=project_type,
+        morphology_plan=morphology_plan,
+    )
+
+    model_name = model_name_from_morphology(
+        fallback_model_name=model_name,
+        morphology_plan=morphology_plan,
+    )
+
+    cad_context = build_cad_context(project_type, morphology_plan)
     cad_reference_brief = cad_context_to_brief(cad_context)
 
     cad_artifact = extract_cad_artifact(mission_result)
@@ -1444,6 +1546,7 @@ def generate_fusion360_export(
         project_type=project_type,
         parameters=parameters,
         cad_reference_brief=cad_reference_brief,
+        morphology_id=morphology_plan.get("morphology_id", ""),
     )
 
     params_content = generate_parameters_json(
