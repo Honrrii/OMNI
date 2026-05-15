@@ -76,6 +76,131 @@ def clean_parameters(parameters: Any) -> List[str]:
     return cleaned
 
 
+
+# ---------------------------------------------------------
+# Morphology helpers
+# ---------------------------------------------------------
+
+
+def extract_morphology_plan(mission_result: Dict[str, Any]) -> Dict[str, Any]:
+    artifacts = mission_result.get("artifacts", {}) or {}
+
+    if not isinstance(artifacts, dict):
+        return {}
+
+    morphology_plan = artifacts.get("morphology_plan", {})
+    return morphology_plan if isinstance(morphology_plan, dict) else {}
+
+
+def morphology_ros2_intent(morphology_plan: Dict[str, Any]) -> Dict[str, Any]:
+    ros2_intent = morphology_plan.get("ros2_intent", {})
+
+    if not isinstance(ros2_intent, dict):
+        return {}
+
+    return ros2_intent
+
+
+def append_unique_dict_by_name(
+    items: List[Dict[str, Any]],
+    new_item: Dict[str, Any],
+) -> None:
+    new_name = str(new_item.get("name", "")).strip()
+
+    if not new_name:
+        return
+
+    for item in items:
+        if str(item.get("name", "")).strip() == new_name:
+            return
+
+    items.append(new_item)
+
+
+def ensure_node_parameter(node: Dict[str, Any], parameter: str) -> None:
+    parameters = clean_parameters(node.get("parameters"))
+
+    if parameter not in parameters:
+        parameters.append(parameter)
+
+    node["parameters"] = parameters
+
+
+def add_morphology_ros2_nodes_and_topics(
+    cleaned_nodes: List[Dict[str, Any]],
+    cleaned_topics: List[Dict[str, Any]],
+    morphology_plan: Dict[str, Any],
+) -> None:
+    ros2_intent = morphology_ros2_intent(morphology_plan)
+
+    if not ros2_intent:
+        return
+
+    recommended_nodes = normalize_list(ros2_intent.get("recommended_nodes"))
+    recommended_topics = normalize_list(ros2_intent.get("recommended_topics"))
+
+    topic_type_hints = {
+        "/cmd_vel": "geometry_msgs/Twist",
+        "/odom": "nav_msgs/Odometry",
+        "/imu/data": "sensor_msgs/Imu",
+        "/battery_state": "sensor_msgs/BatteryState",
+        "/head_camera/image_raw": "sensor_msgs/Image",
+        "/camera/image_raw": "sensor_msgs/Image",
+        "/scan": "sensor_msgs/LaserScan",
+        "/appendage/joint_states": "sensor_msgs/JointState",
+        "/appendage/joint_commands": "trajectory_msgs/JointTrajectory",
+    }
+
+    for topic_name in recommended_topics:
+        topic_name = str(topic_name).strip()
+
+        if not topic_name:
+            continue
+
+        append_unique_dict_by_name(
+            cleaned_topics,
+            {
+                "name": topic_name,
+                "message_type": topic_type_hints.get(topic_name, "std_msgs/String"),
+                "purpose": "Topic recommended by morphology_plan.ros2_intent.",
+            },
+        )
+
+    for node_name in recommended_nodes:
+        node_name = safe_node_name(node_name)
+
+        publishes: List[str] = []
+        subscribes: List[str] = []
+
+        if "camera" in node_name:
+            publishes.append("/head_camera/image_raw")
+        elif "imu" in node_name:
+            publishes.append("/imu/data")
+        elif "battery" in node_name:
+            publishes.append("/battery_state")
+        elif "appendage" in node_name:
+            publishes.append("/appendage/joint_states")
+            subscribes.append("/appendage/joint_commands")
+        elif "locomotion" in node_name or "controller" in node_name:
+            subscribes.append("/cmd_vel")
+        elif "fusion" in node_name:
+            subscribes.extend(["/imu/data", "/head_camera/image_raw"])
+
+        node = {
+            "name": node_name,
+            "language": "python",
+            "purpose": "Node recommended by morphology_plan.ros2_intent.",
+            "publishes": publishes,
+            "subscribes": subscribes,
+            "parameters": ["use_sim_time"],
+        }
+
+        append_unique_dict_by_name(cleaned_nodes, node)
+
+    for node in cleaned_nodes:
+        ensure_node_parameter(node, "use_sim_time")
+
+
 # ---------------------------------------------------------
 # ROS2 Plan Normalization
 # ---------------------------------------------------------
@@ -83,6 +208,7 @@ def normalize_ros2_plan(mission_result: Dict[str, Any]) -> Dict[str, Any]:
     artifacts = mission_result.get("artifacts", {}) or {}
     plan = artifacts.get("ros2_package_plan", {}) or {}
     graph = artifacts.get("ros2_node_graph", {}) or {}
+    morphology_plan = extract_morphology_plan(mission_result)
 
     if not isinstance(plan, dict):
         plan = {}
@@ -197,6 +323,12 @@ def normalize_ros2_plan(mission_result: Dict[str, Any]) -> Dict[str, Any]:
             }
         ]
 
+    add_morphology_ros2_nodes_and_topics(
+        cleaned_nodes=cleaned_nodes,
+        cleaned_topics=cleaned_topics,
+        morphology_plan=morphology_plan,
+    )
+
     cleaned_launch_files = []
 
     for launch_file in launch_files:
@@ -235,6 +367,7 @@ def normalize_ros2_plan(mission_result: Dict[str, Any]) -> Dict[str, Any]:
         "nodes": cleaned_nodes,
         "topics": cleaned_topics,
         "launch_files": cleaned_launch_files,
+        "morphology_plan": morphology_plan,
     }
 
 
@@ -486,44 +619,81 @@ if __name__ == "__main__":
 # ---------------------------------------------------------
 # Generated ROS2 Package Files
 # ---------------------------------------------------------
-def generate_launch_file(package_name: str, nodes: List[Dict[str, Any]]) -> str:
-    node_entries = []
+def generate_launch_file(
+    package_name: str,
+    nodes: List[Dict[str, Any]],
+    morphology_plan: Dict[str, Any] | None = None,
+) -> str:
+    node_entries: List[str] = []
 
     for node in nodes:
         node_name = safe_node_name(node.get("name"))
 
         node_entries.append(
-            f'''        Node(
-            package="{package_name}",
-            executable="{node_name}",
-            name="{node_name}",
-            output="screen",
-            parameters=[params_file],
-        ),'''
+            "\n".join(
+                [
+                    "        Node(",
+                    f'            package="{package_name}",',
+                    f'            executable="{node_name}",',
+                    f'            name="{node_name}",',
+                    '            output="screen",',
+                    '            parameters=[params_file, {"use_sim_time": use_sim_time}],',
+                    "        ),",
+                ]
+            )
         )
 
     node_block = "\n".join(node_entries)
 
-    return f'''"""
-Generated OMNI ROS2 launch file.
+    lines = [
+        '"""',
+        "Generated OMNI ROS2 launch file.",
+        "",
+        "This launch file starts generated nodes, publishes robot_description through",
+        "robot_state_publisher, and loads the installed parameter file.",
+        '"""',
+        "",
+        "from pathlib import Path",
+        "",
+        "from launch import LaunchDescription",
+        "from launch.actions import DeclareLaunchArgument",
+        "from launch.substitutions import Command, LaunchConfiguration",
+        "from launch_ros.actions import Node",
+        "from ament_index_python.packages import get_package_share_directory",
+        "",
+        "",
+        "def generate_launch_description():",
+        f'    package_share = Path(get_package_share_directory("{package_name}"))',
+        '    params_file = str(package_share / "config" / "omni_params.yaml")',
+        f'    urdf_file = str(package_share / "urdf" / "{package_name}.urdf.xacro")',
+        '    use_sim_time = LaunchConfiguration("use_sim_time")',
+        "",
+        "    robot_description = {",
+        '        "robot_description": Command(["xacro ", urdf_file])',
+        "    }",
+        "",
+        "    return LaunchDescription([",
+        "        DeclareLaunchArgument(",
+        '            "use_sim_time",',
+        '            default_value="false",',
+        '            description="Use simulation time if true.",',
+        "        ),",
+        "        Node(",
+        '            package="robot_state_publisher",',
+        '            executable="robot_state_publisher",',
+        '            name="robot_state_publisher",',
+        '            output="screen",',
+        "            parameters=[",
+        "                robot_description,",
+        '                {"use_sim_time": use_sim_time},',
+        "            ],",
+        "        ),",
+        node_block,
+        "    ])",
+        "",
+    ]
 
-This launch file starts generated nodes and loads the installed parameter file.
-"""
-
-from launch import LaunchDescription
-from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-from pathlib import Path
-
-
-def generate_launch_description():
-    package_share = Path(get_package_share_directory("{package_name}"))
-    params_file = str(package_share / "config" / "omni_params.yaml")
-
-    return LaunchDescription([
-{node_block}
-    ])
-'''
+    return "\n".join(lines)
 
 
 def generate_setup_py(package_name: str, nodes: List[Dict[str, Any]]) -> str:
@@ -598,7 +768,7 @@ def generate_package_xml(package_name: str) -> str:
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>launch</depend>
-  <depend>launch_ros</depend>
+  <depend>launch_ros</depend>\n  <depend>trajectory_msgs</depend>\n  <depend>nav_msgs</depend>
   <depend>ament_index_python</depend>
   <depend>robot_state_publisher</depend>
   <depend>xacro</depend>
@@ -763,59 +933,132 @@ echo "  ros2 launch {package_name} {package_name}_launch.py"
 '''
 
 
-def generate_urdf_xacro(package_name: str) -> str:
+def generate_urdf_xacro(
+    package_name: str,
+    morphology_plan: Dict[str, Any] | None = None,
+) -> str:
     robot_name = safe_name(package_name, "omni_robot")
+    morphology_plan = morphology_plan or {}
 
-    return f'''<?xml version="1.0"?>
-<robot name="{robot_name}" xmlns:xacro="http://www.ros.org/wiki/xacro">
+    ros2_intent = morphology_ros2_intent(morphology_plan)
+    body_plan = morphology_plan.get("body_plan", {})
 
-  <!--
-    Generated starter URDF/Xacro by OMNI Command.
+    if not isinstance(body_plan, dict):
+        body_plan = {}
 
-    Replace placeholder dimensions, masses, inertias, wheel placement,
-    sensor frames, materials, and collision geometry before simulation
-    or hardware testing.
-  -->
+    recommended_frames = normalize_list(ros2_intent.get("recommended_frames"))
+    body_segments = normalize_list(body_plan.get("segments"))
+    mounting_points = normalize_list(body_plan.get("mounting_points"))
 
-  <xacro:property name="base_length" value="0.30"/>
-  <xacro:property name="base_width" value="0.20"/>
-  <xacro:property name="base_height" value="0.08"/>
+    if not recommended_frames:
+        recommended_frames = ["base_link", "camera_link"]
 
-  <link name="base_link">
-    <visual>
-      <geometry>
-        <box size="${{base_length}} ${{base_width}} ${{base_height}}"/>
-      </geometry>
-      <material name="omni_dark">
-        <color rgba="0.05 0.05 0.07 1.0"/>
-      </material>
-    </visual>
-    <collision>
-      <geometry>
-        <box size="${{base_length}} ${{base_width}} ${{base_height}}"/>
-      </geometry>
-    </collision>
-  </link>
+    if "base_link" not in recommended_frames:
+        recommended_frames.insert(0, "base_link")
 
-  <link name="camera_link">
-    <visual>
-      <geometry>
-        <box size="0.04 0.03 0.03"/>
-      </geometry>
-      <material name="camera_green">
-        <color rgba="0.1 1.0 0.6 1.0"/>
-      </material>
-    </visual>
-  </link>
+    child_frames = [frame for frame in recommended_frames if frame != "base_link"]
 
-  <joint name="camera_joint" type="fixed">
-    <parent link="base_link"/>
-    <child link="camera_link"/>
-    <origin xyz="0.12 0 0.08" rpy="0 0 0"/>
-  </joint>
+    lines = [
+        '<?xml version="1.0"?>',
+        f'<robot name="{robot_name}" xmlns:xacro="http://www.ros.org/wiki/xacro">',
+        "",
+        "  <!--",
+        "    Generated starter URDF/Xacro by OMNI Command.",
+        "",
+        "    Morphology-aware URDF scaffold.",
+        "    Replace placeholder dimensions, masses, inertias, joint locations,",
+        "    sensor frames, materials, and collision geometry before simulation",
+        "    or hardware testing.",
+        "",
+        f'    Morphology ID: {morphology_plan.get("morphology_id", "")}',
+        f'    Project family: {morphology_plan.get("project_family", "")}',
+        f"    Body segments: {body_segments}",
+        f"    Mounting points: {mounting_points}",
+        f"    Recommended frames: {recommended_frames}",
+        "  -->",
+        "",
+        '  <link name="base_link">',
+        "    <inertial>",
+        '      <mass value="1.0"/>',
+        '      <origin xyz="0 0 0" rpy="0 0 0"/>',
+        '      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>',
+        "    </inertial>",
+        "    <visual>",
+        "      <geometry>",
+        '        <box size="0.30 0.20 0.08"/>',
+        "      </geometry>",
+        '      <material name="omni_dark">',
+        '        <color rgba="0.05 0.05 0.07 1.0"/>',
+        "      </material>",
+        "    </visual>",
+        "    <collision>",
+        "      <geometry>",
+        '        <box size="0.30 0.20 0.08"/>',
+        "      </geometry>",
+        "    </collision>",
+        "  </link>",
+        "",
+    ]
 
-</robot>
-'''
+    for index, frame in enumerate(child_frames, start=1):
+        safe_frame = safe_name(frame, f"morphology_link_{index}")
+
+        x = 0.04 * index
+        y = 0.0
+        z = 0.04 + 0.01 * (index % 3)
+
+        if "head" in safe_frame:
+            x = 0.14
+            z = 0.08
+        elif "thorax" in safe_frame:
+            x = 0.00
+            z = 0.07
+        elif "abdomen" in safe_frame:
+            x = -0.12
+            z = 0.07
+        elif "left" in safe_frame:
+            y = 0.10
+            z = 0.03
+        elif "right" in safe_frame:
+            y = -0.10
+            z = 0.03
+
+        lines.extend(
+            [
+                f'  <link name="{safe_frame}">',
+                "    <inertial>",
+                '      <mass value="0.1"/>',
+                '      <origin xyz="0 0 0" rpy="0 0 0"/>',
+                '      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>',
+                "    </inertial>",
+                "    <visual>",
+                "      <geometry>",
+                '        <box size="0.05 0.03 0.03"/>',
+                "      </geometry>",
+                '      <material name="morphology_blue">',
+                '        <color rgba="0.1 0.4 1.0 1.0"/>',
+                "      </material>",
+                "    </visual>",
+                "    <collision>",
+                "      <geometry>",
+                '        <box size="0.05 0.03 0.03"/>',
+                "      </geometry>",
+                "    </collision>",
+                "  </link>",
+                "",
+                f'  <joint name="{safe_frame}_joint" type="fixed">',
+                '    <parent link="base_link"/>',
+                f'    <child link="{safe_frame}"/>',
+                f'    <origin xyz="{x:.2f} {y:.2f} {z:.2f}" rpy="0 0 0"/>',
+                "  </joint>",
+                "",
+            ]
+        )
+
+    lines.append("</robot>")
+    lines.append("")
+
+    return "\n".join(lines)
 
 
 def generate_rviz_config(package_name: str) -> str:
@@ -962,6 +1205,7 @@ def generate_ros2_package(
     package_name = plan["package_name"]
     nodes = plan["nodes"]
     topics = plan["topics"]
+    morphology_plan = plan.get("morphology_plan", {})
 
     package_dir = output_root / "generated_ros2" / package_name
     module_dir = package_dir / package_name
@@ -1008,7 +1252,7 @@ def generate_ros2_package(
 
     write_file(
         launch_dir / f"{package_name}_launch.py",
-        generate_launch_file(package_name, nodes),
+        generate_launch_file(package_name, nodes, morphology_plan),
     )
 
     write_file(config_dir / "omni_params.yaml", generate_config_yaml(package_name, nodes))
@@ -1019,7 +1263,10 @@ def generate_ros2_package(
         generate_test_topics_script(package_name, topics),
         executable=True,
     )
-    write_file(urdf_dir / f"{package_name}.urdf.xacro", generate_urdf_xacro(package_name))
+    write_file(
+        urdf_dir / f"{package_name}.urdf.xacro",
+        generate_urdf_xacro(package_name, morphology_plan),
+    )
     write_file(rviz_dir / f"{package_name}.rviz", generate_rviz_config(package_name))
 
     for node in nodes:
