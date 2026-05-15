@@ -46,140 +46,97 @@ def mission_text(mission_result: Dict[str, Any]) -> str:
 
 
 def infer_project_type(mission_result: Dict[str, Any]) -> str:
-    """
-    Infer CAD project type from mission text.
+    combined = mission_text(mission_result)
 
-    Bio-inspired, insect, and legged robots get their own morphology route.
-    This prevents them from being forced into drone or rover templates.
-    """
-    if not isinstance(mission_result, dict):
-        mission_text = str(mission_result or "")
-    else:
-        fields = [
-            "mission",
-            "mission_text",
-            "user_prompt",
-            "prompt",
-            "original_mission",
+    if any(
+        word in combined
+        for word in [
+            "drone",
+            "quad",
+            "quadcopter",
+            "hexacopter",
+            "uav",
+            "fpv",
+            "propeller",
         ]
-
-        mission_text = "\n".join(
-            str(mission_result.get(field, "") or "")
-            for field in fields
-        )
-
-        if not mission_text.strip():
-            try:
-                mission_text = json.dumps(mission_result, default=str)
-            except Exception:
-                mission_text = str(mission_result)
-
-    text = mission_text.lower()
-
-    insect_terms = [
-        "insect",
-        "insect-inspired",
-        "hexapod",
-        "six leg",
-        "six-legged",
-        "6 leg",
-        "6-legged",
-        "legged",
-        "walking",
-        "crawler",
-        "crawling",
-        "biomimetic",
-        "bio-inspired",
-        "bio inspired",
-        "arthropod",
-        "ant-like",
-        "antlike",
-        "beetle",
-        "cockroach",
-        "spider-like",
-        "spiderlike",
-        "terrain scouting",
-    ]
-
-    drone_terms = [
-        "drone",
-        "quadcopter",
-        "hexacopter",
-        "octocopter",
-        "uav",
-        "aerial",
-        "flight",
-        "flying",
-        "rotor",
-        "propeller",
-        "multirotor",
-    ]
-
-    rover_terms = [
-        "rover",
-        "wheeled",
-        "wheel",
-        "tracked",
-        "tank tread",
-        "differential drive",
-        "ground vehicle",
-        "mobile base",
-    ]
-
-    arm_terms = [
-        "robot arm",
-        "manipulator",
-        "end effector",
-        "gripper arm",
-        "pick and place",
-    ]
-
-    enclosure_terms = [
-        "enclosure",
-        "case",
-        "housing",
-        "electronics box",
-        "shell",
-    ]
-
-    if any(term in text for term in insect_terms):
-        return "insect_robot"
-
-    if any(term in text for term in drone_terms):
+    ):
         return "drone"
 
-    if any(term in text for term in rover_terms):
+    if any(
+        word in combined
+        for word in ["rover", "mobile robot", "wheel", "wheeled", "tracked", "chassis"]
+    ):
         return "rover"
 
-    if any(term in text for term in arm_terms):
+    if any(
+        word in combined
+        for word in ["robot arm", "manipulator", "joint", "end effector", "end-effector"]
+    ):
         return "robot_arm"
 
-    if any(term in text for term in enclosure_terms):
+    if any(
+        word in combined
+        for word in ["enclosure", "case", "housing", "box", "electronics box"]
+    ):
         return "enclosure"
 
     return "generic_robotics"
 
-def default_parameters(project_type: str) -> Dict[str, Any]:
-    if project_type == "insect_robot":
-        return {
-            "units": "mm",
-            "body_height": 18,
-            "head_radius": 26,
-            "thorax_radius": 42,
-            "abdomen_radius": 36,
-            "head_x": 78,
-            "abdomen_x": -76,
-            "leg_side_offset_y": 42,
-            "upper_leg_length": 48,
-            "lower_leg_length": 52,
-            "leg_width": 8,
-            "leg_height": 7,
-            "mount_hole_radius": 2.2,
-            "standoff_radius": 3,
-            "standoff_height": 10,
-            "label_height": 4,
-        }
 
+def infer_rotor_count(mission_result: Dict[str, Any]) -> int:
+    combined = mission_text(mission_result)
+
+    if any(
+        word in combined
+        for word in [
+            "octocopter",
+            "8 motor",
+            "8 motors",
+            "eight motor",
+            "eight motors",
+            "8 rotor",
+        ]
+    ):
+        return 8
+
+    if any(
+        word in combined
+        for word in [
+            "hexacopter",
+            "hexcopter",
+            "6 motor",
+            "6 motors",
+            "six motor",
+            "six motors",
+            "6 rotor",
+        ]
+    ):
+        return 6
+
+    if any(
+        word in combined
+        for word in [
+            "quadcopter",
+            "quad",
+            "4 motor",
+            "4 motors",
+            "four motor",
+            "four motors",
+            "4 rotor",
+        ]
+    ):
+        return 4
+
+    if any(
+        word in combined
+        for word in ["tricopter", "3 motor", "3 motors", "three motor", "three motors", "3 rotor"]
+    ):
+        return 3
+
+    return 4
+
+
+def default_parameters(project_type: str) -> Dict[str, Any]:
     common = {
         "units": "mm",
         "base_length": 300,
@@ -574,213 +531,6 @@ def create_reference_note_label(component):
         create_label(component, "CAD reference context embedded", -130, 105, 0)
     except Exception:
         pass
-
-
-
-def build_insect_robot(component):
-    # Bio-inspired insect robot concept.
-    # This is intentionally not a drone or rover template.
-
-    body_height = get_param("body_height", 18)
-
-    # Segmented body: head, thorax, abdomen.
-    create_cylinder(
-        component,
-        "head_sensor_capsule",
-        get_param("head_radius", 26),
-        body_height,
-        get_param("head_x", 78),
-        0,
-        0,
-    )
-
-    create_cylinder(
-        component,
-        "thorax_electronics_body",
-        get_param("thorax_radius", 42),
-        body_height + 6,
-        0,
-        0,
-        0,
-    )
-
-    create_cylinder(
-        component,
-        "abdomen_battery_body",
-        get_param("abdomen_radius", 36),
-        body_height,
-        get_param("abdomen_x", -76),
-        0,
-        0,
-    )
-
-    # Body bridges.
-    create_box(
-        component,
-        "head_to_thorax_bridge",
-        44,
-        14,
-        8,
-        42,
-        0,
-        body_height / 2,
-        0,
-    )
-
-    create_box(
-        component,
-        "thorax_to_abdomen_bridge",
-        48,
-        16,
-        8,
-        -40,
-        0,
-        body_height / 2,
-        0,
-    )
-
-    # Electronics and battery placeholders.
-    create_box(
-        component,
-        "electronics_bay_pi_zero_placeholder",
-        46,
-        28,
-        7,
-        0,
-        0,
-        body_height + 8,
-        0,
-    )
-
-    create_box(
-        component,
-        "battery_bay_under_abdomen",
-        58,
-        26,
-        8,
-        -76,
-        0,
-        body_height + 2,
-        0,
-    )
-
-    create_box(
-        component,
-        "front_camera_or_distance_sensor_pod",
-        20,
-        14,
-        14,
-        108,
-        0,
-        body_height + 4,
-        0,
-    )
-
-    # Six legs: three per side.
-    leg_x_positions = [42, 0, -42]
-    side_y = get_param("leg_side_offset_y", 42)
-
-    upper_leg_length = get_param("upper_leg_length", 48)
-    lower_leg_length = get_param("lower_leg_length", 52)
-    leg_width = get_param("leg_width", 8)
-    leg_height = get_param("leg_height", 7)
-
-    # Angles make the front/middle/rear legs splay outward like an insect.
-    left_upper_angles = [55, 90, 125]
-    left_lower_angles = [70, 90, 110]
-
-    for index, x in enumerate(leg_x_positions):
-        for side in [-1, 1]:
-            side_name = "left" if side > 0 else "right"
-            leg_name = side_name + "_leg_" + str(index + 1)
-
-            hip_y = side * side_y
-            knee_y = side * (side_y + 36)
-            foot_y = side * (side_y + 78)
-
-            upper_angle = left_upper_angles[index] * side
-            lower_angle = left_lower_angles[index] * side
-
-            # Hip joint marker.
-            create_cylinder(
-                component,
-                leg_name + "_hip_joint_marker",
-                7,
-                5,
-                x,
-                hip_y,
-                body_height / 2,
-            )
-
-            # Upper leg segment.
-            create_box(
-                component,
-                leg_name + "_upper_segment",
-                upper_leg_length,
-                leg_width,
-                leg_height,
-                x,
-                (hip_y + knee_y) / 2,
-                body_height / 2,
-                upper_angle,
-            )
-
-            # Knee joint marker.
-            create_cylinder(
-                component,
-                leg_name + "_knee_joint_marker",
-                6,
-                5,
-                x,
-                knee_y,
-                body_height / 2 - 3,
-            )
-
-            # Lower leg segment.
-            create_box(
-                component,
-                leg_name + "_lower_segment",
-                lower_leg_length,
-                leg_width,
-                leg_height,
-                x,
-                (knee_y + foot_y) / 2,
-                body_height / 2 - 6,
-                lower_angle,
-            )
-
-            # Foot pad.
-            create_box(
-                component,
-                leg_name + "_compliant_foot_pad",
-                22,
-                11,
-                4,
-                x,
-                foot_y,
-                0,
-                0,
-            )
-
-    # Mounting bosses on thorax.
-    for boss_x in [-18, 18]:
-        for boss_y in [-18, 18]:
-            create_cylinder(
-                component,
-                "thorax_mounting_boss",
-                get_param("standoff_radius", 3),
-                get_param("standoff_height", 10),
-                boss_x,
-                boss_y,
-                body_height + 6,
-            )
-
-    # Subsystem labels.
-    create_label(component, "HEAD SENSOR POD", 62, -24, body_height + 12)
-    create_label(component, "THORAX ELECTRONICS", -30, -32, body_height + 14)
-    create_label(component, "ABDOMEN BATTERY", -112, -26, body_height + 10)
-    create_label(component, MODEL_NAME, -128, -92, body_height + 2)
-    create_reference_note_label(component)
 
 
 def build_rover(component):
@@ -1241,9 +991,7 @@ def run(context):
         root_comp = design.rootComponent
         model_component = root_comp
 
-        if PROJECT_TYPE == "insect_robot":
-            build_insect_robot(model_component)
-        elif PROJECT_TYPE == "rover":
+        if PROJECT_TYPE == "rover":
             build_rover(model_component)
         elif PROJECT_TYPE == "drone":
             build_drone(model_component)
