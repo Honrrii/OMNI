@@ -382,31 +382,15 @@ def build_cad_context(
     project_type: str,
     morphology_plan: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    if summarize_cad_context is None:
-        cad_context: Dict[str, Any] = {
-            "project_type": project_type,
-            "recommended_features": [],
-            "design_rules": [],
-            "reference_lessons": [
-                "CAD pattern library unavailable. Procedural CAD generation will still run."
-            ],
-            "default_dimensions_mm": {},
-        }
-    else:
-        try:
-            cad_context = summarize_cad_context(project_type)
-        except Exception as exc:
-            cad_context = {
-                "project_type": project_type,
-                "recommended_features": [],
-                "design_rules": [],
-                "reference_lessons": [
-                    f"CAD pattern library failed safely: {exc}",
-                    "Procedural CAD generation will still run.",
-                ],
-                "default_dimensions_mm": {},
-            }
+    """
+    Build CAD context for Fusion generation.
 
+    If a MorphologyPlan exists, it becomes the primary source of physical design
+    intent. This prevents unrelated CAD pattern leakage, such as rover/drone
+    guidance appearing inside insect robot CAD exports.
+
+    If no MorphologyPlan exists, OMNI falls back to the older CAD pattern library.
+    """
     morphology_plan = morphology_plan or {}
 
     if morphology_plan:
@@ -416,15 +400,28 @@ def build_cad_context(
         avoid_features = body_plan.get("avoid_features", [])
         mounting_points = body_plan.get("mounting_points", [])
 
-        cad_context["morphology_plan"] = morphology_plan
-        cad_context["morphology_id"] = morphology_plan.get("morphology_id", "")
-        cad_context["project_family"] = morphology_plan.get("project_family", "")
-        cad_context["project_type"] = project_type
+        morphology_id = morphology_plan.get("morphology_id", "")
+        project_family = morphology_plan.get("project_family", "")
+        display_name = morphology_plan.get("display_name", "")
+        description = morphology_plan.get("description", "")
 
-        cad_context.setdefault("recommended_features", [])
-        cad_context.setdefault("design_rules", [])
-        cad_context.setdefault("reference_lessons", [])
-        cad_context.setdefault("default_dimensions_mm", {})
+        cad_context: Dict[str, Any] = {
+            "project_type": project_type,
+            "morphology_id": morphology_id,
+            "project_family": project_family,
+            "display_name": display_name,
+            "description": description,
+            "morphology_plan": morphology_plan,
+            "recommended_features": [],
+            "design_rules": [],
+            "reference_lessons": [
+                "Morphology Engine context is active.",
+                "Use morphology_plan as the primary physical design contract.",
+                "Do not mix reference patterns from unrelated robot families.",
+                "CAD output should reflect the selected morphology_id and avoid all avoid_features.",
+            ],
+            "default_dimensions_mm": {},
+        }
 
         cad_context["recommended_features"].extend(body_segments)
         cad_context["recommended_features"].extend(required_features)
@@ -432,10 +429,11 @@ def build_cad_context(
 
         cad_context["design_rules"].extend(
             [
-                f"Use morphology_id: {morphology_plan.get('morphology_id', '')}",
-                f"Use project_family: {morphology_plan.get('project_family', '')}",
+                f"Use morphology_id: {morphology_id}",
+                f"Use project_family: {project_family}",
                 "Generated CAD must follow morphology_plan body segments.",
                 "Generated CAD must include morphology_plan required_features.",
+                "Generated CAD must include morphology_plan mounting_points when mechanically relevant.",
                 "Generated CAD must avoid morphology_plan avoid_features.",
             ]
         )
@@ -443,7 +441,32 @@ def build_cad_context(
         for avoid in avoid_features:
             cad_context["design_rules"].append(f"AVOID: {avoid}")
 
-    return cad_context
+        return cad_context
+
+    if summarize_cad_context is None:
+        return {
+            "project_type": project_type,
+            "recommended_features": [],
+            "design_rules": [],
+            "reference_lessons": [
+                "CAD pattern library unavailable. Procedural CAD generation will still run."
+            ],
+            "default_dimensions_mm": {},
+        }
+
+    try:
+        return summarize_cad_context(project_type)
+    except Exception as exc:
+        return {
+            "project_type": project_type,
+            "recommended_features": [],
+            "design_rules": [],
+            "reference_lessons": [
+                f"CAD pattern library failed safely: {exc}",
+                "Procedural CAD generation will still run.",
+            ],
+            "default_dimensions_mm": {},
+        }
 
 
 def cad_context_to_brief(cad_context: Dict[str, Any]) -> str:
