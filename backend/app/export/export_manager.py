@@ -102,6 +102,23 @@ def as_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def append_unique(target: List[Any], values: List[Any]) -> List[Any]:
+    existing = {str(item) for item in target}
+
+    for value in values:
+        if value is None:
+            continue
+
+        value_text = str(value).strip()
+        if not value_text or value_text in existing:
+            continue
+
+        target.append(value)
+        existing.add(value_text)
+
+    return target
+
+
 def extract_mission_text(mission_result: Dict[str, Any]) -> str:
     """
     Pull the best available mission/prompt text from an OMNI mission result.
@@ -204,20 +221,216 @@ def should_generate_kicad_package(mission_result: Dict[str, Any]) -> bool:
 # -------------------------------------------------------------------------
 
 
-def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, Any]:
+def build_starter_electronics_plan(
+    mission_result: Dict[str, Any],
+    morphology_plan: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     Build a conservative starter electronics plan for KiCad export.
 
     This creates useful electronics artifacts but does not claim the design is
     fabrication-ready. It should be reviewed and refined before real PCB work.
+
+    When morphology_plan is present, electronics placement, battery placement,
+    connector intent, and power rails are aligned to the physical body plan.
     """
     mission_text = extract_mission_text(mission_result)
     artifacts = as_dict(mission_result.get("artifacts", {}))
+
+    morphology_plan = as_dict(morphology_plan or artifacts.get("morphology_plan", {}))
+    body_plan = as_dict(morphology_plan.get("body_plan", {}))
+    electronics_intent = as_dict(morphology_plan.get("electronics_intent", {}))
+
+    morphology_id = morphology_plan.get("morphology_id", "")
+    project_family = morphology_plan.get("project_family", "")
+    body_segments = as_list(body_plan.get("segments", []))
+    required_features = as_list(body_plan.get("required_features", []))
+    mounting_points = as_list(body_plan.get("mounting_points", []))
+
+    primary_pcb_location = electronics_intent.get("primary_pcb_location", "")
+    battery_location = electronics_intent.get("battery_location", "")
+    sensor_connectors = as_list(electronics_intent.get("sensor_connectors", []))
+    actuator_connectors = as_list(electronics_intent.get("actuator_connectors", []))
+    power_rails = as_list(electronics_intent.get("power_rails", []))
 
     hardware_architecture = artifacts.get("hardware_architecture", [])
     component_tree = artifacts.get("component_tree", [])
     ros2_node_graph = artifacts.get("ros2_node_graph", {})
     blueprint_plan = artifacts.get("blueprint_plan", [])
+
+    sensor_interfaces = [
+        "I2C sensor header",
+        "SPI/UART sensor header",
+        "Camera or perception connector if mission requires vision",
+    ]
+    append_unique(sensor_interfaces, sensor_connectors)
+
+    actuator_interfaces = [
+        "Motor driver connector bank",
+        "Servo connector bank",
+        "PWM/control outputs",
+    ]
+    append_unique(actuator_interfaces, actuator_connectors)
+
+    power_notes = [
+        "This is a starter electronics package.",
+        "Battery chemistry, regulator sizing, and peak current must be validated before fabrication.",
+        "Actuator stall current must be checked before selecting connectors and trace widths.",
+        "PCB dimensions should be checked against the CAD electronics bay before layout.",
+        "Power traces must be wider than signal traces.",
+        "Add input protection, fuse/protection stage, and reverse-polarity protection before fabrication.",
+    ]
+
+    if primary_pcb_location:
+        power_notes.append(
+            f"Morphology-aware PCB placement target: {primary_pcb_location}."
+        )
+
+    if battery_location:
+        power_notes.append(
+            f"Morphology-aware battery placement target: {battery_location}."
+        )
+
+    if power_rails:
+        power_notes.append(
+            "Morphology-requested rails: " + ", ".join(str(item) for item in power_rails)
+        )
+
+    connector_map = {
+        "J1": "Battery or external power input",
+        "J2": "Programming/debug header",
+        "J3": "Primary sensor header",
+        "J4": "Secondary sensor/I2C/SPI/UART header",
+        "J5": "Actuator or motor driver connector bank",
+        "J6": "Optional camera/perception connector",
+    }
+
+    if primary_pcb_location:
+        connector_map["MORPH_PCB_LOCATION"] = primary_pcb_location
+
+    if battery_location:
+        connector_map["MORPH_BATTERY_LOCATION"] = battery_location
+
+    for index, connector in enumerate(sensor_connectors, start=1):
+        connector_map[f"MORPH_SENSOR_{index}"] = connector
+
+    for index, connector in enumerate(actuator_connectors, start=1):
+        connector_map[f"MORPH_ACTUATOR_{index}"] = connector
+
+    bom = [
+        {
+            "reference": "U1",
+            "quantity": 1,
+            "component": "Main controller",
+            "value": "TBD microcontroller or companion computer",
+            "footprint": "TBD",
+            "notes": "Select based on required I/O, compute, ROS2 bridge needs, and power budget.",
+        },
+        {
+            "reference": "U2",
+            "quantity": 1,
+            "component": "Voltage regulator",
+            "value": "5V or 3.3V TBD",
+            "footprint": "TBD",
+            "notes": "Must be sized against sensor, logic, and actuator current loads.",
+        },
+        {
+            "reference": "U3",
+            "quantity": 1,
+            "component": "Motor driver or actuator driver",
+            "value": "TBD",
+            "footprint": "TBD",
+            "notes": "Select after actuator voltage, stall current, and channel count are known.",
+        },
+        {
+            "reference": "J1",
+            "quantity": 1,
+            "component": "Power input connector",
+            "value": "TBD",
+            "footprint": "TBD",
+            "notes": "Add fuse, reverse-polarity protection, and power switch before fabrication.",
+        },
+        {
+            "reference": "J2",
+            "quantity": 1,
+            "component": "Programming/debug header",
+            "value": "SWD/UART/USB TBD",
+            "footprint": "TBD",
+            "notes": "Depends on selected controller.",
+        },
+        {
+            "reference": "J3",
+            "quantity": 1,
+            "component": "Sensor connector",
+            "value": "I2C/SPI/UART TBD",
+            "footprint": "TBD",
+            "notes": "Map to mission-specific sensors after component selection.",
+        },
+        {
+            "reference": "J5",
+            "quantity": 1,
+            "component": "Actuator connector bank",
+            "value": "Motor/servo outputs TBD",
+            "footprint": "TBD",
+            "notes": "Connector current rating must match actuator peak current.",
+        },
+        {
+            "reference": "C1-C4",
+            "quantity": 4,
+            "component": "Decoupling capacitors",
+            "value": "100nF typical",
+            "footprint": "TBD",
+            "notes": "Place close to IC power pins after actual IC selection.",
+        },
+    ]
+
+    for index, connector in enumerate(sensor_connectors, start=1):
+        bom.append(
+            {
+                "reference": f"MS{index}",
+                "quantity": 1,
+                "component": "Morphology sensor connector",
+                "value": connector,
+                "footprint": "TBD",
+                "notes": "Required by morphology_plan electronics_intent.sensor_connectors.",
+            }
+        )
+
+    for index, connector in enumerate(actuator_connectors, start=1):
+        bom.append(
+            {
+                "reference": f"MA{index}",
+                "quantity": 1,
+                "component": "Morphology actuator connector",
+                "value": connector,
+                "footprint": "TBD",
+                "notes": "Required by morphology_plan electronics_intent.actuator_connectors.",
+            }
+        )
+
+    if primary_pcb_location:
+        bom.append(
+            {
+                "reference": "MP1",
+                "quantity": 1,
+                "component": "Main PCB placement zone",
+                "value": primary_pcb_location,
+                "footprint": "Mechanical/placement TBD",
+                "notes": "Placement target from morphology_plan electronics_intent.primary_pcb_location.",
+            }
+        )
+
+    if battery_location:
+        bom.append(
+            {
+                "reference": "MB1",
+                "quantity": 1,
+                "component": "Battery placement zone",
+                "value": battery_location,
+                "footprint": "Mechanical/placement TBD",
+                "notes": "Placement target from morphology_plan electronics_intent.battery_location.",
+            }
+        )
 
     return {
         "summary": f"Starter electronics package generated from mission: {mission_text}",
@@ -227,115 +440,50 @@ def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, 
             "component_tree": component_tree,
             "ros2_node_graph": ros2_node_graph,
             "blueprint_plan": blueprint_plan,
+            "morphology_plan": morphology_plan,
+        },
+        "morphology_electronics_context": {
+            "morphology_id": morphology_id,
+            "project_family": project_family,
+            "body_segments": body_segments,
+            "required_features": required_features,
+            "mounting_points": mounting_points,
+            "primary_pcb_location": primary_pcb_location,
+            "battery_location": battery_location,
+            "sensor_connectors": sensor_connectors,
+            "actuator_connectors": actuator_connectors,
+            "power_rails": power_rails,
         },
         "electronics_architecture": {
             "controller": "TBD microcontroller, companion computer, or ROS2 bridge device",
             "power_input": "TBD battery or external regulated input",
             "logic_power": "3.3V and/or 5V regulated logic rail",
             "actuator_power": "TBD motor/servo voltage rail",
-            "sensor_interfaces": [
-                "I2C sensor header",
-                "SPI/UART sensor header",
-                "Camera or perception connector if mission requires vision",
-            ],
-            "actuator_interfaces": [
-                "Motor driver connector bank",
-                "Servo connector bank",
-                "PWM/control outputs",
-            ],
+            "sensor_interfaces": sensor_interfaces,
+            "actuator_interfaces": actuator_interfaces,
             "debug_interfaces": [
                 "Programming/debug header",
                 "UART or USB debug path",
             ],
+            "morphology_id": morphology_id,
+            "project_family": project_family,
+            "body_segments": body_segments,
+            "primary_pcb_location": primary_pcb_location,
+            "battery_location": battery_location,
+            "morphology_power_rails": power_rails,
         },
         "power_budget": {
             "battery": "TBD",
             "logic_voltage": "3.3V",
             "actuator_voltage": "TBD",
             "estimated_peak_current_a": "TBD",
-            "notes": [
-                "This is a starter electronics package.",
-                "Battery chemistry, regulator sizing, and peak current must be validated before fabrication.",
-                "Actuator stall current must be checked before selecting connectors and trace widths.",
-                "PCB dimensions should be checked against the CAD electronics bay before layout.",
-                "Power traces must be wider than signal traces.",
-                "Add input protection, fuse/protection stage, and reverse-polarity protection before fabrication.",
-            ],
+            "morphology_primary_pcb_location": primary_pcb_location,
+            "morphology_battery_location": battery_location,
+            "morphology_power_rails": power_rails,
+            "notes": power_notes,
         },
-        "connector_map": {
-            "J1": "Battery or external power input",
-            "J2": "Programming/debug header",
-            "J3": "Primary sensor header",
-            "J4": "Secondary sensor/I2C/SPI/UART header",
-            "J5": "Actuator or motor driver connector bank",
-            "J6": "Optional camera/perception connector",
-        },
-        "bom": [
-            {
-                "reference": "U1",
-                "quantity": 1,
-                "component": "Main controller",
-                "value": "TBD microcontroller or companion computer",
-                "footprint": "TBD",
-                "notes": "Select based on required I/O, compute, ROS2 bridge needs, and power budget.",
-            },
-            {
-                "reference": "U2",
-                "quantity": 1,
-                "component": "Voltage regulator",
-                "value": "5V or 3.3V TBD",
-                "footprint": "TBD",
-                "notes": "Must be sized against sensor, logic, and actuator current loads.",
-            },
-            {
-                "reference": "U3",
-                "quantity": 1,
-                "component": "Motor driver or actuator driver",
-                "value": "TBD",
-                "footprint": "TBD",
-                "notes": "Select after actuator voltage, stall current, and channel count are known.",
-            },
-            {
-                "reference": "J1",
-                "quantity": 1,
-                "component": "Power input connector",
-                "value": "TBD",
-                "footprint": "TBD",
-                "notes": "Add fuse, reverse-polarity protection, and power switch before fabrication.",
-            },
-            {
-                "reference": "J2",
-                "quantity": 1,
-                "component": "Programming/debug header",
-                "value": "SWD/UART/USB TBD",
-                "footprint": "TBD",
-                "notes": "Depends on selected controller.",
-            },
-            {
-                "reference": "J3",
-                "quantity": 1,
-                "component": "Sensor connector",
-                "value": "I2C/SPI/UART TBD",
-                "footprint": "TBD",
-                "notes": "Map to mission-specific sensors after component selection.",
-            },
-            {
-                "reference": "J5",
-                "quantity": 1,
-                "component": "Actuator connector bank",
-                "value": "Motor/servo outputs TBD",
-                "footprint": "TBD",
-                "notes": "Connector current rating must match actuator peak current.",
-            },
-            {
-                "reference": "C1-C4",
-                "quantity": 4,
-                "component": "Decoupling capacitors",
-                "value": "100nF typical",
-                "footprint": "TBD",
-                "notes": "Place close to IC power pins after actual IC selection.",
-            },
-        ],
+        "connector_map": connector_map,
+        "bom": bom,
     }
 
 
@@ -826,7 +974,10 @@ def export_mission_files(
 
     if should_generate_kicad_package(mission_result):
         try:
-            electronics_plan = build_starter_electronics_plan(mission_result)
+            electronics_plan = build_starter_electronics_plan(
+                mission_result=mission_result,
+                morphology_plan=morphology_plan,
+            )
 
             kicad_files = KiCadProjectGenerator(
                 output_root=export_dir.parent,
@@ -834,6 +985,7 @@ def export_mission_files(
                 mission_slug=export_dir.name,
                 electronics_plan=electronics_plan,
                 mission_text=mission,
+                morphology_plan=morphology_plan,
             )
 
             kicad_generation = {
