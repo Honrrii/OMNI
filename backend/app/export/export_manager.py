@@ -18,6 +18,11 @@ from backend.app.omni_core.formatters import safe_folder_name, sanitize_payload
 OUTPUT_ROOT = Path("outputs") / "omni_missions"
 
 
+# -------------------------------------------------------------------------
+# Basic file writers
+# -------------------------------------------------------------------------
+
+
 def write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(content or ""), encoding="utf-8")
@@ -46,10 +51,15 @@ def write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
 
     fieldnames = sorted({key for row in clean_rows for key in row.keys()})
 
-    with open(path, "w", newline="", encoding="utf-8") as csv_file:
+    with path.open("w", newline="", encoding="utf-8") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(clean_rows)
+
+
+# -------------------------------------------------------------------------
+# Small helpers
+# -------------------------------------------------------------------------
 
 
 def markdown_list(title: str, items: List[Any]) -> str:
@@ -89,6 +99,32 @@ def as_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def extract_mission_text(mission_result: Dict[str, Any]) -> str:
+    """
+    Pull the best available mission/prompt text from an OMNI mission result.
+
+    This is used by export generators so downstream modules can detect whether
+    a mission needs ROS2, Fusion, KiCad, CAD context, electronics context, etc.
+    """
+    if not isinstance(mission_result, dict):
+        return "omni_mission"
+
+    return str(
+        mission_result.get("mission")
+        or mission_result.get("mission_text")
+        or mission_result.get("prompt")
+        or mission_result.get("user_prompt")
+        or mission_result.get("title")
+        or mission_result.get("summary")
+        or "omni_mission"
+    )
+
+
+# -------------------------------------------------------------------------
+# Export trigger logic
+# -------------------------------------------------------------------------
+
+
 def should_generate_ros2_package(artifacts: Dict[str, Any]) -> bool:
     if not isinstance(artifacts, dict):
         return False
@@ -111,7 +147,7 @@ def should_generate_ros2_package(artifacts: Dict[str, Any]) -> bool:
 
 def should_generate_kicad_package(mission_result: Dict[str, Any]) -> bool:
     """
-    Decide whether OMNI should generate a starter KiCAD electronics package.
+    Decide whether OMNI should generate a starter KiCad electronics package.
 
     This scans the full mission result because electronics-related language may
     appear in mission text, agent outputs, artifacts, validation, or reports.
@@ -124,44 +160,55 @@ def should_generate_kicad_package(mission_result: Dict[str, Any]) -> bool:
     keywords = [
         "kicad",
         "pcb",
+        "printed circuit board",
         "electronics",
         "electrical",
         "circuit",
         "schematic",
         "battery",
+        "battery input",
+        "voltage regulator",
+        "power regulator",
+        "power budget",
+        "power distribution",
         "sensor",
         "sensors",
+        "imu",
+        "camera connector",
         "motor driver",
+        "servo connector",
+        "actuator connector",
         "controller board",
-        "power budget",
         "connector",
         "connectors",
-        "imu",
         "microcontroller",
         "raspberry pi",
         "esp32",
         "stm32",
         "rp2040",
+        "footprint",
+        "symbol",
+        "bom",
+        "gerber",
+        "drill file",
     ]
 
     return any(keyword in text_blob for keyword in keywords)
 
 
+# -------------------------------------------------------------------------
+# Starter KiCad electronics planning
+# -------------------------------------------------------------------------
+
+
 def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Build a conservative starter electronics plan for KiCAD export.
+    Build a conservative starter electronics plan for KiCad export.
 
     This creates useful electronics artifacts but does not claim the design is
     fabrication-ready. It should be reviewed and refined before real PCB work.
     """
-    mission_text = (
-        mission_result.get("mission")
-        or mission_result.get("mission_text")
-        or mission_result.get("user_prompt")
-        or mission_result.get("summary")
-        or "OMNI mission"
-    )
-
+    mission_text = extract_mission_text(mission_result)
     artifacts = as_dict(mission_result.get("artifacts", {}))
 
     hardware_architecture = artifacts.get("hardware_architecture", [])
@@ -172,10 +219,31 @@ def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, 
     return {
         "summary": f"Starter electronics package generated from mission: {mission_text}",
         "source_context": {
+            "mission_text": mission_text,
             "hardware_architecture": hardware_architecture,
             "component_tree": component_tree,
             "ros2_node_graph": ros2_node_graph,
             "blueprint_plan": blueprint_plan,
+        },
+        "electronics_architecture": {
+            "controller": "TBD microcontroller, companion computer, or ROS2 bridge device",
+            "power_input": "TBD battery or external regulated input",
+            "logic_power": "3.3V and/or 5V regulated logic rail",
+            "actuator_power": "TBD motor/servo voltage rail",
+            "sensor_interfaces": [
+                "I2C sensor header",
+                "SPI/UART sensor header",
+                "Camera or perception connector if mission requires vision",
+            ],
+            "actuator_interfaces": [
+                "Motor driver connector bank",
+                "Servo connector bank",
+                "PWM/control outputs",
+            ],
+            "debug_interfaces": [
+                "Programming/debug header",
+                "UART or USB debug path",
+            ],
         },
         "power_budget": {
             "battery": "TBD",
@@ -187,14 +255,17 @@ def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, 
                 "Battery chemistry, regulator sizing, and peak current must be validated before fabrication.",
                 "Actuator stall current must be checked before selecting connectors and trace widths.",
                 "PCB dimensions should be checked against the CAD electronics bay before layout.",
+                "Power traces must be wider than signal traces.",
+                "Add input protection, fuse/protection stage, and reverse-polarity protection before fabrication.",
             ],
         },
         "connector_map": {
             "J1": "Battery or external power input",
             "J2": "Programming/debug header",
             "J3": "Primary sensor header",
-            "J4": "Secondary sensor/I2C/SPI header",
+            "J4": "Secondary sensor/I2C/SPI/UART header",
             "J5": "Actuator or motor driver connector bank",
+            "J6": "Optional camera/perception connector",
         },
         "bom": [
             {
@@ -212,6 +283,14 @@ def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, 
                 "value": "5V or 3.3V TBD",
                 "footprint": "TBD",
                 "notes": "Must be sized against sensor, logic, and actuator current loads.",
+            },
+            {
+                "reference": "U3",
+                "quantity": 1,
+                "component": "Motor driver or actuator driver",
+                "value": "TBD",
+                "footprint": "TBD",
+                "notes": "Select after actuator voltage, stall current, and channel count are known.",
             },
             {
                 "reference": "J1",
@@ -245,8 +324,21 @@ def build_starter_electronics_plan(mission_result: Dict[str, Any]) -> Dict[str, 
                 "footprint": "TBD",
                 "notes": "Connector current rating must match actuator peak current.",
             },
+            {
+                "reference": "C1-C4",
+                "quantity": 4,
+                "component": "Decoupling capacitors",
+                "value": "100nF typical",
+                "footprint": "TBD",
+                "notes": "Place close to IC power pins after actual IC selection.",
+            },
         ],
     }
+
+
+# -------------------------------------------------------------------------
+# ROS2 validation helpers
+# -------------------------------------------------------------------------
 
 
 def compact_validation_result(
@@ -382,6 +474,11 @@ def run_ros2_validation(
         }
 
 
+# -------------------------------------------------------------------------
+# Main export function
+# -------------------------------------------------------------------------
+
+
 def export_mission_files(
     mission_result: Dict[str, Any],
     validate_ros2: bool = True,
@@ -402,20 +499,14 @@ def export_mission_files(
 
     If a ROS2 package is generated, this can also auto-run the ROS2 build validator.
     If CAD/Fusion content is detected, this can generate a Fusion 360 Python script.
-    If electronics/PCB content is detected, this can generate a starter KiCAD package.
+    If electronics/PCB content is detected, this can generate a starter KiCad package.
     """
     if not isinstance(mission_result, dict):
         raise ValueError("mission_result must be a dictionary.")
 
-    # Centralized cleanup: remove legacy names before writing mission exports.
     mission_result = sanitize_payload(mission_result)
 
-    mission = (
-        mission_result.get("mission")
-        or mission_result.get("mission_text")
-        or mission_result.get("user_prompt")
-        or "omni_mission"
-    )
+    mission = extract_mission_text(mission_result)
 
     result_id = mission_result.get("result_id") or datetime.now().isoformat().replace(
         ":",
@@ -471,6 +562,7 @@ def export_mission_files(
     # ---------------------------------------------------------
     # Core mission files
     # ---------------------------------------------------------
+
     path = export_dir / "mission.json"
     write_json(path, mission_result)
     record(path)
@@ -508,6 +600,7 @@ def export_mission_files(
     # ---------------------------------------------------------
     # Agent reports
     # ---------------------------------------------------------
+
     for agent_name in ["omni", "sky", "korva", "isy", "oli", "pluto", "qaz"]:
         path = agent_dir / f"{agent_name}.md"
         write_text(path, agents.get(agent_name, f"No {agent_name} report returned."))
@@ -516,6 +609,7 @@ def export_mission_files(
     # ---------------------------------------------------------
     # Structured artifacts
     # ---------------------------------------------------------
+
     artifact_json_files = {
         "ros2_node_graph.json": artifacts.get("ros2_node_graph", {}),
         "component_tree.json": artifacts.get("component_tree", []),
@@ -535,6 +629,7 @@ def export_mission_files(
     # ---------------------------------------------------------
     # CSV / Markdown artifacts
     # ---------------------------------------------------------
+
     path = artifact_dir / "risk_matrix.csv"
     write_csv(path, as_list(artifacts.get("risk_matrix", [])))
     record(path)
@@ -556,6 +651,7 @@ def export_mission_files(
     # ---------------------------------------------------------
     # Generated ROS2 package scaffold + validation
     # ---------------------------------------------------------
+
     ros2_generation = None
     ros2_validation = None
 
@@ -613,6 +709,7 @@ def export_mission_files(
     # ---------------------------------------------------------
     # Generated Fusion 360 concept script
     # ---------------------------------------------------------
+
     fusion360_generation = None
 
     if should_generate_fusion360_script(mission_result):
@@ -640,8 +737,9 @@ def export_mission_files(
             record(path)
 
     # ---------------------------------------------------------
-    # Generated KiCAD electronics package
+    # Generated KiCad electronics package
     # ---------------------------------------------------------
+
     kicad_generation = None
 
     if should_generate_kicad_package(mission_result):
@@ -653,6 +751,7 @@ def export_mission_files(
             ).generate(
                 mission_slug=export_dir.name,
                 electronics_plan=electronics_plan,
+                mission_text=mission,
             )
 
             kicad_generation = {
@@ -682,6 +781,7 @@ def export_mission_files(
     # ---------------------------------------------------------
     # Human-readable README values
     # ---------------------------------------------------------
+
     validation = as_dict(mission_result.get("validation", {}))
 
     ros2_generation_status = (
@@ -735,6 +835,7 @@ def export_mission_files(
     # ---------------------------------------------------------
     # OMNI Mission Report / Engineering Provenance Dossier
     # ---------------------------------------------------------
+
     mission_report = None
 
     try:
@@ -801,7 +902,7 @@ def export_mission_files(
 - Project Type: {fusion360_project_type}
 - Model Name: {fusion360_model_name}
 
-## KiCAD Electronics Package
+## KiCad Electronics Package
 - Status: {kicad_generation_status}
 - Package Type: {kicad_package_type}
 
