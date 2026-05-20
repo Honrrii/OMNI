@@ -47,3 +47,9 @@ memory/project_memory.json
 logs/telemetry/*.jsonl
 # Raw imported knowledge cards
 backend/app/knowledge/raw_knowledge_cards/
+
+# ML datasets
+data/
+experiments/pytorch_playground/data/
+*.gz
+*-idx*-ubyte
