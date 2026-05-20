@@ -1,58 +1,37 @@
-from io import BytesIO
+"""
+inference_service.py
+--------------------
+Backward-compatibility wrapper around the OMNITorch service layer.
+
+Existing callers that use classify_uploaded_image(image_bytes) continue
+to work without changes. New code should call omnitorch_service.analyze_image()
+directly to get the full OMNITorchResult schema.
+"""
+
 from typing import Any, Dict
 
-from PIL import Image
-import torch
-from torchvision import transforms
-
-from backend.app.ml.fashion_mnist_model import (
-    CLASS_NAMES,
-    load_fashion_mnist_model,
-)
-
-
-_transform = transforms.Compose(
-    [
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((28, 28)),
-        transforms.ToTensor(),
-    ]
-)
-
-
-def get_torch_status() -> Dict[str, Any]:
-    return {
-        "torch_available": True,
-        "torch_version": torch.__version__,
-        "cuda_available": torch.cuda.is_available(),
-        "device": "cuda" if torch.cuda.is_available() else "cpu",
-    }
+from backend.app.ml.omnitorch_service import DEFAULT_MODEL, analyze_image
 
 
 def classify_uploaded_image(image_bytes: bytes) -> Dict[str, Any]:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    """
+    Classify an image using the default OMNITorch model.
 
-    image = Image.open(BytesIO(image_bytes)).convert("RGB")
-    input_tensor = _transform(image).unsqueeze(0).to(device)
+    This function preserves the original interface used by ml_routes.py
+    and any other callers. It returns a dictionary rather than a Pydantic
+    model so existing JSON serialization paths are unaffected.
 
-    model = load_fashion_mnist_model(device=device)
+    For full OMNITorchResult access, call omnitorch_service.analyze_image() directly.
 
-    with torch.no_grad():
-        logits = model(input_tensor)
-        probabilities = torch.softmax(logits, dim=1)
-        confidence, predicted_index = torch.max(probabilities, dim=1)
+    Args:
+        image_bytes: Raw bytes of the uploaded image file.
 
-    predicted_index_int = predicted_index.item()
-    confidence_float = confidence.item()
+    Returns:
+        Dictionary representation of OMNITorchResult.
 
-    return {
-        "model_name": "fashion_mnist_mlp",
-        "predicted_class": CLASS_NAMES[predicted_index_int],
-        "predicted_index": predicted_index_int,
-        "confidence": round(confidence_float, 4),
-        "device": device,
-        "note": (
-            "This is a demo Fashion-MNIST classifier. "
-            "It is not yet a robotics/CAD design understanding model."
-        ),
-    }
+    Raises:
+        ValueError: For invalid images.
+        RuntimeError: For model loading failures.
+    """
+    result = analyze_image(image_bytes=image_bytes, model_name=DEFAULT_MODEL)
+    return result.dict()
