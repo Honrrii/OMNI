@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import "./App.css";
 import { initSpaceBg } from "./space-bg";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
+import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
 
 import OmniForgePanel from "./components/OmniForgePanel";
 import OmniSimulationPanel from "./components/OmniSimulationPanel";
@@ -76,6 +77,7 @@ const PAGE_ITEMS = [
   { id: "command", label: "Command" },
   { id: "forge", label: "Forge" },
   { id: "simulation", label: "Simulation" },
+  { id: "vision", label: "Vision" },
   { id: "blueprint", label: "Blueprint" },
   { id: "agents", label: "Agents" },
   { id: "artifacts", label: "Artifacts" },
@@ -1062,6 +1064,32 @@ function SimulationPage() {
   );
 }
 
+function VisionPage() {
+  return (
+    <section className="page vision-page-v2">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">OMNI Vision</p>
+          <h1>Image Intake + ML Inference</h1>
+          <p>
+            Upload images into OMNI&apos;s PyTorch inference service. This demo
+            currently uses Fashion-MNIST, but the same pipeline can later
+            support CAD screenshots, robot images, component recognition, and
+            visual design review.
+          </p>
+        </div>
+
+        <div className="dual-agent-card">
+          <AgentFigure type="vega" small active />
+          <AgentFigure type="qaz" small active />
+        </div>
+      </div>
+
+      <OmniVisionUploadPanel />
+    </section>
+  );
+}
+
 function BlueprintPage({ missionResult }) {
   if (!missionResult) {
     return <EmptyPage title="Blueprint" message="Run a mission to generate a blueprint." />;
@@ -1784,6 +1812,8 @@ function App() {
           {activePage === "forge" && <ForgePage />}
 
           {activePage === "simulation" && <SimulationPage />}
+
+          {activePage === "vision" && <VisionPage />}
 
           {activePage === "blueprint" && <BlueprintPage missionResult={missionResult} />}
 

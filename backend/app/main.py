@@ -18,9 +18,12 @@ from backend.app.omni_core.omni_forge_service import (
     run_omni_forge_cad_script_execution,
 )
 from backend.app.ros.ros_status_service import get_ros_status
+from backend.app.api.ml_routes import router as ml_router
 
 
 app = FastAPI(title="OMNI Command API")
+
+app.include_router(ml_router, prefix="/api/ml", tags=["ml"])
 
 
 # ---------------------------------------------------------

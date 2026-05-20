@@ -2561,3 +2561,106 @@ input::placeholder,
     scroll-behavior: auto !important;
   }
 }
+
+.omni-vision-panel {
+  border: 1px solid rgba(130, 180, 255, 0.22);
+  background: rgba(8, 14, 28, 0.72);
+  border-radius: 24px;
+  padding: 24px;
+  margin: 24px 0;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+}
+
+.vision-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.vision-header h2 {
+  margin: 0 0 8px;
+}
+
+.vision-header p {
+  max-width: 850px;
+  opacity: 0.82;
+  line-height: 1.55;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.74rem;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+
+.vision-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(280px, 1.1fr);
+  gap: 18px;
+}
+
+.vision-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.vision-card h3 {
+  margin-top: 0;
+}
+
+.vision-preview-wrap {
+  margin: 16px 0;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.vision-preview {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+}
+
+.vision-button {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  font-weight: 700;
+  background: rgba(90, 160, 255, 0.95);
+  color: white;
+}
+
+.vision-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.vision-error {
+  color: #ff8c8c;
+  margin-top: 12px;
+}
+
+.vision-result p {
+  margin: 8px 0;
+}
+
+.muted {
+  opacity: 0.72;
+  line-height: 1.5;
+}
+
+@media (max-width: 850px) {
+  .vision-grid {
+    grid-template-columns: 1fr;
+  }
+}
