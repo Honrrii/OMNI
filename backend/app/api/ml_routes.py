@@ -9,7 +9,7 @@ Endpoints:
     POST /api/ml/classify-demo  — Classify with the default demo model (backward compat)
     POST /api/ml/analyze-image  — Full OMNITorch inference with model selection
 """
-
+from backend.app.ml.cad_visual_review import review_cad_image
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from backend.app.ml.omnitorch_service import (
     MAX_IMAGE_BYTES,
@@ -155,3 +155,39 @@ async def analyze_image_endpoint(
             status_code=500,
             detail=f"OMNITorch inference failed unexpectedly: {exc}",
         )
+
+@router.post("/cad-visual-review")
+async def cad_visual_review(file: UploadFile = File(...)):
+    allowed_extensions = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
+    filename = file.filename or ""
+
+    if not filename.lower().endswith(allowed_extensions):
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Upload a PNG, JPG, JPEG, BMP, or WEBP image.",
+        )
+
+    image_bytes = await file.read()
+
+    max_upload_bytes = 8 * 1024 * 1024
+    if len(image_bytes) > max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail="Image is too large. Maximum upload size is 8 MB.",
+        )
+
+    try:
+        result = review_cad_image(image_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"CAD visual review failed: {exc}",
+        )
+
+    return {
+        "status": "ok",
+        "filename": filename,
+        "result": result,
+    }
