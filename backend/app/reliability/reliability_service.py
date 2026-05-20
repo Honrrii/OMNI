@@ -295,13 +295,63 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
         task_type = payload.omnitorch_result.get("task_type", "unknown")
         system_name = payload.omnitorch_result.get("system", "unknown")
 
-        is_demo_classifier = task_type == "image_classification"
+        if task_type == "image_classification":
+            gate_status = "WARN"
+            evidence_status = "WARN"
+            summary = (
+                "OMNITorch result was provided, but the current image classification demo "
+                "is not engineering-specific."
+            )
+            warnings = [
+                "Fashion-MNIST predictions must not be treated as CAD or robotics evidence."
+            ]
+            required_next_tests = [
+                "Replace demo image classifier with CAD visual review or robotics model."
+            ]
+
+        elif task_type == "cad_visual_review":
+            result_status = payload.omnitorch_result.get("status", "WARN")
+            visual_review = payload.omnitorch_result.get("visual_review", {})
+
+            if result_status in {"PASS", "WARN", "FAIL", "BLOCKED"}:
+                evidence_status = result_status
+                gate_status = result_status
+            else:
+                evidence_status = "WARN"
+                gate_status = "WARN"
+
+            if visual_review.get("flatness_warning"):
+                summary = "OMNITorch CAD review detected severe flatness risk."
+            elif visual_review.get("planar_morphology_warning"):
+                summary = "OMNITorch CAD review detected broad planar morphology risk."
+            else:
+                summary = "OMNITorch CAD review did not detect major visual morphology risk."
+
+            warnings = visual_review.get("recommendations", []) if gate_status == "WARN" else []
+
+            required_next_tests = (
+                ["Revise CAD morphology and re-run OMNITorch CAD visual review."]
+                if gate_status == "WARN"
+                else []
+            )
+
+        else:
+            gate_status = "WARN"
+            evidence_status = "WARN"
+            summary = (
+                f"OMNITorch result with task_type '{task_type}' was provided, "
+                "but this task type is not fully supported by Reliability Core yet."
+            )
+            warnings = [
+                "Review OMNITorch output manually before using it as engineering evidence."
+            ]
+            required_next_tests = []
 
         item = make_evidence(
             label="OMNITorch result provided",
             evidence_type="omnitorch_inference",
             source=system_name,
-            status="WARN" if is_demo_classifier else "PASS",
+            status=evidence_status,
             confidence="medium",
             details=payload.omnitorch_result,
             human_review_required=True,
@@ -312,26 +362,14 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
             make_gate(
                 gate_id="omnitorch-visual-evidence",
                 name="OMNITorch Visual Evidence",
-                status="WARN" if is_demo_classifier else "PASS",
-                summary=(
-                    "OMNITorch result was provided, but current image classification demo "
-                    "is not engineering-specific."
-                    if is_demo_classifier
-                    else "OMNITorch engineering-specific visual evidence was provided."
-                ),
+                status=gate_status,
+                summary=summary,
                 evidence_ids=[item.id],
-                warnings=(
-                    ["Fashion-MNIST predictions must not be treated as CAD or robotics evidence."]
-                    if is_demo_classifier
-                    else []
-                ),
-                required_next_tests=(
-                    ["Replace demo image classifier with CAD visual review or robotics model."]
-                    if is_demo_classifier
-                    else []
-                ),
+                warnings=warnings,
+                required_next_tests=required_next_tests,
             )
         )
+
     else:
         item = make_evidence(
             label="No OMNITorch result provided",
