@@ -14,6 +14,17 @@ from backend.app.reliability.gates import (
 from backend.app.reliability.schemas import ReliabilityReport, ReliabilityReviewRequest
 from backend.app.reliability.scoring import compute_engineering_confidence
 
+from dataclasses import asdict
+
+from backend.app.reliability.calculators.power_calculators import (
+    PowerBudgetInput,
+    estimate_power_budget,
+)
+from backend.app.reliability.calculators.rover_calculators import (
+    RoverMobilityInput,
+    estimate_rover_mobility,
+)
+
 
 def get_reliability_status() -> Dict[str, Any]:
     return {
@@ -91,6 +102,49 @@ def _has_mission_artifacts(mission_result: Optional[Dict[str, Any]]) -> bool:
 
     return any(key in mission_result and mission_result.get(key) for key in artifact_keys)
 
+def _get_context_block(payload: ReliabilityReviewRequest) -> Dict[str, Any]:
+    if not payload.context:
+        return {}
+
+    return payload.context
+
+
+def _run_power_budget_if_available(
+    payload: ReliabilityReviewRequest,
+) -> Optional[Dict[str, Any]]:
+    context = _get_context_block(payload)
+    power_input = context.get("power_budget")
+
+    if not power_input:
+        return None
+
+    result = estimate_power_budget(PowerBudgetInput(**power_input))
+
+    return {
+        "input": power_input,
+        "result": asdict(result),
+    }
+
+
+def _run_rover_mobility_if_available(
+    payload: ReliabilityReviewRequest,
+) -> Optional[Dict[str, Any]]:
+    context = _get_context_block(payload)
+    rover_input = context.get("rover_mobility")
+
+    if not rover_input:
+        return None
+
+    result = estimate_rover_mobility(RoverMobilityInput(**rover_input))
+
+    return {
+        "input": rover_input,
+        "result": asdict(result),
+    }
+
+
+def _status_from_calculation(calculation_result: Dict[str, Any]) -> str:
+    return calculation_result.get("result", {}).get("status", "WARN")
 
 def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityReport:
     mission_text = payload.mission_text.strip()
@@ -302,9 +356,166 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
     # Gate 5: deterministic engineering calculations
     calculation_required_domains = {"drone", "rover", "manipulator", "electronics"}
 
-    if mission_domain in calculation_required_domains:
+    calculation_evidence_ids: list[str] = []
+    calculation_warnings: list[str] = []
+    calculation_blockers: list[str] = []
+    calculation_next_tests: list[str] = []
+
+    power_calculation = None
+    rover_calculation = None
+
+    try:
+        power_calculation = _run_power_budget_if_available(payload)
+    except Exception as exc:
         item = make_evidence(
-            label="Deterministic engineering calculation missing",
+            label="Power budget calculation failed",
+            evidence_type="calculation",
+            source="power_calculators.estimate_power_budget",
+            status="FAIL",
+            confidence="high",
+            details={"error": str(exc)},
+            human_review_required=True,
+        )
+        evidence.append(item)
+        calculation_evidence_ids.append(item.id)
+        calculation_warnings.append(f"Power budget calculation failed: {exc}")
+
+    try:
+        rover_calculation = _run_rover_mobility_if_available(payload)
+    except Exception as exc:
+        item = make_evidence(
+            label="Rover mobility calculation failed",
+            evidence_type="calculation",
+            source="rover_calculators.estimate_rover_mobility",
+            status="FAIL",
+            confidence="high",
+            details={"error": str(exc)},
+            human_review_required=True,
+        )
+        evidence.append(item)
+        calculation_evidence_ids.append(item.id)
+        calculation_warnings.append(f"Rover mobility calculation failed: {exc}")
+
+    if power_calculation:
+        power_status = _status_from_calculation(power_calculation)
+
+        item = make_evidence(
+            label="Power budget calculation completed",
+            evidence_type="calculation",
+            source="power_calculators.estimate_power_budget",
+            status=power_status,
+            confidence="high",
+            details=power_calculation,
+            human_review_required=True,
+        )
+        evidence.append(item)
+        calculation_evidence_ids.append(item.id)
+
+        for warning in power_calculation["result"].get("warnings", []):
+            calculation_warnings.append(f"Power budget: {warning}")
+
+    if rover_calculation:
+        rover_status = _status_from_calculation(rover_calculation)
+
+        item = make_evidence(
+            label="Rover mobility calculation completed",
+            evidence_type="calculation",
+            source="rover_calculators.estimate_rover_mobility",
+            status=rover_status,
+            confidence="high",
+            details=rover_calculation,
+            human_review_required=True,
+        )
+        evidence.append(item)
+        calculation_evidence_ids.append(item.id)
+
+        for warning in rover_calculation["result"].get("warnings", []):
+            calculation_warnings.append(f"Rover mobility: {warning}")
+
+    if mission_domain == "rover":
+        missing_required_calculations = []
+
+        if not power_calculation:
+            missing_required_calculations.append("power budget")
+
+        if not rover_calculation:
+            missing_required_calculations.append("rover mobility")
+
+        if missing_required_calculations:
+            calculation_next_tests.append(
+                "Provide rover_mobility and power_budget inputs in the reliability review context."
+            )
+
+        if not calculation_evidence_ids:
+            item = make_evidence(
+                label="Deterministic engineering calculation missing",
+                evidence_type="missing_evidence",
+                source="engineering_calculators",
+                status="BLOCKED",
+                confidence="high",
+            )
+            evidence.append(item)
+
+            gates.append(
+                make_gate(
+                    gate_id="deterministic-calculations",
+                    name="Deterministic Engineering Calculations",
+                    status="BLOCKED",
+                    summary=(
+                        "Rover missions require deterministic power and mobility calculations "
+                        "before high engineering confidence can be assigned."
+                    ),
+                    evidence_ids=[item.id],
+                    blockers=[
+                        "No deterministic rover mobility or power budget calculation was provided."
+                    ],
+                    required_next_tests=[
+                        "Run rover mobility calculator.",
+                        "Run power budget calculator.",
+                        "Record assumptions used by each calculator.",
+                    ],
+                )
+            )
+
+        else:
+            calculation_statuses = [
+                evidence_item.status
+                for evidence_item in evidence
+                if evidence_item.id in calculation_evidence_ids
+            ]
+
+            if "FAIL" in calculation_statuses:
+                gate_status = "FAIL"
+                summary = "One or more deterministic rover calculations failed."
+            elif missing_required_calculations:
+                gate_status = "WARN"
+                summary = (
+                    "Some deterministic rover calculations were provided, but the review "
+                    f"is missing: {', '.join(missing_required_calculations)}."
+                )
+            elif "WARN" in calculation_statuses:
+                gate_status = "WARN"
+                summary = "Deterministic rover calculations completed with warnings."
+            else:
+                gate_status = "PASS"
+                summary = "Deterministic rover power and mobility calculations passed."
+
+            gates.append(
+                make_gate(
+                    gate_id="deterministic-calculations",
+                    name="Deterministic Engineering Calculations",
+                    status=gate_status,
+                    summary=summary,
+                    evidence_ids=calculation_evidence_ids,
+                    warnings=calculation_warnings,
+                    blockers=calculation_blockers,
+                    required_next_tests=calculation_next_tests,
+                )
+            )
+
+    elif mission_domain in calculation_required_domains:
+        item = make_evidence(
+            label="Domain-specific deterministic calculation missing",
             evidence_type="missing_evidence",
             source="engineering_calculators",
             status="BLOCKED",
@@ -331,26 +542,42 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
                 ],
             )
         )
-    else:
-        item = make_evidence(
-            label="No domain-specific deterministic calculator required yet",
-            evidence_type="missing_evidence",
-            source="engineering_calculators",
-            status="WARN",
-            confidence="medium",
-        )
-        evidence.append(item)
 
-        gates.append(
-            make_gate(
-                gate_id="deterministic-calculations",
-                name="Deterministic Engineering Calculations",
-                status="WARN",
-                summary="No deterministic calculator was run for this mission yet.",
-                evidence_ids=[item.id],
-                required_next_tests=["Add a domain-specific calculator if the mission becomes hardware-specific."],
+    else:
+        if power_calculation:
+            gates.append(
+                make_gate(
+                    gate_id="deterministic-calculations",
+                    name="Deterministic Engineering Calculations",
+                    status="PASS",
+                    summary="Power budget calculation was provided.",
+                    evidence_ids=calculation_evidence_ids,
+                    warnings=calculation_warnings,
+                    required_next_tests=calculation_next_tests,
+                )
             )
-        )
+        else:
+            item = make_evidence(
+                label="No domain-specific deterministic calculator required yet",
+                evidence_type="missing_evidence",
+                source="engineering_calculators",
+                status="WARN",
+                confidence="medium",
+            )
+            evidence.append(item)
+
+            gates.append(
+                make_gate(
+                    gate_id="deterministic-calculations",
+                    name="Deterministic Engineering Calculations",
+                    status="WARN",
+                    summary="No deterministic calculator was run for this mission yet.",
+                    evidence_ids=[item.id],
+                    required_next_tests=[
+                        "Add a domain-specific calculator if the mission becomes hardware-specific."
+                    ],
+                )
+            )
 
     evidence_summary = build_evidence_summary(evidence)
     overall_status = compute_overall_status(gates)
