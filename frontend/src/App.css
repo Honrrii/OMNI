@@ -2664,3 +2664,129 @@ input::placeholder,
     grid-template-columns: 1fr;
   }
 }
+
+.reliability-panel {
+  display: grid;
+  gap: 24px;
+}
+
+.reliability-card,
+.reliability-summary,
+.gate-card,
+.evidence-card {
+  border: 1px solid rgba(130, 180, 255, 0.18);
+  background: rgba(8, 14, 28, 0.72);
+  border-radius: 22px;
+  padding: 20px;
+}
+
+.reliability-json-input {
+  width: 100%;
+  min-height: 280px;
+  margin: 18px 0;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(130, 180, 255, 0.22);
+  background: rgba(0, 0, 0, 0.35);
+  color: white;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  resize: vertical;
+}
+
+.reliability-run-button {
+  width: 100%;
+}
+
+.reliability-results {
+  display: grid;
+  gap: 24px;
+}
+
+.reliability-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.reliability-summary h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 7vw, 6rem);
+}
+
+.confidence-ring {
+  width: 132px;
+  height: 132px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 1.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.reliability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.gate-list,
+.evidence-list {
+  display: grid;
+  gap: 12px;
+}
+
+.gate-card,
+.evidence-card {
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.gate-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+}
+
+.gate-topline span {
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.gate-card.pass,
+.evidence-card.pass,
+.reliability-summary.pass {
+  border-color: rgba(90, 255, 170, 0.34);
+}
+
+.gate-card.warn,
+.evidence-card.warn,
+.reliability-summary.warn {
+  border-color: rgba(255, 210, 90, 0.42);
+}
+
+.gate-card.fail,
+.evidence-card.fail,
+.reliability-summary.fail {
+  border-color: rgba(255, 100, 100, 0.42);
+}
+
+.gate-card.blocked,
+.evidence-card.blocked,
+.reliability-summary.blocked {
+  border-color: rgba(255, 80, 120, 0.52);
+}
+
+@media (max-width: 900px) {
+  .reliability-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .reliability-grid {
+    grid-template-columns: 1fr;
+  }
+}

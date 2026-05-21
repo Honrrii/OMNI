@@ -3,6 +3,7 @@ import "./App.css";
 import { initSpaceBg } from "./space-bg";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
 import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
+import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
 
 import OmniForgePanel from "./components/OmniForgePanel";
 import OmniSimulationPanel from "./components/OmniSimulationPanel";
@@ -82,6 +83,7 @@ const PAGE_ITEMS = [
   { id: "agents", label: "Agents" },
   { id: "artifacts", label: "Artifacts" },
   { id: "validation", label: "Validation" },
+  { id: "reliability", label: "Reliability" },
   { id: "knowledge", label: "Knowledge" },
   { id: "memory", label: "Memory" },
 ];
@@ -1484,6 +1486,30 @@ function MemoryPage({ missionResult }) {
   );
 }
 
+function ReliabilityPage() {
+  return (
+    <section className="page reliability-page-v2">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">OMNI Reliability Core</p>
+          <h1>Engineering Judgment Dashboard</h1>
+          <p>
+            Evidence-labeled reliability review for OMNI missions, deterministic
+            calculators, ROS2 validation, and OMNITorch visual inspection.
+          </p>
+        </div>
+
+        <div className="dual-agent-card">
+          <AgentFigure type="qaz" small active />
+          <AgentFigure type="pluto" small active />
+        </div>
+      </div>
+
+      <OmniReliabilityPanel />
+    </section>
+  );
+}
+
 function TimelineItem({ step, title, description }) {
   return (
     <div className="timeline-item">
@@ -1830,8 +1856,10 @@ function App() {
 
           {activePage === "validation" && <ValidationPage missionResult={missionResult} />}
 
+          {activePage === "reliability" && <ReliabilityPage />}
+
           {activePage === "knowledge" && (
-          <KnowledgeContextPage missionResult={missionResult} />
+            <KnowledgeContextPage missionResult={missionResult} />
           )}
 
           {activePage === "memory" && <MemoryPage missionResult={missionResult} />}
