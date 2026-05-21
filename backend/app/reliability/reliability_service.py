@@ -24,6 +24,10 @@ from backend.app.reliability.calculators.rover_calculators import (
     RoverMobilityInput,
     estimate_rover_mobility,
 )
+from backend.app.reliability.calculators.drone_calculators import (
+    DroneSizingInput,
+    estimate_drone_sizing,
+)
 
 
 def get_reliability_status() -> Dict[str, Any]:
@@ -142,6 +146,21 @@ def _run_rover_mobility_if_available(
         "result": asdict(result),
     }
 
+def _run_drone_sizing_if_available(
+    payload: ReliabilityReviewRequest,
+) -> Optional[Dict[str, Any]]:
+    context = _get_context_block(payload)
+    drone_input = context.get("drone_sizing")
+
+    if not drone_input:
+        return None
+
+    result = estimate_drone_sizing(DroneSizingInput(**drone_input))
+
+    return {
+        "input": drone_input,
+        "result": asdict(result),
+    }
 
 def _status_from_calculation(calculation_result: Dict[str, Any]) -> str:
     return calculation_result.get("result", {}).get("status", "WARN")
@@ -401,6 +420,7 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
 
     power_calculation = None
     rover_calculation = None
+    drone_calculation = None
 
     try:
         power_calculation = _run_power_budget_if_available(payload)
@@ -433,6 +453,22 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
         evidence.append(item)
         calculation_evidence_ids.append(item.id)
         calculation_warnings.append(f"Rover mobility calculation failed: {exc}")
+
+    try:
+        drone_calculation = _run_drone_sizing_if_available(payload)
+    except Exception as exc:
+        item = make_evidence(
+            label="Drone sizing calculation failed",
+            evidence_type="calculation",
+            source="drone_calculators.estimate_drone_sizing",
+            status="FAIL",
+            confidence="high",
+            details={"error": str(exc)},
+            human_review_required=True,
+        )
+        evidence.append(item)
+        calculation_evidence_ids.append(item.id)
+        calculation_warnings.append(f"Drone sizing calculation failed: {exc}")
 
     if power_calculation:
         power_status = _status_from_calculation(power_calculation)
@@ -470,7 +506,87 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
         for warning in rover_calculation["result"].get("warnings", []):
             calculation_warnings.append(f"Rover mobility: {warning}")
 
-    if mission_domain == "rover":
+    if drone_calculation:
+        drone_status = _status_from_calculation(drone_calculation)
+
+        item = make_evidence(
+            label="Drone sizing calculation completed",
+            evidence_type="calculation",
+            source="drone_calculators.estimate_drone_sizing",
+            status=drone_status,
+            confidence="high",
+            details=drone_calculation,
+            human_review_required=True,
+        )
+        evidence.append(item)
+        calculation_evidence_ids.append(item.id)
+
+        for warning in drone_calculation["result"].get("warnings", []):
+            calculation_warnings.append(f"Drone sizing: {warning}")
+
+    if mission_domain == "drone":
+        if not drone_calculation:
+            item = make_evidence(
+                label="Drone deterministic engineering calculation missing",
+                evidence_type="missing_evidence",
+                source="engineering_calculators",
+                status="BLOCKED",
+                confidence="high",
+            )
+            evidence.append(item)
+
+            gates.append(
+                make_gate(
+                    gate_id="deterministic-calculations",
+                    name="Deterministic Engineering Calculations",
+                    status="BLOCKED",
+                    summary=(
+                        "Drone missions require deterministic mass, thrust, current draw, "
+                        "and flight-time calculations before high engineering confidence "
+                        "can be assigned."
+                    ),
+                    evidence_ids=[item.id],
+                    blockers=[
+                        "No deterministic drone sizing calculation was provided."
+                    ],
+                    required_next_tests=[
+                        "Run drone sizing calculator.",
+                        "Record mass, motor count, thrust per motor, battery capacity, voltage, and current assumptions.",
+                    ],
+                )
+            )
+
+        else:
+            calculation_statuses = [
+                evidence_item.status
+                for evidence_item in evidence
+                if evidence_item.id in calculation_evidence_ids
+            ]
+
+            if "FAIL" in calculation_statuses:
+                gate_status = "FAIL"
+                summary = "One or more deterministic drone calculations failed."
+            elif "WARN" in calculation_statuses:
+                gate_status = "WARN"
+                summary = "Deterministic drone sizing calculation completed with warnings."
+            else:
+                gate_status = "PASS"
+                summary = "Deterministic drone sizing calculation passed."
+
+            gates.append(
+                make_gate(
+                    gate_id="deterministic-calculations",
+                    name="Deterministic Engineering Calculations",
+                    status=gate_status,
+                    summary=summary,
+                    evidence_ids=calculation_evidence_ids,
+                    warnings=calculation_warnings,
+                    blockers=calculation_blockers,
+                    required_next_tests=calculation_next_tests,
+                )
+            )
+
+    elif mission_domain == "rover":
         missing_required_calculations = []
 
         if not power_calculation:
