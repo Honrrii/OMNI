@@ -86,4 +86,65 @@ GOLDEN_STANDARD_CASES: List[GoldenStandardCase] = [
         expected_max_confidence=0.60,
         expected_blocker_count=2,
     ),
+        GoldenStandardCase(
+        id="GS-DRONE-001",
+        name="Quadcopter drone with sizing calculation warning",
+        description=(
+            "A quadcopter mission with deterministic sizing context should avoid "
+            "being blocked, but should warn when estimated flight time is short."
+        ),
+        payload={
+            "mission_text": (
+                "Design a quadcopter drone with Fusion 360 CAD, ROS2 validation, "
+                "camera payload, battery power, and OMNITorch visual review."
+            ),
+            "context": {
+                "drone_sizing": {
+                    "estimated_total_mass_g": 850,
+                    "motor_count": 4,
+                    "max_thrust_per_motor_g": 650,
+                    "battery_capacity_mah": 2200,
+                    "battery_voltage_v": 11.1,
+                    "average_current_per_motor_a": 4.5,
+                    "payload_mass_g": 120,
+                }
+            },
+        },
+        expected_overall_status="WARN",
+        expected_gate_statuses={
+            "mission-requirements": "PASS",
+            "artifact-presence": "WARN",
+            "ros2-build-validation": "WARN",
+            "omnitorch-visual-evidence": "WARN",
+            "deterministic-calculations": "WARN",
+        },
+        expected_min_confidence=0.60,
+        expected_max_confidence=0.90,
+        expected_blocker_count=0,
+    ),
+    GoldenStandardCase(
+        id="GS-DRONE-002",
+        name="Quadcopter drone missing sizing calculation",
+        description=(
+            "A drone mission without deterministic sizing context should remain "
+            "blocked because mass, thrust, current draw, and flight time are unknown."
+        ),
+        payload={
+            "mission_text": (
+                "Design a quadcopter drone with Fusion 360 CAD, ROS2 validation, "
+                "camera payload, battery power, and OMNITorch visual review."
+            )
+        },
+        expected_overall_status="BLOCKED",
+        expected_gate_statuses={
+            "mission-requirements": "PASS",
+            "artifact-presence": "WARN",
+            "ros2-build-validation": "WARN",
+            "omnitorch-visual-evidence": "WARN",
+            "deterministic-calculations": "BLOCKED",
+        },
+        expected_min_confidence=0.20,
+        expected_max_confidence=0.60,
+        expected_blocker_count=2,
+    ),
 ]
