@@ -1,5 +1,32 @@
 import json
 import pprint
+
+try:
+    from backend.app.cad.cad_detail_pass_planner import (
+        plan_cad_detail_passes,
+        assembly_spec_to_dict,
+        summarize_assembly_spec,
+    )
+except Exception:
+    try:
+        from cad.cad_detail_pass_planner import (
+            plan_cad_detail_passes,
+            assembly_spec_to_dict,
+            summarize_assembly_spec,
+        )
+    except Exception:
+        try:
+            from app.cad.cad_detail_pass_planner import (
+                plan_cad_detail_passes,
+                assembly_spec_to_dict,
+                summarize_assembly_spec,
+            )
+        except Exception:
+            plan_cad_detail_passes = None
+            assembly_spec_to_dict = None
+            summarize_assembly_spec = None
+
+
 import re
 from pathlib import Path
 from typing import Any, Dict, List
@@ -1891,6 +1918,10 @@ def generate_fusion360_export(
     morphology_compiler_artifacts: Dict[str, Any] = {}
     morphology_compiler_error = ""
 
+    assembly_spec = None
+    assembly_spec_dict = None
+    assembly_planner_error = ""
+
     if build_morphology_artifacts is not None:
         try:
             morphology_compiler_artifacts = build_morphology_artifacts(
@@ -2008,6 +2039,36 @@ def generate_fusion360_export(
     if project_type == "drone":
         parameters["rotor_count"] = infer_rotor_count(mission_result)
 
+    if morphology_spec and plan_cad_detail_passes is not None and assembly_spec_to_dict is not None:
+        try:
+            detail_mission_text = str(
+                mission_result.get("mission")
+                or mission_result.get("mission_text")
+                or mission_result.get("prompt")
+                or mission_result.get("original_prompt")
+                or mission_text
+                or ""
+            )
+
+            assembly_spec = plan_cad_detail_passes(
+                mission_text=detail_mission_text,
+                morphology_spec=morphology_spec,
+                project_type=project_type,
+            )
+            assembly_spec_dict = assembly_spec_to_dict(assembly_spec)
+            parameters["assembly_spec"] = assembly_spec_dict
+
+            cad_context.setdefault("reference_lessons", []).append(
+                "Assembly detail planner context is active."
+            )
+            cad_context.setdefault("design_rules", []).append(
+                "Use PARAMS['assembly_spec'] for detailed internal assembly layout when available."
+            )
+        except Exception as exc:
+            assembly_planner_error = str(exc)
+            assembly_spec = None
+            assembly_spec_dict = None
+
     if morphology_spec:
         parameters["morphology_spec"] = morphology_spec
 
@@ -2022,6 +2083,7 @@ def generate_fusion360_export(
     readme_path = fusion_dir / "CAD_README.md"
     morphology_spec_path = fusion_dir / "morphology_spec.json"
     morphology_gate_path = fusion_dir / "morphology_quality_gate.json"
+    assembly_spec_path = fusion_dir / "assembly_spec.json"
 
     script_content = generate_fusion360_script(
         model_name=model_name,
@@ -2065,6 +2127,12 @@ def generate_fusion360_export(
             encoding="utf-8",
         )
 
+    if assembly_spec_dict:
+        assembly_spec_path.write_text(
+            json.dumps(assembly_spec_dict, indent=2),
+            encoding="utf-8",
+        )
+
     files = [
         str(script_path.relative_to(output_root)),
         str(params_path.relative_to(output_root)),
@@ -2076,6 +2144,9 @@ def generate_fusion360_export(
 
     if morphology_quality_gate:
         files.append(str(morphology_gate_path.relative_to(output_root)))
+
+    if assembly_spec_dict:
+        files.append(str(assembly_spec_path.relative_to(output_root)))
 
     return {
         "status": "generated",
@@ -2097,6 +2168,28 @@ def generate_fusion360_export(
             else None
         ),
         "morphology_compiler_error": morphology_compiler_error or None,
+        "assembly_detail_available": bool(assembly_spec_dict),
+        "assembly_detail_level": (
+            assembly_spec_dict.get("detail_level")
+            if isinstance(assembly_spec_dict, dict)
+            else None
+        ),
+        "assembly_visibility_mode": (
+            assembly_spec_dict.get("visibility_mode")
+            if isinstance(assembly_spec_dict, dict)
+            else None
+        ),
+        "assembly_component_count": (
+            assembly_spec_dict.get("component_count")
+            if isinstance(assembly_spec_dict, dict)
+            else None
+        ),
+        "assembly_structural_feature_count": (
+            assembly_spec_dict.get("structural_feature_count")
+            if isinstance(assembly_spec_dict, dict)
+            else None
+        ),
+        "assembly_planner_error": assembly_planner_error or None,
         "morphology_family": (
             morphology_spec.get("morphology_family")
             if isinstance(morphology_spec, dict)
@@ -2114,4 +2207,3 @@ def generate_fusion360_export(
         ),
         "rotor_count": parameters.get("rotor_count") if project_type == "drone" else None,
     }
-
