@@ -1673,6 +1673,330 @@ def _bio_draw_from_spec_generic(component, spec):
             )
 
 
+
+# ─────────────────────────────────────────────────────────────
+# AssemblySpec Rendering Helpers
+# ─────────────────────────────────────────────────────────────
+
+def _get_assembly_spec():
+    spec = PARAMS.get("assembly_spec", dict())
+    if isinstance(spec, dict):
+        return spec
+    return dict()
+
+
+def _has_assembly_spec():
+    spec = _get_assembly_spec()
+    return bool(spec)
+
+
+def _asm_float(value, fallback):
+    try:
+        return float(value)
+    except Exception:
+        return float(fallback)
+
+
+def _asm_list(value):
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _asm_dict(value):
+    if isinstance(value, dict):
+        return value
+    return dict()
+
+
+def _asm_name(value, fallback):
+    return _bio_clean_name(value, fallback)
+
+
+def _asm_component_dims(component):
+    length = _asm_float(component.get("length_mm", 0), 0)
+    width = _asm_float(component.get("width_mm", 0), 0)
+    height = _asm_float(component.get("height_mm", 0), 0)
+
+    if length <= 0:
+        length = 50
+    if width <= 0:
+        width = 28
+    if height <= 0:
+        height = 12
+
+    return length, width, height
+
+
+def _asm_draw_panel(component, panel):
+    panel = _asm_dict(panel)
+
+    name = _asm_name(panel.get("name", "panel"), "panel")
+    panel_type = str(panel.get("panel_type", "panel") or "panel")
+    transparent = bool(panel.get("transparent", False))
+
+    length = _asm_float(panel.get("length_mm", 100), 100)
+    width = _asm_float(panel.get("width_mm", 50), 50)
+    thickness = _asm_float(panel.get("thickness_mm", 3), 3)
+
+    x = _asm_float(panel.get("x_mm", 0), 0)
+    y = _asm_float(panel.get("y_mm", 0), 0)
+    z = _asm_float(panel.get("z_mm", 0), 0)
+    angle = _asm_float(panel.get("angle_deg", 0), 0)
+
+    body_name = "asm_panel_" + name
+    if transparent:
+        body_name = body_name + "_transparent_marker"
+
+    create_box(
+        component,
+        body_name,
+        length,
+        width,
+        thickness,
+        x,
+        y,
+        z,
+        angle,
+    )
+
+    if transparent:
+        create_label(component, "transparent cutaway shell", x - length / 2, y, z + thickness + 2)
+
+    if panel_type in ("fin_panel", "wing_panel"):
+        create_label(component, panel_type, x - length / 2, y, z + thickness + 2)
+
+
+def _asm_draw_component(component, comp):
+    comp = _asm_dict(comp)
+
+    name = _asm_name(comp.get("name", "component"), "component")
+    ctype = str(comp.get("component_type", "box") or "box").lower()
+
+    x = _asm_float(comp.get("x_mm", 0), 0)
+    y = _asm_float(comp.get("y_mm", 0), 0)
+    z = _asm_float(comp.get("z_mm", 0), 0)
+    angle = _asm_float(comp.get("angle_deg", 0), 0)
+
+    length, width, height = _asm_component_dims(comp)
+
+    label = str(comp.get("label", "") or name)
+
+    # Cylindrical components use width as radius by convention.
+    if ctype in ("motor_can", "propeller_disk", "sonar_ring", "camera_lens", "standoff", "screw_boss"):
+        radius = max(2.0, width)
+        create_cylinder(
+            component,
+            "asm_component_" + name,
+            radius,
+            height,
+            x,
+            y,
+            z,
+        )
+    else:
+        create_box(
+            component,
+            "asm_component_" + name,
+            length,
+            width,
+            height,
+            x,
+            y,
+            z,
+            angle,
+        )
+
+    if ctype in ("battery_pack", "electronics_board", "compute_module", "flight_controller", "sensor_pod"):
+        create_label(component, label, x - length / 2, y - width / 2, z + height + 2)
+
+
+def _asm_draw_mounting_feature(component, mount):
+    mount = _asm_dict(mount)
+
+    name = _asm_name(mount.get("name", "mount"), "mount")
+    feature_type = str(mount.get("feature_type", "boss") or "boss").lower()
+
+    x = _asm_float(mount.get("x_mm", 0), 0)
+    y = _asm_float(mount.get("y_mm", 0), 0)
+    z = _asm_float(mount.get("z_mm", 0), 0)
+
+    diameter = _asm_float(mount.get("diameter_mm", 6), 6)
+    height = _asm_float(mount.get("height_mm", 8), 8)
+
+    if feature_type in ("boss", "standoff", "hole_pattern"):
+        create_cylinder(
+            component,
+            "asm_mount_" + name,
+            diameter / 2.0,
+            height,
+            x,
+            y,
+            z,
+        )
+    elif feature_type in ("rail", "slot"):
+        create_box(
+            component,
+            "asm_mount_" + name,
+            80,
+            max(4, diameter),
+            max(3, height),
+            x,
+            y,
+            z,
+        )
+    else:
+        create_box(
+            component,
+            "asm_mount_" + name,
+            20,
+            8,
+            height,
+            x,
+            y,
+            z,
+        )
+
+
+def _asm_draw_fastener_pattern(component, pattern):
+    pattern = _asm_dict(pattern)
+
+    name = _asm_name(pattern.get("name", "fasteners"), "fasteners")
+    xs = _asm_list(pattern.get("x_positions_mm", []))
+    ys = _asm_list(pattern.get("y_positions_mm", []))
+
+    z = _asm_float(pattern.get("z_mm", 0), 0)
+    diameter = _asm_float(pattern.get("diameter_mm", 3.2), 3.2)
+    depth = _asm_float(pattern.get("depth_mm", 4), 4)
+
+    index = 1
+    for x in xs:
+        for y in ys:
+            create_cylinder(
+                component,
+                "asm_fastener_" + name + "_" + str(index),
+                diameter / 2.0,
+                depth,
+                _asm_float(x, 0),
+                _asm_float(y, 0),
+                z,
+            )
+            index += 1
+
+
+def _asm_draw_structural_feature(component, feature):
+    feature = _asm_dict(feature)
+
+    name = _asm_name(feature.get("name", "structural"), "structural")
+    ftype = str(feature.get("feature_type", "rib") or "rib").lower()
+
+    length = _asm_float(feature.get("length_mm", 60), 60)
+    width = _asm_float(feature.get("width_mm", 4), 4)
+    height = _asm_float(feature.get("height_mm", 20), 20)
+
+    x = _asm_float(feature.get("x_mm", 0), 0)
+    y = _asm_float(feature.get("y_mm", 0), 0)
+    z = _asm_float(feature.get("z_mm", 0), 0)
+    angle = _asm_float(feature.get("angle_deg", 0), 0)
+
+    create_box(
+        component,
+        "asm_" + ftype + "_" + name,
+        length,
+        width,
+        height,
+        x,
+        y,
+        z,
+        angle,
+    )
+
+    if ftype in ("cable_corridor", "bulkhead"):
+        create_label(component, ftype, x - length / 2, y, z + height + 2)
+
+
+def _asm_draw_subassembly(component, subassembly):
+    subassembly = _asm_dict(subassembly)
+
+    for comp in _asm_list(subassembly.get("components", [])):
+        _asm_draw_component(component, comp)
+
+    for mount in _asm_list(subassembly.get("mounting_features", [])):
+        _asm_draw_mounting_feature(component, mount)
+
+    for pattern in _asm_list(subassembly.get("fastener_patterns", [])):
+        _asm_draw_fastener_pattern(component, pattern)
+
+
+def _asm_render_assembly_spec(component, family_label):
+    assembly = _get_assembly_spec()
+
+    if not assembly:
+        return False
+
+    outer_shell = _asm_dict(assembly.get("outer_shell", dict()))
+    panels = _asm_list(outer_shell.get("panels", []))
+
+    for panel in panels:
+        _asm_draw_panel(component, panel)
+
+    for subassembly in _asm_list(assembly.get("subassemblies", [])):
+        _asm_draw_subassembly(component, subassembly)
+
+    for feature in _asm_list(assembly.get("structural_features", [])):
+        _asm_draw_structural_feature(component, feature)
+
+    create_label(
+        component,
+        "Assembly: " + str(assembly.get("assembly_name", "assembly")),
+        -140,
+        125,
+        10,
+    )
+    create_label(
+        component,
+        "Detail: " + str(assembly.get("detail_level", "unknown")),
+        -140,
+        140,
+        10,
+    )
+    create_label(
+        component,
+        "Visibility: " + str(assembly.get("visibility_mode", "opaque")),
+        -140,
+        155,
+        10,
+    )
+    create_label(
+        component,
+        "Family: " + str(family_label),
+        -140,
+        170,
+        10,
+    )
+
+    create_reference_note_label(component)
+    return True
+
+
+def build_detailed_aquatic_glider(component):
+    rendered = _asm_render_assembly_spec(component, "aquatic_glider_robot")
+    if not rendered:
+        build_biomorphic_robot(component)
+
+
+def build_detailed_hybrid_biomorphic_drone(component):
+    rendered = _asm_render_assembly_spec(component, "hybrid_biomorphic_drone")
+    if not rendered:
+        build_biomorphic_robot(component)
+
+
+def build_detailed_biomorphic_rover(component):
+    rendered = _asm_render_assembly_spec(component, "biomorphic_rover")
+    if not rendered:
+        build_biomorphic_robot(component)
+
+
 def build_biomorphic_robot(component):
     spec = _get_morphology_spec()
     family = str(spec.get("morphology_family", PROJECT_TYPE) or PROJECT_TYPE).lower()
@@ -1747,6 +2071,12 @@ def run(context):
             build_robot_arm(model_component)
         elif PROJECT_TYPE == "enclosure":
             build_enclosure(model_component)
+        elif PROJECT_TYPE == "aquatic_glider_robot" and _has_assembly_spec():
+            build_detailed_aquatic_glider(model_component)
+        elif PROJECT_TYPE == "hybrid_biomorphic_drone" and _has_assembly_spec():
+            build_detailed_hybrid_biomorphic_drone(model_component)
+        elif PROJECT_TYPE == "biomorphic_rover" and _has_assembly_spec():
+            build_detailed_biomorphic_rover(model_component)
         elif PROJECT_TYPE in (
             "wall_climbing_robot",
             "serpentine_robot",
@@ -1758,6 +2088,10 @@ def run(context):
             "jumping_robot",
             "biomorphic_micro_uav",
             "biomorphic_generic_robot",
+            "hybrid_biomorphic_drone",
+            "biomorphic_rover",
+            "biomorphic_underwater_robot",
+            "hybrid_biomorphic_walker",
         ):
             build_biomorphic_robot(model_component)
         else:
