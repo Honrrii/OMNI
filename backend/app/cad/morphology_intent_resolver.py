@@ -55,10 +55,12 @@ PLATFORM_KEYWORDS = {
 
 def _term_matches(text: str, term: str) -> bool:
     """
-    Match platform terms without letting short acronyms leak into longer words.
+    Match platform terms without letting short acronyms leak into longer words,
+    and ignore explicitly negated platform terms.
 
     Example:
         "rov" should match "ROV" but not the "rov" inside "rover".
+        "not a drone" should not trigger aerial_drone.
     """
     term = str(term or "").lower().strip()
     if not term:
@@ -66,9 +68,18 @@ def _term_matches(text: str, term: str) -> bool:
 
     if term.replace("_", "").replace("-", "").isalnum() and " " not in term:
         pattern = r"(?<![a-z0-9])" + re.escape(term) + r"(?![a-z0-9])"
-        return re.search(pattern, text) is not None
+        for match in re.finditer(pattern, text):
+            if not _is_negated_match(text, match.start()):
+                return True
+        return False
 
-    return term in text
+    index = text.find(term)
+    while index != -1:
+        if not _is_negated_match(text, index):
+            return True
+        index = text.find(term, index + 1)
+
+    return False
 
 
 def _contains_any(text: str, terms: List[str]) -> bool:
@@ -116,6 +127,135 @@ def detect_platform_intent(prompt: str) -> Dict[str, Any]:
         "platform_priority": "explicit_user_request",
         "all_matches": matches,
     }
+
+
+
+# ─────────────────────────────────────────────────────────────
+# Negation guards
+# ─────────────────────────────────────────────────────────────
+
+_NEGATION_CUES = [
+    "not",
+    "not a",
+    "not an",
+    "not the",
+    "no",
+    "without",
+    "avoid",
+    "excluding",
+    "exclude",
+    "do not",
+    "don't",
+    "isn't",
+    "is not",
+    "must not",
+]
+
+
+def _is_negated_match(text: str, start_index: int) -> bool:
+    """
+    Return True if a platform/creature term is being explicitly rejected.
+
+    Examples:
+        "not a drone" should not trigger aerial_drone.
+        "not a bird-inspired robot" should not trigger bird traits.
+    """
+    left = text[max(0, start_index - 60):start_index].lower()
+    left = left.replace("-", " ").replace("_", " ")
+
+    # Direct negation cues close to the term.
+    for cue in _NEGATION_CUES:
+        if cue in left.split(",")[-1].strip():
+            return True
+
+    # Common phrase pattern: "not a flying UAV", where "not" is separated
+    # from the target by one adjective.
+    if "not a flying" in left or "not flying" in left:
+        return True
+
+    return False
+
+
+def _term_positive_matches(text: str, term: str) -> bool:
+    """
+    Return True if term appears at least once in a non-negated context.
+    Handles spaces / underscores / hyphens for creature names like manta_ray.
+    """
+    term = str(term or "").lower().strip()
+    if not term:
+        return False
+
+    variants = {
+        term,
+        term.replace("_", " "),
+        term.replace("_", "-"),
+        term.replace("-", " "),
+    }
+
+    for variant in variants:
+        variant = variant.strip()
+        if not variant:
+            continue
+
+        if variant.replace(" ", "").replace("_", "").replace("-", "").isalnum():
+            if " " in variant or "-" in variant or "_" in variant:
+                pattern = r"(?<![a-z0-9])" + re.escape(variant).replace(r"\ ", r"[\s_-]+").replace(r"\-", r"[\s_-]+").replace(r"_", r"[\s_-]+") + r"(?![a-z0-9])"
+            else:
+                pattern = r"(?<![a-z0-9])" + re.escape(variant) + r"(?![a-z0-9])"
+
+            for match in re.finditer(pattern, text):
+                if not _is_negated_match(text, match.start()):
+                    return True
+        else:
+            index = text.find(variant)
+            while index != -1:
+                if not _is_negated_match(text, index):
+                    return True
+                index = text.find(variant, index + 1)
+
+    return False
+
+
+def _creature_record_terms(record: Dict[str, Any]) -> List[str]:
+    terms: List[str] = []
+
+    for key in ("source_creature", "creature", "name", "id", "label"):
+        value = record.get(key)
+        if value:
+            terms.append(str(value))
+
+    for key in ("aliases", "keywords", "common_names", "search_terms"):
+        values = record.get(key)
+        if isinstance(values, list):
+            terms.extend([str(v) for v in values if v])
+
+    # Add human-readable variants.
+    expanded: List[str] = []
+    for term in terms:
+        expanded.append(term)
+        expanded.append(term.replace("_", " "))
+        expanded.append(term.replace("_", "-"))
+
+    return _unique(expanded)
+
+
+def _filter_negated_creature_records(text: str, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Keep creature records only when at least one of their names/aliases appears
+    in a non-negated context.
+    """
+    filtered: List[Dict[str, Any]] = []
+
+    for record in records:
+        terms = _creature_record_terms(record)
+        if not terms:
+            filtered.append(record)
+            continue
+
+        if any(_term_positive_matches(text, term) for term in terms):
+            filtered.append(record)
+
+    return filtered
 
 
 def _unique(items: List[Any]) -> List[Any]:
@@ -328,6 +468,7 @@ def resolve_morphology_intent(prompt: str) -> Dict[str, Any]:
 
     platform_intent = detect_platform_intent(text)
     creature_records = find_all_creature_records(text)
+    creature_records = _filter_negated_creature_records(text, creature_records)
 
     if not creature_records:
         return {
