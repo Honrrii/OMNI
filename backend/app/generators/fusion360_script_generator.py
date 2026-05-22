@@ -1410,6 +1410,269 @@ def build_enclosure(component):
     create_reference_note_label(component)
 
 
+
+def _bio_clean_name(value, fallback):
+    text = str(value or fallback).lower().strip()
+    text = text.replace(" ", "_").replace("-", "_").replace("/", "_")
+    safe = ""
+    for ch in text:
+        if ch.isalnum() or ch == "_":
+            safe += ch
+    if not safe:
+        safe = fallback
+    return safe
+
+
+def _bio_float(value, fallback):
+    try:
+        return float(value)
+    except Exception:
+        return float(fallback)
+
+
+def _bio_list(value):
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _get_morphology_spec():
+    spec = PARAMS.get("morphology_spec", dict())
+    if isinstance(spec, dict):
+        return spec
+    return dict()
+
+
+def _bio_segment_box(component, segment, index, x_offset):
+    name = _bio_clean_name(segment.get("name", "segment"), "segment_" + str(index + 1))
+    length = _bio_float(segment.get("length_mm", 70), 70)
+    width = _bio_float(segment.get("width_mm", 36), 36)
+    height = _bio_float(segment.get("height_mm", 18), 18)
+    z_base = _bio_float(segment.get("z_base_mm", 0), 0)
+
+    create_box(
+        component,
+        "bio_segment_" + name,
+        length,
+        width,
+        height,
+        x_offset,
+        0,
+        z_base,
+    )
+
+
+def _bio_draw_low_quadruped(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "creature"), "creature")
+
+    create_box(component, source + "_low_torso", 95, 45, 18, 0, 0, 14)
+    create_box(component, source + "_sensor_head", 35, 28, 18, 62, 0, 18)
+    create_box(component, source + "_tail_stabilizer", 70, 10, 8, -78, 0, 16)
+
+    leg_x = [-28, 28]
+    leg_y = [-32, 32]
+
+    index = 1
+    for x in leg_x:
+        for y in leg_y:
+            create_box(component, source + "_splayed_limb_" + str(index), 52, 8, 8, x, y, 8)
+            create_box(component, source + "_adhesive_foot_pad_" + str(index), 24, 18, 4, x, y + 16 if y > 0 else y - 16, 2)
+            index += 1
+
+    create_label(component, source + " wall-climbing morphology", -95, -60, 8)
+
+
+def _bio_draw_quadruped_runner(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "quadruped"), "quadruped")
+
+    create_box(component, source + "_raised_torso", 110, 38, 28, 0, 0, 52)
+    create_box(component, source + "_hip_body", 46, 36, 22, -58, 0, 48)
+    create_box(component, source + "_sensor_head", 38, 28, 22, 72, 0, 58)
+    create_box(component, source + "_tail_balance_beam", 70, 8, 8, -100, 0, 56)
+
+    positions = [(32, 24), (32, -24), (-38, 24), (-38, -24)]
+    for i, pos in enumerate(positions):
+        x = pos[0]
+        y = pos[1]
+        create_box(component, source + "_upper_leg_" + str(i + 1), 10, 8, 34, x, y, 31)
+        create_box(component, source + "_lower_leg_" + str(i + 1), 8, 7, 32, x + 8, y, 12)
+        create_box(component, source + "_foot_" + str(i + 1), 24, 10, 5, x + 16, y, 1)
+
+    create_label(component, source + " quadruped morphology", -95, -60, 12)
+
+
+def _bio_draw_serpentine(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "snake"), "snake")
+
+    module_count = 8
+    spacing = 34
+    start_x = -spacing * (module_count - 1) / 2
+
+    for i in range(module_count):
+        x = start_x + i * spacing
+        create_box(component, source + "_body_module_" + str(i + 1), 28, 24, 18, x, 0, 8)
+        if i < module_count - 1:
+            create_box(component, source + "_flex_joint_" + str(i + 1), 10, 14, 12, x + spacing / 2, 0, 8)
+
+    create_box(component, source + "_front_sensor_head", 34, 26, 22, start_x + module_count * spacing, 0, 10)
+    create_label(component, source + " serpentine modular chain", start_x, -45, 8)
+
+
+def _bio_draw_aquatic_glider(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "manta"), "manta")
+
+    create_box(component, source + "_central_hydrodynamic_body", 90, 45, 14, 0, 0, 8)
+    create_box(component, source + "_left_wide_fin", 80, 95, 4, 0, 72, 7)
+    create_box(component, source + "_right_wide_fin", 80, 95, 4, 0, -72, 7)
+    create_box(component, source + "_front_sensor_pod", 28, 24, 16, 58, 0, 10)
+    create_box(component, source + "_tail_stabilizer", 70, 8, 5, -78, 0, 8)
+
+    create_label(component, source + " aquatic glider morphology", -95, -95, 8)
+
+
+def _bio_draw_winged_uav(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "bird"), "bird")
+
+    create_box(component, source + "_lightweight_fuselage", 125, 28, 18, 0, 0, 14)
+    create_box(component, source + "_left_wing_surface", 85, 100, 4, 0, 72, 15)
+    create_box(component, source + "_right_wing_surface", 85, 100, 4, 0, -72, 15)
+    create_box(component, source + "_tail_plane", 38, 62, 4, -80, 0, 18)
+    create_box(component, source + "_nose_sensor", 24, 22, 16, 75, 0, 18)
+
+    if source in ("dragonfly", "damselfly"):
+        create_box(component, source + "_front_left_wing", 62, 72, 3, 26, 58, 18)
+        create_box(component, source + "_front_right_wing", 62, 72, 3, 26, -58, 18)
+        create_box(component, source + "_rear_left_wing", 58, 68, 3, -22, 52, 18)
+        create_box(component, source + "_rear_right_wing", 58, 68, 3, -22, -52, 18)
+        create_box(component, source + "_long_tail_boom", 95, 8, 8, -78, 0, 15)
+
+    create_label(component, source + " winged biomorphic morphology", -95, -95, 8)
+
+
+def _bio_draw_crustacean(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "crab"), "crab")
+
+    create_box(component, source + "_wide_armored_shell", 80, 105, 24, 0, 0, 16)
+    create_box(component, source + "_front_sensor_bar", 36, 42, 14, 52, 0, 22)
+
+    y_values = [62, 82, -62, -82]
+    x_values = [30, 5, -20, -45]
+    index = 1
+
+    for side in [1, -1]:
+        for x in x_values:
+            y = 62 * side
+            create_box(component, source + "_lateral_leg_" + str(index), 55, 8, 7, x, y, 8)
+            create_box(component, source + "_foot_pad_" + str(index), 16, 18, 4, x, y + 24 * side, 2)
+            index += 1
+
+    create_box(component, source + "_left_front_claw", 34, 18, 10, 70, 42, 14)
+    create_box(component, source + "_right_front_claw", 34, 18, 10, 70, -42, 14)
+
+    create_label(component, source + " crustacean lateral walker", -95, -95, 8)
+
+
+def _bio_draw_soft_radial(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "octopus"), "octopus")
+
+    create_cylinder(component, source + "_central_soft_body", 32, 28, 0, 0, 18)
+    create_box(component, source + "_sensor_head", 36, 24, 18, 0, 0, 42)
+
+    arm_count = 8
+    for i in range(arm_count):
+        angle = math.radians(i * 360.0 / arm_count)
+        x = math.cos(angle) * 45
+        y = math.sin(angle) * 45
+        create_box(component, source + "_soft_arm_" + str(i + 1), 52, 7, 7, x, y, 10)
+
+    create_label(component, source + " soft radial morphology", -95, -95, 8)
+
+
+def _bio_draw_from_spec_generic(component, spec):
+    segments = _bio_list(spec.get("primary_segments", []))
+    appendages = _bio_list(spec.get("appendages", []))
+
+    if not segments:
+        create_box(component, "biomorphic_generic_body", 100, 55, 24, 0, 0, 18)
+    else:
+        spacing = 55
+        start_x = -spacing * max(0, len(segments) - 1) / 2
+        for i, segment in enumerate(segments):
+            _bio_segment_box(component, segment, i, start_x + i * spacing)
+
+    for i, app in enumerate(appendages):
+        app_type = str(app.get("appendage_type", app.get("type", "appendage")) or "appendage")
+        attach = app.get("attach", [0, 0, 0])
+        if not isinstance(attach, list) or len(attach) != 3:
+            attach = [app.get("attach_x_mm", 0), app.get("attach_y_mm", 0), app.get("attach_z_mm", 0)]
+
+        x = _bio_float(attach[0], 0)
+        y = _bio_float(attach[1], 0)
+        z = _bio_float(attach[2], 8)
+
+        length = _bio_float(app.get("length_mm", 45), 45)
+        width = _bio_float(app.get("width_mm", 8), 8)
+        height = _bio_float(app.get("height_mm", 8), 8)
+
+        create_box(
+            component,
+            "bio_" + _bio_clean_name(app_type, "appendage") + "_" + str(i + 1),
+            max(12, length),
+            max(4, width),
+            max(3, height),
+            x,
+            y,
+            z,
+        )
+
+        if app.get("ground_contact", False):
+            create_box(
+                component,
+                "bio_foot_contact_" + str(i + 1),
+                18,
+                14,
+                4,
+                x,
+                y,
+                1,
+            )
+
+
+def build_biomorphic_robot(component):
+    spec = _get_morphology_spec()
+    family = str(spec.get("morphology_family", PROJECT_TYPE) or PROJECT_TYPE).lower()
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", family), family)
+
+    if family == "wall_climbing_robot":
+        _bio_draw_low_quadruped(component, spec)
+    elif family == "quadruped_robot":
+        _bio_draw_quadruped_runner(component, spec)
+    elif family == "serpentine_robot":
+        _bio_draw_serpentine(component, spec)
+    elif family == "aquatic_glider_robot":
+        _bio_draw_aquatic_glider(component, spec)
+    elif family == "winged_uav" or family == "biomorphic_micro_uav":
+        _bio_draw_winged_uav(component, spec)
+    elif family == "crustacean_walker":
+        _bio_draw_crustacean(component, spec)
+    elif family == "cephalopod_soft_robot":
+        _bio_draw_soft_radial(component, spec)
+    else:
+        _bio_draw_from_spec_generic(component, spec)
+
+    create_label(component, "Morphology: " + family, -130, 95, 8)
+    create_label(component, "Bio source: " + source, -130, 110, 8)
+    create_reference_note_label(component)
+
+
 def build_generic_robotics(component):
     create_box(
         component,
@@ -1456,6 +1719,19 @@ def run(context):
             build_robot_arm(model_component)
         elif PROJECT_TYPE == "enclosure":
             build_enclosure(model_component)
+        elif PROJECT_TYPE in (
+            "wall_climbing_robot",
+            "serpentine_robot",
+            "aquatic_glider_robot",
+            "winged_uav",
+            "crustacean_walker",
+            "cephalopod_soft_robot",
+            "armored_rover",
+            "jumping_robot",
+            "biomorphic_micro_uav",
+            "biomorphic_generic_robot",
+        ):
+            build_biomorphic_robot(model_component)
         else:
             build_generic_robotics(model_component)
 
@@ -1656,17 +1932,62 @@ def generate_fusion360_export(
     cad_context = build_cad_context(project_type, morphology_plan)
 
     if morphology_spec:
-        cad_context["morphology_spec"] = morphology_spec
-        cad_context.setdefault("reference_lessons", []).append(
-            "CAD Morphology Compiler context is active."
-        )
-        cad_context.setdefault("design_rules", []).extend(
-            [
-                "Use morphology_spec as the structured CAD morphology contract.",
-                "Respect morphology_spec body_posture, primary_segments, appendages, anchor_points, and vertical_structure.",
-                "Avoid all morphology_spec hard_negatives.",
-            ]
-        )
+        # For data-driven biomorphic projects, avoid leaking old rover/drone
+        # pattern-library guidance into the CAD reference brief.
+        biomorphic_families = {
+            "wall_climbing_robot",
+            "serpentine_robot",
+            "aquatic_glider_robot",
+            "winged_uav",
+            "crustacean_walker",
+            "cephalopod_soft_robot",
+            "armored_rover",
+            "jumping_robot",
+            "biomorphic_micro_uav",
+            "biomorphic_generic_robot",
+        }
+
+        morphology_family = str(
+            morphology_spec.get("morphology_family", "")
+        ).lower().strip()
+
+        if morphology_family in biomorphic_families:
+            bio = morphology_spec.get("bio_inspiration", {}) or {}
+
+            cad_context = {
+                "project_type": project_type,
+                "morphology_spec": morphology_spec,
+                "recommended_features": (
+                    list(morphology_spec.get("specialized_features", []) or [])
+                    + list(morphology_spec.get("cad_rules", []) or [])
+                ),
+                "design_rules": [
+                    "Use morphology_spec as the structured CAD morphology contract.",
+                    "Respect morphology_spec body_posture, primary_segments, appendages, anchor_points, and vertical_structure.",
+                    "Avoid all morphology_spec hard_negatives.",
+                    f"Use biomorphic source creature: {bio.get('source_creature', 'unknown')}.",
+                    f"Use morphology archetype: {morphology_spec.get('morphology_archetype', 'unknown')}.",
+                ],
+                "reference_lessons": [
+                    "CAD Morphology Compiler context is active.",
+                    "Biomorphic trait library context is active.",
+                    "Generate creature-inspired robotic geometry from structured traits, not generic rover/drone defaults.",
+                    "Creature-inspired features should remain mechanically interpretable, not purely decorative.",
+                ],
+                "default_dimensions_mm": {},
+            }
+        else:
+            cad_context["morphology_spec"] = morphology_spec
+            cad_context.setdefault("reference_lessons", []).append(
+                "CAD Morphology Compiler context is active."
+            )
+            cad_context.setdefault("design_rules", []).extend(
+                [
+                    "Use morphology_spec as the structured CAD morphology contract.",
+                    "Respect morphology_spec body_posture, primary_segments, appendages, anchor_points, and vertical_structure.",
+                    "Avoid all morphology_spec hard_negatives.",
+                ]
+            )
 
     if morphology_quality_gate:
         cad_context["morphology_quality_gate"] = morphology_quality_gate
