@@ -1,4 +1,5 @@
 import json
+import pprint
 import re
 from pathlib import Path
 from typing import Any, Dict, List
@@ -581,7 +582,7 @@ def generate_fusion360_script(
     cad_reference_brief: str = "",
     morphology_id: str = "",
 ) -> str:
-    params_json = json.dumps(parameters, indent=4)
+    params_json = pprint.pformat(parameters, indent=4, width=120, sort_dicts=False)
     cad_reference_json = json.dumps(cad_reference_brief, indent=4)
 
     return f'''"""
