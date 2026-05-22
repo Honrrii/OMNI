@@ -2235,6 +2235,176 @@ def should_generate_fusion360_script(mission_result: Dict[str, Any]) -> bool:
     return any(keyword in combined for keyword in keywords)
 
 
+
+def clean_cad_mission_prompt(value: Any) -> str:
+    """
+    Extract the user's actual CAD mission prompt from possibly polluted text.
+
+    Frontend mission artifacts can contain generated README text, research excerpts,
+    matched terms, citations, ROS package summaries, or agent commentary. CAD
+    morphology must not infer animal/platform traits from those sections.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    # If a README-style mission section is present, keep only that section.
+    lower = text.lower()
+    mission_markers = [
+        "## mission",
+        "# mission",
+        "mission:",
+        "user mission:",
+        "original mission:",
+        "prompt:",
+    ]
+
+    for marker_text in mission_markers:
+        idx = lower.find(marker_text)
+        if idx != -1:
+            section = text[idx + len(marker_text):].strip()
+
+            # Stop at the next obvious generated/documentation section.
+            stop_markers = [
+                "\n## ",
+                "\n# ",
+                "\nmatched terms:",
+                "\nexcerpt:",
+                "\nreference",
+                "\nresearch",
+                "\nros2",
+                "\npackage",
+                "\ncommands",
+                "\nusage",
+                "\nvalidation",
+            ]
+
+            section_lower = section.lower()
+            stop_positions = [
+                section_lower.find(stop)
+                for stop in stop_markers
+                if section_lower.find(stop) != -1
+            ]
+
+            if stop_positions:
+                section = section[:min(stop_positions)].strip()
+
+            if len(section) >= 20:
+                text = section
+                break
+
+    # Cut off known pollution even without a formal heading.
+    pollution_markers = [
+        "\nmatched terms:",
+        "\nexcerpt:",
+        "\nreference hits",
+        "\nresearch context",
+        "\nretrieved context",
+        "\nagent output",
+        "\n## research",
+        "\n## references",
+        "\n## ros",
+        "\n## generated",
+    ]
+
+    lower = text.lower()
+    cut_positions = [
+        lower.find(marker)
+        for marker in pollution_markers
+        if lower.find(marker) != -1
+    ]
+
+    if cut_positions:
+        text = text[:min(cut_positions)].strip()
+
+    # Keep CAD prompt reasonably bounded. Real prompts are usually far shorter
+    # than retrieved research dumps.
+    if len(text) > 2500:
+        text = text[:2500].strip()
+
+    return text
+
+
+def select_cad_raw_mission_prompt(mission_result: Dict[str, Any]) -> str:
+    """
+    Choose the best raw user mission candidate for CAD morphology planning.
+    Prefer explicit/raw prompt fields, but clean every candidate defensively.
+    """
+    mission_result = mission_result or {}
+
+    candidates = []
+
+    for key in (
+        "raw_user_prompt",
+        "user_prompt",
+        "original_user_prompt",
+        "original_prompt",
+        "prompt",
+        "mission",
+        "mission_text",
+    ):
+        value = mission_result.get(key)
+        if value:
+            candidates.append((key, clean_cad_mission_prompt(value)))
+
+    for container_key in ("request", "input", "payload", "metadata", "mission_request", "context"):
+        container = mission_result.get(container_key)
+        if isinstance(container, dict):
+            for key in (
+                "raw_user_prompt",
+                "user_prompt",
+                "original_user_prompt",
+                "original_prompt",
+                "prompt",
+                "mission",
+                "mission_text",
+            ):
+                value = container.get(key)
+                if value:
+                    candidates.append((container_key + "." + key, clean_cad_mission_prompt(value)))
+
+    # Score candidates. Penalize obvious generated/retrieved content.
+    best_text = ""
+    best_score = -10**9
+
+    for key, candidate in candidates:
+        if not candidate:
+            continue
+
+        lower = candidate.lower()
+        score = 0
+
+        # User mission language should score well.
+        for token in ("design", "robot", "underwater", "aquatic", "manta", "fusion", "cad"):
+            if token in lower:
+                score += 10
+
+        # Pollution should score badly.
+        for token in ("excerpt:", "matched terms:", "research", "package:", "colcon", "ros2 launch"):
+            if token in lower:
+                score -= 60
+
+        # Prefer concise raw prompts over long generated reports.
+        score -= max(0, len(candidate) - 1200) // 50
+
+        # Prefer explicitly raw/original fields.
+        if "raw" in key or "original" in key or "prompt" in key:
+            score += 10
+
+        if score > best_score:
+            best_score = score
+            best_text = candidate
+
+    if best_text:
+        return best_text
+
+    return clean_cad_mission_prompt(
+        mission_result.get("mission")
+        or mission_result.get("mission_text")
+        or mission_result.get("prompt")
+        or ""
+    )
+
 def generate_fusion360_export(
     mission_result: Dict[str, Any],
     output_root: Path,
@@ -2242,17 +2412,9 @@ def generate_fusion360_export(
     # CAD morphology and assembly planning must be grounded to the raw user prompt.
     # Do not let research excerpts, generated ROS README text, memory summaries,
     # or synthesized artifacts inject unrelated platform/creature traits.
-    raw_user_mission_text = str(
-        mission_result.get("mission")
-        or mission_result.get("mission_text")
-        or mission_result.get("prompt")
-        or mission_result.get("original_prompt")
-        or ""
-    )
+    raw_user_mission_text = select_cad_raw_mission_prompt(mission_result)
 
     # Sanitized mission payload for CAD morphology planning only.
-    # This prevents downstream research/generated artifacts from contaminating
-    # creature/platform detection.
     cad_safe_mission_result = dict(mission_result or {})
     cad_safe_mission_result["mission"] = raw_user_mission_text
     cad_safe_mission_result["mission_text"] = raw_user_mission_text
