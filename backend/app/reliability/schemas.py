@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 
 GateStatus = Literal["PASS", "WARN", "FAIL", "BLOCKED"]
 
+ProvenanceConfidence = Literal["low", "medium", "high"]
+
 EvidenceType = Literal[
     "user_provided",
     "llm_generated",
@@ -52,6 +54,17 @@ class EvidenceSummary(BaseModel):
     human_review_required: bool = False
 
 
+class ProvenanceRecord(BaseModel):
+    agent_id: str
+    agent_name: str
+    claim: str
+    evidence_type: EvidenceType
+    confidence: ProvenanceConfidence = "medium"
+    timestamp: Optional[str] = None
+    human_review_required: bool = True
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
 class ReliabilityReviewRequest(BaseModel):
     mission_text: str
     mission_result: Optional[Dict[str, Any]] = None
@@ -79,3 +92,6 @@ class ReliabilityReport(BaseModel):
     blockers: List[str] = Field(default_factory=list)
     required_next_tests: List[str] = Field(default_factory=list)
     recommendations: List[str] = Field(default_factory=list)
+
+    provenance: List[ProvenanceRecord] = Field(default_factory=list)
+    reflection_notes: List[str] = Field(default_factory=list)
