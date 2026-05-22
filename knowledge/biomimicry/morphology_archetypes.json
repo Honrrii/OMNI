@@ -1,0 +1,55 @@
+{
+  "version": "0.1",
+  "archetypes": {
+    "wall_climbing_quadruped": {
+      "description": "Four-limbed low-profile robot optimized for climbing or crawling on vertical/rough surfaces.",
+      "default_posture": "low_slung",
+      "default_robot_family": "wall_climbing_robot"
+    },
+    "serpentine_chain": {
+      "description": "Long modular robot with repeated body segments for pipe traversal and confined-space inspection.",
+      "default_posture": "segmented_chain",
+      "default_robot_family": "serpentine_robot"
+    },
+    "aquatic_glider": {
+      "description": "Flattened underwater robot with large fin surfaces and hydrodynamic body.",
+      "default_posture": "aquatic",
+      "default_robot_family": "aquatic_glider_robot"
+    },
+    "winged_avian": {
+      "description": "Aerial robot with central fuselage, bilateral wings, and tail stabilizer.",
+      "default_posture": "aerial",
+      "default_robot_family": "winged_uav"
+    },
+    "lateral_crustacean_walker": {
+      "description": "Low wide body with side-mounted legs for shoreline or rough lateral traversal.",
+      "default_posture": "low_slung",
+      "default_robot_family": "crustacean_walker"
+    },
+    "quadruped_runner": {
+      "description": "Four-legged raised-body robot inspired by mammalian walking/running.",
+      "default_posture": "standing",
+      "default_robot_family": "quadruped_robot"
+    },
+    "multi_arm_soft_robot": {
+      "description": "Central body with many flexible appendages for manipulation or underwater movement.",
+      "default_posture": "soft_radial",
+      "default_robot_family": "cephalopod_soft_robot"
+    },
+    "armored_low_rover": {
+      "description": "Protected low-profile robot with shell-like protective body.",
+      "default_posture": "low_slung",
+      "default_robot_family": "armored_rover"
+    },
+    "jumping_amphibian": {
+      "description": "Crouched robot with oversized rear limbs for jumping or burst locomotion.",
+      "default_posture": "crouched",
+      "default_robot_family": "jumping_robot"
+    },
+    "micro_aerial_insect": {
+      "description": "Lightweight aerial robot with insect-like sensor head, tail boom, and wing-like surfaces.",
+      "default_posture": "aerial",
+      "default_robot_family": "biomorphic_micro_uav"
+    }
+  }
+}

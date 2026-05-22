@@ -1,0 +1,340 @@
+{
+  "version": "0.1",
+  "description": "Structured biomorphic creature traits for OMNI CAD morphology planning.",
+  "creatures": {
+    "gecko": {
+      "aliases": ["lizard", "wall lizard", "climbing lizard"],
+      "creature_class": "reptile",
+      "morphology_archetype": "wall_climbing_quadruped",
+      "robot_family": "wall_climbing_robot",
+      "body_posture": "low_slung",
+      "symmetry": "bilateral",
+      "appendage_count": 4,
+      "body_segments": ["head", "torso", "tail"],
+      "locomotion": {
+        "primary": "climbing",
+        "secondary": ["crawling"],
+        "terrain": ["walls", "ceilings", "rough vertical surfaces"]
+      },
+      "specialized_features": [
+        "adhesive foot pads",
+        "splayed limbs",
+        "tail stabilization",
+        "low center of mass",
+        "wide stance"
+      ],
+      "cad_rules": [
+        "use four side-mounted limbs",
+        "make foot pads visibly larger than leg tips",
+        "keep torso low and elongated",
+        "add rear tail-like stabilizer",
+        "place sensor head near the front"
+      ],
+      "hard_negatives": [
+        "six-leg insect assumption",
+        "radial quadcopter layout",
+        "generic flat rover plate"
+      ]
+    },
+    "snake": {
+      "aliases": ["serpent", "python", "viper"],
+      "creature_class": "serpent",
+      "morphology_archetype": "serpentine_chain",
+      "robot_family": "serpentine_robot",
+      "body_posture": "segmented_chain",
+      "symmetry": "bilateral",
+      "appendage_count": 0,
+      "body_segments": ["sensor_head", "repeating_body_modules", "tail_module"],
+      "locomotion": {
+        "primary": "slithering",
+        "secondary": ["pipe traversal", "confined-space crawling"],
+        "terrain": ["pipes", "rubble", "narrow passages"]
+      },
+      "specialized_features": [
+        "modular body segments",
+        "flexible joints",
+        "front sensor head",
+        "narrow body diameter",
+        "distributed actuation"
+      ],
+      "cad_rules": [
+        "use repeated cylindrical or capsule-like modules",
+        "connect modules with visible flexible joints",
+        "keep body narrow and elongated",
+        "place sensor package at the front module"
+      ],
+      "hard_negatives": [
+        "legs",
+        "wheel chassis",
+        "quadcopter arms",
+        "single block body"
+      ]
+    },
+    "manta_ray": {
+      "aliases": ["manta", "ray", "stingray"],
+      "creature_class": "aquatic",
+      "morphology_archetype": "aquatic_glider",
+      "robot_family": "aquatic_glider_robot",
+      "body_posture": "aquatic",
+      "symmetry": "bilateral",
+      "appendage_count": 2,
+      "body_segments": ["central_body", "left_fin", "right_fin", "tail_stabilizer"],
+      "locomotion": {
+        "primary": "underwater gliding",
+        "secondary": ["fin propulsion"],
+        "terrain": ["underwater", "shallow water", "marine inspection"]
+      },
+      "specialized_features": [
+        "wide wing-like fins",
+        "smooth hydrodynamic body",
+        "central sensor pod",
+        "tail stabilizer",
+        "low drag silhouette"
+      ],
+      "cad_rules": [
+        "create a broad flattened body",
+        "add two large lateral fin surfaces",
+        "blend central body into fins conceptually",
+        "add rear tail-like stabilizer",
+        "avoid boxy ground robot shapes"
+      ],
+      "hard_negatives": [
+        "ground rover chassis",
+        "walking legs",
+        "radial drone layout",
+        "tall standing body"
+      ]
+    },
+    "bird": {
+      "aliases": ["eagle", "falcon", "owl", "hawk"],
+      "creature_class": "avian",
+      "morphology_archetype": "winged_avian",
+      "robot_family": "winged_uav",
+      "body_posture": "aerial",
+      "symmetry": "bilateral",
+      "appendage_count": 2,
+      "body_segments": ["fuselage", "left_wing", "right_wing", "tail"],
+      "locomotion": {
+        "primary": "flight",
+        "secondary": ["gliding", "perching"],
+        "terrain": ["air", "open environments"]
+      },
+      "specialized_features": [
+        "wing-like stabilizers",
+        "lightweight fuselage",
+        "tail control surface",
+        "front sensor head",
+        "perching/gripping option"
+      ],
+      "cad_rules": [
+        "use a narrow central fuselage",
+        "add large bilateral wing surfaces",
+        "add rear tail plane",
+        "place sensor/camera at nose"
+      ],
+      "hard_negatives": [
+        "six-leg insect body",
+        "tank tracks",
+        "flat rover chassis"
+      ]
+    },
+    "crab": {
+      "aliases": ["shore crab", "crustacean"],
+      "creature_class": "crustacean",
+      "morphology_archetype": "lateral_crustacean_walker",
+      "robot_family": "crustacean_walker",
+      "body_posture": "low_slung",
+      "symmetry": "bilateral",
+      "appendage_count": 8,
+      "body_segments": ["wide_shell_body", "left_leg_bank", "right_leg_bank", "front_claws"],
+      "locomotion": {
+        "primary": "lateral walking",
+        "secondary": ["shoreline traversal", "low-profile crawling"],
+        "terrain": ["sand", "shoreline", "rocks", "wet surfaces"]
+      },
+      "specialized_features": [
+        "wide armored shell",
+        "side-mounted legs",
+        "lateral stance",
+        "front manipulator claws",
+        "low center of gravity"
+      ],
+      "cad_rules": [
+        "use wide low shell body",
+        "place legs mostly along left and right sides",
+        "make stance wider than body",
+        "add optional front claw-like manipulators"
+      ],
+      "hard_negatives": [
+        "tall standing insect thorax",
+        "radial quadcopter arms",
+        "two-wheel rover layout"
+      ]
+    },
+    "wolf": {
+      "aliases": ["dog", "canine", "coyote"],
+      "creature_class": "mammal",
+      "morphology_archetype": "quadruped_runner",
+      "robot_family": "quadruped_robot",
+      "body_posture": "standing",
+      "symmetry": "bilateral",
+      "appendage_count": 4,
+      "body_segments": ["head", "torso", "hip_body", "tail_stabilizer"],
+      "locomotion": {
+        "primary": "running",
+        "secondary": ["walking", "scouting"],
+        "terrain": ["rough ground", "outdoor terrain", "inspection routes"]
+      },
+      "specialized_features": [
+        "four articulated legs",
+        "forward sensor head",
+        "tail stabilizer",
+        "raised torso",
+        "dynamic gait posture"
+      ],
+      "cad_rules": [
+        "use four articulated legs",
+        "raise torso above ground",
+        "place sensor head at front",
+        "add rear tail-like balance stabilizer"
+      ],
+      "hard_negatives": [
+        "six-leg insect assumption",
+        "flat rover plate",
+        "propeller drone layout"
+      ]
+    },
+    "octopus": {
+      "aliases": ["cephalopod", "squid", "cuttlefish"],
+      "creature_class": "cephalopod",
+      "morphology_archetype": "multi_arm_soft_robot",
+      "robot_family": "cephalopod_soft_robot",
+      "body_posture": "soft_radial",
+      "symmetry": "radial_n",
+      "appendage_count": 8,
+      "body_segments": ["central_body", "sensor_head", "radial_arms"],
+      "locomotion": {
+        "primary": "manipulation",
+        "secondary": ["crawling", "underwater maneuvering"],
+        "terrain": ["underwater", "cluttered environments", "object manipulation"]
+      },
+      "specialized_features": [
+        "multiple flexible arms",
+        "central soft body",
+        "distributed grasping",
+        "high dexterity",
+        "soft contact surfaces"
+      ],
+      "cad_rules": [
+        "use central rounded body",
+        "arrange multiple arms around body",
+        "make arms slender and flexible-looking",
+        "add sensor module above or front of body"
+      ],
+      "hard_negatives": [
+        "rigid four-wheel rover",
+        "two-wing aircraft layout",
+        "single block body"
+      ]
+    },
+    "turtle": {
+      "aliases": ["tortoise"],
+      "creature_class": "reptile",
+      "morphology_archetype": "armored_low_rover",
+      "robot_family": "armored_rover",
+      "body_posture": "low_slung",
+      "symmetry": "bilateral",
+      "appendage_count": 4,
+      "body_segments": ["protective_shell", "front_sensor_head", "low_chassis"],
+      "locomotion": {
+        "primary": "slow crawling",
+        "secondary": ["protected inspection"],
+        "terrain": ["rough floor", "debris", "inspection sites"]
+      },
+      "specialized_features": [
+        "protective shell",
+        "low body",
+        "front sensor head",
+        "protected electronics bay",
+        "stable stance"
+      ],
+      "cad_rules": [
+        "use domed or armored top shell",
+        "keep body low",
+        "place sensors at front",
+        "protect central electronics under shell"
+      ],
+      "hard_negatives": [
+        "fragile exposed frame",
+        "radial drone arms",
+        "tall biped stance"
+      ]
+    },
+    "frog": {
+      "aliases": ["toad"],
+      "creature_class": "amphibian",
+      "morphology_archetype": "jumping_amphibian",
+      "robot_family": "jumping_robot",
+      "body_posture": "crouched",
+      "symmetry": "bilateral",
+      "appendage_count": 4,
+      "body_segments": ["head_body", "rear_power_legs", "front_support_limbs"],
+      "locomotion": {
+        "primary": "jumping",
+        "secondary": ["crawling", "amphibious movement"],
+        "terrain": ["wet surfaces", "short obstacle fields"]
+      },
+      "specialized_features": [
+        "large rear legs",
+        "crouched posture",
+        "front stabilizer limbs",
+        "spring-like motion concept",
+        "wide landing feet"
+      ],
+      "cad_rules": [
+        "make rear legs larger than front limbs",
+        "use crouched low body posture",
+        "add large rear foot pads",
+        "place sensor head forward"
+      ],
+      "hard_negatives": [
+        "six equal insect legs",
+        "quadcopter radial arms",
+        "long snake body"
+      ]
+    },
+    "dragonfly": {
+      "aliases": ["damselfly"],
+      "creature_class": "insect",
+      "morphology_archetype": "micro_aerial_insect",
+      "robot_family": "biomorphic_micro_uav",
+      "body_posture": "aerial",
+      "symmetry": "bilateral",
+      "appendage_count": 4,
+      "body_segments": ["sensor_head", "thorax_body", "tail_boom", "four_wings"],
+      "locomotion": {
+        "primary": "flight",
+        "secondary": ["hovering", "rapid maneuvering"],
+        "terrain": ["air", "indoor exploration", "tight spaces"]
+      },
+      "specialized_features": [
+        "four wing-like surfaces",
+        "long tail boom",
+        "large sensor head",
+        "lightweight thorax",
+        "high maneuverability"
+      ],
+      "cad_rules": [
+        "use long narrow body",
+        "add four thin wing-like surfaces",
+        "place sensor head at front",
+        "avoid generic quadcopter cross unless explicitly requested"
+      ],
+      "hard_negatives": [
+        "standard quadcopter X frame",
+        "ground rover chassis",
+        "heavy armored body"
+      ]
+    }
+  }
+}
