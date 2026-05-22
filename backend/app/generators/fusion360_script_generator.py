@@ -32,6 +32,18 @@ except Exception:
 
 
 # ---------------------------------------------------------
+# CAD Morphology Compiler
+# ---------------------------------------------------------
+try:
+    from backend.app.cad.morphology_artifact_writer import build_morphology_artifacts
+except Exception:
+    try:
+        from cad.morphology_artifact_writer import build_morphology_artifacts
+    except Exception:
+        build_morphology_artifacts = None
+
+
+# ---------------------------------------------------------
 # Naming Helpers
 # ---------------------------------------------------------
 def safe_name(value: Any, fallback: str = "omni_cad_model") -> str:
@@ -1534,6 +1546,28 @@ def generate_fusion360_export(
 
     morphology_plan = extract_morphology_plan(mission_result)
 
+    morphology_compiler_artifacts: Dict[str, Any] = {}
+    morphology_compiler_error = ""
+
+    if build_morphology_artifacts is not None:
+        try:
+            morphology_compiler_artifacts = build_morphology_artifacts(
+                mission_text(mission_result)
+            )
+        except Exception as exc:
+            morphology_compiler_error = str(exc)
+
+    morphology_spec = (
+        morphology_compiler_artifacts.get("morphology_spec", {})
+        if isinstance(morphology_compiler_artifacts, dict)
+        else {}
+    )
+    morphology_quality_gate = (
+        morphology_compiler_artifacts.get("morphology_quality_gate", {})
+        if isinstance(morphology_compiler_artifacts, dict)
+        else {}
+    )
+
     project_type = fusion_project_type_from_morphology(
         fallback_project_type=project_type,
         morphology_plan=morphology_plan,
@@ -1545,6 +1579,26 @@ def generate_fusion360_export(
     )
 
     cad_context = build_cad_context(project_type, morphology_plan)
+
+    if morphology_spec:
+        cad_context["morphology_spec"] = morphology_spec
+        cad_context.setdefault("reference_lessons", []).append(
+            "CAD Morphology Compiler context is active."
+        )
+        cad_context.setdefault("design_rules", []).extend(
+            [
+                "Use morphology_spec as the structured CAD morphology contract.",
+                "Respect morphology_spec body_posture, primary_segments, appendages, anchor_points, and vertical_structure.",
+                "Avoid all morphology_spec hard_negatives.",
+            ]
+        )
+
+    if morphology_quality_gate:
+        cad_context["morphology_quality_gate"] = morphology_quality_gate
+        cad_context.setdefault("design_rules", []).append(
+            f"CAD morphology gate verdict: {morphology_quality_gate.get('verdict', 'UNKNOWN')}"
+        )
+
     cad_reference_brief = cad_context_to_brief(cad_context)
 
     cad_artifact = extract_cad_artifact(mission_result)
@@ -1557,19 +1611,30 @@ def generate_fusion360_export(
     if project_type == "drone":
         parameters["rotor_count"] = infer_rotor_count(mission_result)
 
+    if morphology_spec:
+        parameters["morphology_spec"] = morphology_spec
+
+    if morphology_quality_gate:
+        parameters["morphology_quality_gate"] = morphology_quality_gate
+
     fusion_dir = output_root / "generated_fusion360"
     fusion_dir.mkdir(parents=True, exist_ok=True)
 
     script_path = fusion_dir / "fusion360_model_generator.py"
     params_path = fusion_dir / "fusion360_parameters.json"
     readme_path = fusion_dir / "CAD_README.md"
+    morphology_spec_path = fusion_dir / "morphology_spec.json"
+    morphology_gate_path = fusion_dir / "morphology_quality_gate.json"
 
     script_content = generate_fusion360_script(
         model_name=model_name,
         project_type=project_type,
         parameters=parameters,
         cad_reference_brief=cad_reference_brief,
-        morphology_id=morphology_plan.get("morphology_id", ""),
+        morphology_id=(
+            morphology_plan.get("morphology_id", "")
+            or morphology_spec.get("morphology_family", "")
+        ),
     )
 
     params_content = generate_parameters_json(
@@ -1591,11 +1656,29 @@ def generate_fusion360_export(
     params_path.write_text(json.dumps(params_content, indent=2), encoding="utf-8")
     readme_path.write_text(readme_content, encoding="utf-8")
 
+    if morphology_spec:
+        morphology_spec_path.write_text(
+            json.dumps(morphology_spec, indent=2),
+            encoding="utf-8",
+        )
+
+    if morphology_quality_gate:
+        morphology_gate_path.write_text(
+            json.dumps(morphology_quality_gate, indent=2),
+            encoding="utf-8",
+        )
+
     files = [
         str(script_path.relative_to(output_root)),
         str(params_path.relative_to(output_root)),
         str(readme_path.relative_to(output_root)),
     ]
+
+    if morphology_spec:
+        files.append(str(morphology_spec_path.relative_to(output_root)))
+
+    if morphology_quality_gate:
+        files.append(str(morphology_gate_path.relative_to(output_root)))
 
     return {
         "status": "generated",
@@ -1605,5 +1688,17 @@ def generate_fusion360_export(
         "files": files,
         "file_count": len(files),
         "cad_reference_context_available": bool(cad_reference_brief),
+        "morphology_compiler_available": bool(morphology_spec),
+        "morphology_gate_verdict": (
+            morphology_quality_gate.get("verdict")
+            if isinstance(morphology_quality_gate, dict)
+            else None
+        ),
+        "morphology_gate_score": (
+            morphology_quality_gate.get("overall_score")
+            if isinstance(morphology_quality_gate, dict)
+            else None
+        ),
+        "morphology_compiler_error": morphology_compiler_error or None,
         "rotor_count": parameters.get("rotor_count") if project_type == "drone" else None,
     }
