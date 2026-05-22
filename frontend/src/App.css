@@ -2790,3 +2790,32 @@ input::placeholder,
     grid-template-columns: 1fr;
   }
 }
+
+.latest-mission-card {
+  border: 1px solid rgba(130, 180, 255, 0.18);
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: 18px;
+  padding: 16px;
+  margin: 18px 0;
+}
+
+.latest-mission-card h3 {
+  margin: 0 0 8px;
+}
+
+.reliability-label {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  font-weight: 800;
+}
+
+.reliability-label span {
+  font-weight: 400;
+  opacity: 0.72;
+  line-height: 1.45;
+}
+
+.reliability-context-input {
+  min-height: 180px;
+}

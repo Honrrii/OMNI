@@ -1486,7 +1486,7 @@ function MemoryPage({ missionResult }) {
   );
 }
 
-function ReliabilityPage() {
+function ReliabilityPage({ missionResult, exportResult }) {
   return (
     <section className="page reliability-page-v2">
       <div className="page-header">
@@ -1505,7 +1505,10 @@ function ReliabilityPage() {
         </div>
       </div>
 
-      <OmniReliabilityPanel />
+      <OmniReliabilityPanel
+        missionResult={missionResult}
+        exportResult={exportResult}
+      />
     </section>
   );
 }
@@ -1856,7 +1859,12 @@ function App() {
 
           {activePage === "validation" && <ValidationPage missionResult={missionResult} />}
 
-          {activePage === "reliability" && <ReliabilityPage />}
+          {activePage === "reliability" && (
+            <ReliabilityPage
+              missionResult={missionResult}
+              exportResult={exportResult}
+            />
+          )}
 
           {activePage === "knowledge" && (
             <KnowledgeContextPage missionResult={missionResult} />
