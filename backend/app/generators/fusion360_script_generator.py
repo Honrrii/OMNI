@@ -390,6 +390,71 @@ def model_name_from_morphology(
     return fallback_model_name
 
 
+def fusion_project_type_from_morphology_spec(
+    fallback_project_type: str,
+    morphology_spec: Dict[str, Any],
+) -> str:
+    """
+    Use the new MorphologySpec family as Fusion export identity.
+
+    Existing builder-compatible families map to old project types.
+    New biomorphic families keep their own family name so generated artifacts
+    stop appearing as generic_robotics.
+    """
+    if not isinstance(morphology_spec, dict):
+        return fallback_project_type or "concept"
+
+    family = str(morphology_spec.get("morphology_family", "") or "").lower().strip()
+
+    if not family:
+        return fallback_project_type or "concept"
+
+    builder_compatible = {
+        "aerial_drone": "drone",
+        "wheeled_rover": "rover",
+        "tracked_rover": "rover",
+        "armored_rover": "rover",
+        "manipulator_arm": "robot_arm",
+        "sensor_pod": "enclosure",
+        "insectoid_legged_robot": "insect_robot",
+        "hexapod_robot": "insect_robot",
+    }
+
+    if family in builder_compatible:
+        return builder_compatible[family]
+
+    # New biomorphic families are allowed to pass through as their own
+    # project_type. The generated Fusion script will safely fall back to the
+    # generic builder until specialized visual builders are added.
+    return family
+
+
+def model_name_from_morphology_spec(
+    fallback_model_name: str,
+    morphology_spec: Dict[str, Any],
+) -> str:
+    """
+    Create a more descriptive model name from MorphologySpec.
+
+    Example:
+        gecko + wall_climbing_robot
+        -> omni_gecko_wall_climbing_robot_fusion_concept
+    """
+    if not isinstance(morphology_spec, dict):
+        return fallback_model_name
+
+    family = str(morphology_spec.get("morphology_family", "") or "").strip()
+    bio = morphology_spec.get("bio_inspiration", {}) or {}
+    source_creature = str(bio.get("source_creature", "") or "").strip()
+
+    parts = [p for p in [source_creature, family] if p]
+
+    if not parts:
+        return fallback_model_name
+
+    return f"omni_{safe_name('_'.join(parts))}_fusion_concept"
+
+
 def build_cad_context(
     project_type: str,
     morphology_plan: Dict[str, Any] | None = None,
@@ -1578,6 +1643,16 @@ def generate_fusion360_export(
         morphology_plan=morphology_plan,
     )
 
+    if morphology_spec:
+        project_type = fusion_project_type_from_morphology_spec(
+            fallback_project_type=project_type,
+            morphology_spec=morphology_spec,
+        )
+        model_name = model_name_from_morphology_spec(
+            fallback_model_name=model_name,
+            morphology_spec=morphology_spec,
+        )
+
     cad_context = build_cad_context(project_type, morphology_plan)
 
     if morphology_spec:
@@ -1700,5 +1775,21 @@ def generate_fusion360_export(
             else None
         ),
         "morphology_compiler_error": morphology_compiler_error or None,
+        "morphology_family": (
+            morphology_spec.get("morphology_family")
+            if isinstance(morphology_spec, dict)
+            else None
+        ),
+        "morphology_archetype": (
+            morphology_spec.get("morphology_archetype")
+            if isinstance(morphology_spec, dict)
+            else None
+        ),
+        "bio_inspiration": (
+            morphology_spec.get("bio_inspiration")
+            if isinstance(morphology_spec, dict)
+            else None
+        ),
         "rotor_count": parameters.get("rotor_count") if project_type == "drone" else None,
     }
+
