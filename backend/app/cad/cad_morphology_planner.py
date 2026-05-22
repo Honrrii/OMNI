@@ -47,6 +47,15 @@ except ImportError:
         infer_biomorphic_hints = None
 
 
+try:
+    from .morphology_intent_resolver import resolve_morphology_intent
+except ImportError:
+    try:
+        from morphology_intent_resolver import resolve_morphology_intent
+    except ImportError:
+        resolve_morphology_intent = None
+
+
 def _contains(text: str, keywords: List[str]) -> bool:
     t = text.lower()
     return any(kw in t for kw in keywords)
@@ -931,6 +940,10 @@ def _build_biomorphic_from_hints(text: str, hints: Dict[str, Any]) -> Morphology
             "creature_class": hints.get("creature_class", ""),
             "inspiration_mode": "functional_biomimicry",
             "borrowed_traits": specialized_features,
+            "platform_intent": hints.get("platform_intent", {}),
+            "trait_sources": hints.get("trait_sources", []),
+            "hybridization_strategy": hints.get("hybridization_strategy", {}),
+            "intent_mode": hints.get("intent_mode", "creature_primary"),
         },
         locomotion_strategy={
             "primary_mode": hints.get("locomotion_primary", ""),
@@ -951,6 +964,19 @@ def _build_biomorphic_from_hints(text: str, hints: Dict[str, Any]) -> Morphology
 def infer_morphology_spec(mission_text: str) -> MorphologySpec:
     """Main entry point. Takes a mission string and returns a MorphologySpec."""
     text = str(mission_text or "").lower().strip()
+
+    # Hybrid Morphology Intent Resolver:
+    # platform intent + creature traits should be resolved before direct
+    # creature-family fallback. This allows "manta-ray drone" to remain a
+    # drone while borrowing manta traits.
+    if resolve_morphology_intent is not None:
+        intent_result = resolve_morphology_intent(text)
+        if intent_result.get("matched"):
+            return _build_biomorphic_from_hints(
+                text,
+                intent_result.get("morphology_hints", {}),
+            )
+
 
     # First: use the data-driven biomorphic trait library when a known
     # creature is mentioned. This prevents all animal-inspired robots from collapsing

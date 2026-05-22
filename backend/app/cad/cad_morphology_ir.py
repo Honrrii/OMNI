@@ -36,6 +36,13 @@ MORPHOLOGY_FAMILIES = [
     "biomorphic_micro_uav",
     "hybrid_creature_robot",
     "biomorphic_generic_robot",
+    "hybrid_biomorphic_platform",
+    "biomorphic_surface_vessel",
+    "biomorphic_manipulator",
+    "hybrid_biomorphic_walker",
+    "biomorphic_underwater_robot",
+    "biomorphic_rover",
+    "hybrid_biomorphic_drone",
     "generic_robotic_platform",
 ]
 
