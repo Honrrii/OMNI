@@ -2471,6 +2471,44 @@ def generate_fusion360_export(
         morphology_plan=morphology_plan,
     )
 
+    # Hard guardrail: Fusion CAD morphology must be inferred from the cleaned
+    # CAD prompt, not from research excerpts, README text, generated ROS docs,
+    # or any synthesized artifact context.
+    if raw_user_mission_text:
+        try:
+            try:
+                from backend.app.cad.cad_morphology_planner import infer_morphology_spec as _clean_infer_morphology_spec
+                from backend.app.cad.morphology_quality_gate import validate_morphology_spec as _clean_validate_morphology_spec
+            except Exception:
+                from cad.cad_morphology_planner import infer_morphology_spec as _clean_infer_morphology_spec
+                from cad.morphology_quality_gate import validate_morphology_spec as _clean_validate_morphology_spec
+
+            clean_spec_obj = _clean_infer_morphology_spec(raw_user_mission_text)
+
+            if hasattr(clean_spec_obj, "to_dict"):
+                clean_spec_dict = clean_spec_obj.to_dict()
+            elif isinstance(clean_spec_obj, dict):
+                clean_spec_dict = clean_spec_obj
+            else:
+                clean_spec_dict = {}
+
+            if isinstance(clean_spec_dict, dict) and clean_spec_dict:
+                morphology_spec = clean_spec_dict
+
+                try:
+                    clean_gate_obj = _clean_validate_morphology_spec(clean_spec_obj, raw_user_mission_text)
+                    if hasattr(clean_gate_obj, "to_dict"):
+                        morphology_quality_gate = clean_gate_obj.to_dict()
+                    elif isinstance(clean_gate_obj, dict):
+                        morphology_quality_gate = clean_gate_obj
+                except Exception:
+                    pass
+
+        except Exception as exc:
+            morphology_compiler_error = (
+                (morphology_compiler_error + " | ") if morphology_compiler_error else ""
+            ) + "clean_prompt_morphology_override_failed: " + str(exc)
+
     if morphology_spec:
         project_type = fusion_project_type_from_morphology_spec(
             fallback_project_type=project_type,
