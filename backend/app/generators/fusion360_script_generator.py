@@ -2239,6 +2239,30 @@ def generate_fusion360_export(
     mission_result: Dict[str, Any],
     output_root: Path,
 ) -> Dict[str, Any]:
+    # CAD morphology and assembly planning must be grounded to the raw user prompt.
+    # Do not let research excerpts, generated ROS README text, memory summaries,
+    # or synthesized artifacts inject unrelated platform/creature traits.
+    raw_user_mission_text = str(
+        mission_result.get("mission")
+        or mission_result.get("mission_text")
+        or mission_result.get("prompt")
+        or mission_result.get("original_prompt")
+        or ""
+    )
+
+    # Sanitized mission payload for CAD morphology planning only.
+    # This prevents downstream research/generated artifacts from contaminating
+    # creature/platform detection.
+    cad_safe_mission_result = dict(mission_result or {})
+    cad_safe_mission_result["mission"] = raw_user_mission_text
+    cad_safe_mission_result["mission_text"] = raw_user_mission_text
+    cad_safe_mission_result["prompt"] = raw_user_mission_text
+    cad_safe_mission_result["original_prompt"] = raw_user_mission_text
+    cad_safe_mission_result["artifacts"] = {}
+    cad_safe_mission_result["research_context"] = ""
+    cad_safe_mission_result["agent_outputs"] = {}
+    cad_safe_mission_result["memory_context"] = ""
+
     if not isinstance(mission_result, dict):
         raise ValueError("mission_result must be a dictionary.")
 
@@ -2385,7 +2409,7 @@ def generate_fusion360_export(
             )
 
             assembly_spec = plan_cad_detail_passes(
-                mission_text=detail_mission_text,
+                mission_text=raw_user_mission_text,
                 morphology_spec=morphology_spec,
                 project_type=project_type,
             )
@@ -2434,7 +2458,7 @@ def generate_fusion360_export(
         model_name=model_name,
         project_type=project_type,
         parameters=parameters,
-        mission_result=mission_result,
+        mission_result=cad_safe_mission_result,
         cad_context=cad_context,
         cad_reference_brief=cad_reference_brief,
     )
