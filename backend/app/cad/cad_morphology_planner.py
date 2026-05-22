@@ -34,6 +34,19 @@ except ImportError:  # Allows direct script execution from this folder.
     )
 
 
+
+# ─────────────────────────────────────────────────────────────
+# Biomorphic trait library
+# ─────────────────────────────────────────────────────────────
+try:
+    from .biomorphic_trait_library import infer_biomorphic_hints
+except ImportError:
+    try:
+        from biomorphic_trait_library import infer_biomorphic_hints
+    except ImportError:
+        infer_biomorphic_hints = None
+
+
 def _contains(text: str, keywords: List[str]) -> bool:
     t = text.lower()
     return any(kw in t for kw in keywords)
@@ -663,9 +676,293 @@ def _build_generic(text: str) -> MorphologySpec:
     )
 
 
+
+# ─────────────────────────────────────────────────────────────
+# Biomorphic / creature-inspired builder
+# ─────────────────────────────────────────────────────────────
+
+def _segment_dimensions_for_biomorph(name: str, posture: str, index: int) -> tuple[float, float, float, float]:
+    n = str(name or "").lower()
+
+    if posture == "standing":
+        base_z = 45.0 + index * 4.0
+    elif posture in ("low_slung", "crouched"):
+        base_z = 12.0 + index * 2.0
+    elif posture == "segmented_chain":
+        base_z = 8.0
+    elif posture in ("aquatic", "aerial"):
+        base_z = 0.0
+    elif posture == "soft_radial":
+        base_z = 12.0
+    else:
+        base_z = 10.0 + index * 2.0
+
+    if "head" in n or "sensor" in n:
+        return 35.0, 32.0, 20.0, base_z + 6.0
+    if "tail" in n:
+        return 65.0, 14.0, 12.0, base_z
+    if "torso" in n or "body" in n or "chassis" in n or "shell" in n or "fuselage" in n:
+        return 90.0, 48.0, 24.0, base_z
+    if "hip" in n or "pelvis" in n:
+        return 55.0, 42.0, 18.0, base_z - 2.0
+    if "wing" in n or "fin" in n:
+        return 85.0, 16.0, 4.0, base_z
+    if "module" in n:
+        return 42.0, 26.0, 22.0, base_z
+    if "leg" in n or "limb" in n:
+        return 55.0, 10.0, 8.0, base_z
+
+    return 70.0, 36.0, 18.0, base_z
+
+
+def _build_biomorphic_appendages(
+    hints: Dict[str, Any],
+    body_width_mm: float,
+    body_length_mm: float,
+    base_z_mm: float,
+) -> tuple[List[Appendage], List[AnchorPoint]]:
+    robot_family = str(hints.get("robot_family", "") or "").lower()
+    posture = str(hints.get("body_posture", "") or "").lower()
+    appendage_count = int(hints.get("appendage_count", 0) or 0)
+
+    appendages: List[Appendage] = []
+    anchors: List[AnchorPoint] = []
+
+    if appendage_count <= 0:
+        return appendages, anchors
+
+    if robot_family in ("aquatic_glider_robot", "winged_uav", "biomorphic_micro_uav"):
+        kind = "fin" if robot_family == "aquatic_glider_robot" else "wing"
+
+        if robot_family == "biomorphic_micro_uav":
+            y_positions = [body_length_mm * 0.18, -body_length_mm * 0.18]
+            for i, y in enumerate(y_positions):
+                for side, x_sign in [("L", 1), ("R", -1)]:
+                    name = f"{kind}_{side}{i+1}"
+                    appendages.append(Appendage(
+                        name=name,
+                        appendage_type=kind,
+                        attach_x_mm=x_sign * body_width_mm / 2,
+                        attach_y_mm=y,
+                        attach_z_mm=base_z_mm + 12,
+                        angle_deg=90.0 if x_sign > 0 else 270.0,
+                        tilt_deg=0.0,
+                        length_mm=70.0,
+                        width_mm=8.0,
+                        height_mm=3.0,
+                        ground_contact=False,
+                        notes=f"Biomorphic {kind} inspired by {hints.get('source_creature', 'creature')}.",
+                    ))
+                    anchors.append(AnchorPoint(
+                        name=f"{name}_anchor",
+                        x_mm=x_sign * body_width_mm / 2,
+                        y_mm=y,
+                        z_mm=base_z_mm + 12,
+                        purpose=f"{kind} mount",
+                    ))
+            return appendages, anchors
+
+        for side, x_sign in [("L", 1), ("R", -1)]:
+            name = f"{kind}_{side}"
+            appendages.append(Appendage(
+                name=name,
+                appendage_type=kind,
+                attach_x_mm=x_sign * body_width_mm / 2,
+                attach_y_mm=0.0,
+                attach_z_mm=base_z_mm + 8,
+                angle_deg=90.0 if x_sign > 0 else 270.0,
+                tilt_deg=0.0,
+                length_mm=90.0,
+                width_mm=14.0,
+                height_mm=4.0,
+                ground_contact=False,
+                notes=f"Large lateral {kind} surface inspired by {hints.get('source_creature', 'creature')}.",
+            ))
+            anchors.append(AnchorPoint(
+                name=f"{name}_anchor",
+                x_mm=x_sign * body_width_mm / 2,
+                y_mm=0.0,
+                z_mm=base_z_mm + 8,
+                purpose=f"{kind} mount",
+            ))
+
+        return appendages, anchors
+
+    if robot_family == "cephalopod_soft_robot" or posture == "soft_radial":
+        for i in range(appendage_count):
+            angle = i * (360.0 / appendage_count)
+            appendages.append(Appendage(
+                name=f"soft_arm_{i+1}",
+                appendage_type="arm",
+                attach_x_mm=0.0,
+                attach_y_mm=0.0,
+                attach_z_mm=base_z_mm + 8,
+                angle_deg=angle,
+                tilt_deg=10.0,
+                length_mm=65.0,
+                width_mm=7.0,
+                height_mm=7.0,
+                ground_contact=False,
+                notes="Flexible radial arm / manipulator.",
+            ))
+        return appendages, anchors
+
+    legs_per_side = max(1, appendage_count // 2)
+    if legs_per_side == 1:
+        y_positions = [0.0]
+    else:
+        y_positions = [
+            body_length_mm * (0.35 - i * (0.7 / max(legs_per_side - 1, 1)))
+            for i in range(legs_per_side)
+        ]
+
+    ground_contact = posture not in ("aerial", "aquatic", "soft_radial")
+    attach_z = base_z_mm + 8.0
+    tilt_deg = 35.0 if posture == "standing" else 20.0
+
+    for i, y in enumerate(y_positions):
+        for side, x_sign in [("L", 1), ("R", -1)]:
+            name = f"leg_{side}{i+1}"
+            appendages.append(Appendage(
+                name=name,
+                appendage_type="leg",
+                attach_x_mm=x_sign * body_width_mm / 2,
+                attach_y_mm=y,
+                attach_z_mm=attach_z,
+                angle_deg=95.0 if x_sign > 0 else 265.0,
+                tilt_deg=tilt_deg,
+                length_mm=58.0 if posture != "low_slung" else 38.0,
+                width_mm=8.0,
+                height_mm=8.0,
+                ground_contact=ground_contact,
+                foot_radius_mm=6.0,
+                notes=f"Creature-inspired limb from {hints.get('source_creature', 'creature')} morphology.",
+            ))
+            anchors.append(AnchorPoint(
+                name=f"{name}_anchor",
+                x_mm=x_sign * body_width_mm / 2,
+                y_mm=y,
+                z_mm=attach_z,
+                purpose="creature-inspired limb mount",
+            ))
+
+    return appendages[:appendage_count], anchors[:appendage_count]
+
+
+def _build_biomorphic_from_hints(text: str, hints: Dict[str, Any]) -> MorphologySpec:
+    source_creature = str(hints.get("source_creature", "") or "unknown_creature")
+    robot_family = str(hints.get("robot_family", "") or "biomorphic_generic_robot")
+    posture = str(hints.get("body_posture", "") or "standing")
+    archetype = str(hints.get("morphology_archetype", "") or "")
+    symmetry = str(hints.get("symmetry", "") or "bilateral")
+    body_segment_names = list(hints.get("body_segments", []) or ["body"])
+
+    primary_segments: List[BodySegment] = []
+    for index, seg_name in enumerate(body_segment_names):
+        length, width, height, z_base = _segment_dimensions_for_biomorph(seg_name, posture, index)
+        primary_segments.append(BodySegment(
+            name=str(seg_name),
+            length_mm=length,
+            width_mm=width,
+            height_mm=height,
+            z_base_mm=z_base,
+            label=str(seg_name).replace("_", " ").title(),
+            notes=f"Biomorphic segment inspired by {source_creature}.",
+        ))
+
+    body_width = max((s.width_mm for s in primary_segments), default=48.0)
+    body_length = max((s.length_mm for s in primary_segments), default=90.0)
+    base_z = min((s.z_base_mm for s in primary_segments), default=10.0)
+
+    appendages, anchors = _build_biomorphic_appendages(
+        hints=hints,
+        body_width_mm=body_width,
+        body_length_mm=body_length,
+        base_z_mm=base_z,
+    )
+
+    body_elevated = posture in ("standing", "crouched")
+    use_z = len({round(s.z_base_mm, 1) for s in primary_segments}) > 1
+
+    specialized_features = list(hints.get("specialized_features", []) or [])
+    cad_rules = list(hints.get("cad_rules", []) or [])
+    hard_negatives = list(hints.get("hard_negatives", []) or [])
+
+    quality_items = [
+        f"bio inspiration captured: {source_creature}",
+        f"morphology archetype: {archetype}",
+        f"robot family: {robot_family}",
+        "specialized creature features included",
+        "CAD rules provided from biomorphic trait library",
+        f"{len(primary_segments)} body segments defined",
+    ]
+    if appendages:
+        quality_items.append(f"{len(appendages)} appendages defined from creature topology")
+
+    return MorphologySpec(
+        morphology_family=robot_family,
+        body_posture=posture,
+        silhouette=f"{source_creature}-inspired {archetype or robot_family}",
+        symmetry_strategy=symmetry,
+        primary_segments=primary_segments,
+        appendages=appendages,
+        appendage_count=len(appendages),
+        anchor_points=anchors,
+        vertical_structure=VerticalStructure(
+            leg_ground_clearance_mm=25.0 if body_elevated else 8.0,
+            body_elevation_mm=base_z,
+            legs_extend_downward=any(a.appendage_type == "leg" for a in appendages),
+            body_elevated_above_ground=body_elevated,
+            use_segmented_z_heights=use_z,
+            notes=f"Vertical posture derived from {source_creature} biomorphic trait record.",
+        ),
+        fabrication_hints=[
+            "Concept-stage biomorphic morphology; validate mechanics before fabrication.",
+            "Use simple primitives first, then refine into organic/mechanical surfaces.",
+            "Keep creature-inspired features mechanically interpretable, not purely decorative.",
+        ],
+        allowed_primitive_shapes=[
+            "box", "cylinder", "sphere", "chamfered_box", "capsule", "thin_plate", "wedge",
+        ],
+        hard_negatives=hard_negatives,
+        morphology_archetype=archetype,
+        bio_inspiration={
+            "source_creature": source_creature,
+            "creature_class": hints.get("creature_class", ""),
+            "inspiration_mode": "functional_biomimicry",
+            "borrowed_traits": specialized_features,
+        },
+        locomotion_strategy={
+            "primary_mode": hints.get("locomotion_primary", ""),
+            "secondary_modes": hints.get("locomotion_secondary", []),
+            "terrain_target": hints.get("terrain", []),
+        },
+        specialized_features=specialized_features,
+        cad_rules=cad_rules,
+        quality_checklist=quality_items,
+        source_mission_keywords=[source_creature, archetype, robot_family],
+        notes=(
+            f"Biomorphic morphology generated from trait library. "
+            f"Creature={source_creature}, family={robot_family}, archetype={archetype}."
+        ),
+    )
+
+
 def infer_morphology_spec(mission_text: str) -> MorphologySpec:
     """Main entry point. Takes a mission string and returns a MorphologySpec."""
     text = str(mission_text or "").lower().strip()
+
+    # First: use the data-driven biomorphic trait library when a known
+    # creature is mentioned. This prevents all animal-inspired robots from collapsing
+    # into insect/drone/rover defaults.
+    biomorphic_hints = (
+        infer_biomorphic_hints(text)
+        if infer_biomorphic_hints is not None
+        else {}
+    )
+    if biomorphic_hints and biomorphic_hints.get("matched"):
+        return _build_biomorphic_from_hints(text, biomorphic_hints)
+
     family = _detect_family(text)
     leg_count = _detect_leg_count(text)
 
