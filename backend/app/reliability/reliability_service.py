@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from backend.app.reliability.evidence import build_evidence_summary, make_evidence
 from backend.app.reliability.gates import (
@@ -11,8 +11,17 @@ from backend.app.reliability.gates import (
     compute_overall_status,
     make_gate,
 )
-from backend.app.reliability.schemas import ReliabilityReport, ReliabilityReviewRequest
+from backend.app.reliability.provenance import build_provenance_from_mission_state
+from backend.app.reliability.reflection import build_reflection_notes
+from backend.app.reliability.schemas import (
+    ProvenanceRecord,
+    ReliabilityReport,
+    ReliabilityReviewRequest,
+)
 from backend.app.reliability.scoring import compute_engineering_confidence
+
+if TYPE_CHECKING:
+    from backend.app.omni_core.mission_state import MissionState
 
 from dataclasses import asdict
 
@@ -165,7 +174,10 @@ def _run_drone_sizing_if_available(
 def _status_from_calculation(calculation_result: Dict[str, Any]) -> str:
     return calculation_result.get("result", {}).get("status", "WARN")
 
-def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityReport:
+def run_reliability_review(
+    payload: ReliabilityReviewRequest,
+    mission_state: Optional["MissionState"] = None,
+) -> ReliabilityReport:
     mission_text = payload.mission_text.strip()
     mission_domain = detect_mission_domain(mission_text)
 
@@ -754,6 +766,14 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
         f"Engineering confidence: {confidence:.2f}."
     )
 
+    provenance: List[ProvenanceRecord] = (
+        build_provenance_from_mission_state(mission_state)
+        if mission_state is not None
+        else []
+    )
+
+    reflection_notes = build_reflection_notes(gates, evidence, provenance)
+
     return ReliabilityReport(
         overall_status=overall_status,
         engineering_confidence=confidence,
@@ -767,4 +787,6 @@ def run_reliability_review(payload: ReliabilityReviewRequest) -> ReliabilityRepo
         blockers=blockers,
         required_next_tests=next_tests,
         recommendations=recommendations,
+        provenance=provenance,
+        reflection_notes=reflection_notes,
     )
