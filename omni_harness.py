@@ -28,7 +28,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -198,7 +198,7 @@ def _build_provenance_record(result: Dict[str, Any]) -> Dict[str, Any]:
 # Dry-run path
 # ---------------------------------------------------------------------------
 
-def _run_dry_run(output_root: Path, mission: str) -> None:
+def _run_dry_run(output_root: Path, mission: str, db_path: Optional[Path] = None) -> None:
     """
     Create the output folder and write placeholder files without any LLM calls.
     Used to verify folder creation, naming, and file-writing logic.
@@ -242,6 +242,20 @@ def _run_dry_run(output_root: Path, mission: str) -> None:
     for name in written:
         print(f"  {name}")
     print(f"\n[OMNI Harness] Dry run complete. Folder: {folder}")
+
+    if db_path is not None:
+        try:
+            import omni_indexer
+            omni_indexer.index_mission(
+                db_path=db_path,
+                output_folder=folder,
+                result={"mission": mission, "status": "dry_run", "dry_run": True},
+                next_artifacts=[],
+            )
+            print(f"[OMNI Harness] Indexed to: {db_path}")
+        except Exception as exc:
+            print(f"[OMNI Harness] Warning: indexing failed — {exc}", file=sys.stderr)
+
     print()
 
 
@@ -249,7 +263,7 @@ def _run_dry_run(output_root: Path, mission: str) -> None:
 # Live mission run path
 # ---------------------------------------------------------------------------
 
-def _run_mission(output_root: Path, mission: str) -> None:
+def _run_mission(output_root: Path, mission: str, db_path: Optional[Path] = None) -> None:
     """
     Full mission run: execute the supervisor pipeline and write outputs.
     Creates the output folder before running so partial results are preserved
@@ -342,10 +356,11 @@ def _run_mission(output_root: Path, mission: str) -> None:
         print(f"  [warn] provenance_record.json — defaulted to empty: {exc}", file=sys.stderr)
 
     # 5. next_artifacts.json
+    next_artifacts_indexed: List[str] = []
     try:
-        next_artifacts = _extract_next_artifacts(result)
-        _write_json(folder / "next_artifacts.json", next_artifacts)
-        print(f"  [ok] next_artifacts.json ({len(next_artifacts)} items)")
+        next_artifacts_indexed = _extract_next_artifacts(result)
+        _write_json(folder / "next_artifacts.json", next_artifacts_indexed)
+        print(f"  [ok] next_artifacts.json ({len(next_artifacts_indexed)} items)")
     except Exception as exc:
         errors.append(f"next_artifacts.json: {exc}")
         _write_json(folder / "next_artifacts.json", [])
@@ -355,6 +370,19 @@ def _run_mission(output_root: Path, mission: str) -> None:
         print(f"\n[OMNI Harness] Completed with {len(errors)} write error(s).")
     else:
         print(f"\n[OMNI Harness] Mission complete.")
+
+    if db_path is not None:
+        try:
+            import omni_indexer
+            omni_indexer.index_mission(
+                db_path=db_path,
+                output_folder=folder,
+                result=result,
+                next_artifacts=next_artifacts_indexed,
+            )
+            print(f"[OMNI Harness] Indexed to: {db_path}")
+        except Exception as exc:
+            print(f"[OMNI Harness] Warning: indexing failed — {exc}", file=sys.stderr)
 
     print(f"[OMNI Harness] Output: {folder}")
     print()
@@ -407,6 +435,15 @@ def main() -> None:
         metavar="PATH",
         help="Root directory for mission output folders. Default: outputs/omni_missions",
     )
+    parser.add_argument(
+        "--index-db",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to SQLite index database. If provided, mission metadata is "
+            "indexed after each run. The database is created if it does not exist."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -420,11 +457,12 @@ def main() -> None:
         sys.exit(1)
 
     output_root = Path(args.output_root)
+    db_path = Path(args.index_db) if args.index_db else None
 
     if args.dry_run:
-        _run_dry_run(output_root, mission)
+        _run_dry_run(output_root, mission, db_path=db_path)
     else:
-        _run_mission(output_root, mission)
+        _run_mission(output_root, mission, db_path=db_path)
 
 
 if __name__ == "__main__":
