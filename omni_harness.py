@@ -263,7 +263,7 @@ def _run_dry_run(output_root: Path, mission: str, db_path: Optional[Path] = None
 # Live mission run path
 # ---------------------------------------------------------------------------
 
-def _run_mission(output_root: Path, mission: str, db_path: Optional[Path] = None) -> None:
+def _run_mission(output_root: Path, mission: str, db_path: Optional[Path] = None, parallel: bool = False) -> None:
     """
     Full mission run: execute the supervisor pipeline and write outputs.
     Creates the output folder before running so partial results are preserved
@@ -283,7 +283,7 @@ def _run_mission(output_root: Path, mission: str, db_path: Optional[Path] = None
 
         supervisor = SupervisorAgent()
         print("[OMNI Harness] Running OMNI council...")
-        raw = supervisor.run_mission_structured(mission)
+        raw = supervisor.run_mission_structured(mission, use_parallel_specialists=parallel)
 
         if isinstance(raw, dict):
             result = raw
@@ -444,6 +444,15 @@ def main() -> None:
             "indexed after each run. The database is created if it does not exist."
         ),
     )
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help=(
+            "Run Sky, Isy, Oli, and Korva specialists concurrently. "
+            "Serial execution is the default. Note: specialists will not see "
+            "each other's outputs when run in parallel."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -462,7 +471,7 @@ def main() -> None:
     if args.dry_run:
         _run_dry_run(output_root, mission, db_path=db_path)
     else:
-        _run_mission(output_root, mission, db_path=db_path)
+        _run_mission(output_root, mission, db_path=db_path, parallel=args.parallel)
 
 
 if __name__ == "__main__":
