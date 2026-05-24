@@ -102,7 +102,7 @@ def _safe_str(val: Any) -> str:
 
 def _extract_platform(mission_text: str) -> str:
     lower = mission_text.lower()
-    for kw in _PLATFORM_KEYWORDS:
+    for kw in sorted(_PLATFORM_KEYWORDS, key=len, reverse=True):
         if kw in lower:
             return kw
     return ""
@@ -485,6 +485,10 @@ def build_graph(folder: Path) -> MissionKnowledgeGraph:
         next_artifacts=[_safe_str(a) for a in next_artifacts if a],
         consistency_warnings=[],
     )
+
+    # --- Enrich relationships -------------------------------------------------
+    from backend.app.mission_graph.enrichment import enrich_graph
+    enrich_graph(graph)
 
     # --- Run consistency checks, prepend file-load warnings -------------------
     structural_warnings = check_graph(graph)

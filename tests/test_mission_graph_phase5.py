@@ -435,3 +435,131 @@ def test_smoke_write_graph_to_tmp(tmp_path):
     assert isinstance(data["ros2_nodes"], list)
     assert isinstance(data["consistency_warnings"], list)
     assert data["schema_version"] == "0.1"
+
+
+# ---------------------------------------------------------------------------
+# Phase 5B — Graph Relationship Enrichment
+# ---------------------------------------------------------------------------
+
+def test_platform_normalized_ground_rover():
+    """'rover' platform normalizes to 'ground-rover'."""
+    from backend.app.mission_graph.enrichment import enrich_graph
+    from backend.app.mission_graph.schemas import MissionKnowledgeGraph
+    graph = MissionKnowledgeGraph(
+        graph_id="e001", generated_at="2026-05-24T00:00:00+00:00",
+        platform="rover",
+    )
+    enrich_graph(graph)
+    assert graph.platform_normalized == "ground-rover"
+
+
+def test_platform_normalized_unknown_slugified():
+    """Unknown platform value is slugified into platform_normalized."""
+    from backend.app.mission_graph.enrichment import enrich_graph
+    from backend.app.mission_graph.schemas import MissionKnowledgeGraph
+    graph = MissionKnowledgeGraph(
+        graph_id="e002", generated_at="2026-05-24T00:00:00+00:00",
+        platform="My Custom Bot",
+    )
+    enrich_graph(graph)
+    assert graph.platform_normalized == "my-custom-bot"
+
+
+def test_component_linked_to_power_rail():
+    """Component with '5V' in power_notes gets power_rail_id set."""
+    from backend.app.mission_graph.enrichment import enrich_graph
+    from backend.app.mission_graph.schemas import Component, MissionKnowledgeGraph, PowerRail
+    graph = MissionKnowledgeGraph(
+        graph_id="e003", generated_at="2026-05-24T00:00:00+00:00",
+        components=[Component(id="comp.000", name="MCU", power_notes="5V, 100mA")],
+        power_rails=[PowerRail(id="rail.000", label="5V Rail", voltage_hint="5V")],
+    )
+    enrich_graph(graph)
+    assert graph.components[0].power_rail_id == "rail.000"
+
+
+def test_component_linked_to_data_bus():
+    """Component with 'UART' in interface gets data_bus_id set."""
+    from backend.app.mission_graph.enrichment import enrich_graph
+    from backend.app.mission_graph.schemas import Component, DataBus, MissionKnowledgeGraph
+    graph = MissionKnowledgeGraph(
+        graph_id="e004", generated_at="2026-05-24T00:00:00+00:00",
+        components=[Component(id="comp.000", name="GPS Module", interface="UART serial link")],
+        data_buses=[DataBus(id="bus.000", label="UART Bus", protocol="UART")],
+    )
+    enrich_graph(graph)
+    assert graph.components[0].data_bus_id == "bus.000"
+
+
+def test_node_component_cross_reference():
+    """Node.component_ids populated when component keyword appears in node text."""
+    from backend.app.mission_graph.enrichment import enrich_graph
+    from backend.app.mission_graph.schemas import Component, MissionKnowledgeGraph, Ros2Node
+    graph = MissionKnowledgeGraph(
+        graph_id="e005", generated_at="2026-05-24T00:00:00+00:00",
+        components=[Component(id="comp.000", name="IMU Sensor", role="sensing")],
+        ros2_nodes=[Ros2Node(id="node.sensor", name="sensor_node", purpose="Reads IMU data")],
+    )
+    enrich_graph(graph)
+    assert "comp.000" in graph.ros2_nodes[0].component_ids
+
+
+def test_enrich_graph_idempotent():
+    """Running enrich_graph twice does not create duplicate links."""
+    from backend.app.mission_graph.enrichment import enrich_graph
+    from backend.app.mission_graph.schemas import (
+        Component, DataBus, MissionKnowledgeGraph, PowerRail, Ros2Node,
+    )
+    graph = MissionKnowledgeGraph(
+        graph_id="e006", generated_at="2026-05-24T00:00:00+00:00",
+        components=[Component(
+            id="comp.000", name="Sensor Board", role="sensing",
+            power_notes="3.3V, 50mA", interface="I2C",
+        )],
+        power_rails=[PowerRail(id="rail.000", label="3.3V Rail", voltage_hint="3.3V")],
+        data_buses=[DataBus(id="bus.000", label="I2C Bus", protocol="I2C")],
+        ros2_nodes=[Ros2Node(id="node.sensor", name="sensor_node", purpose="Reads sensor data")],
+    )
+    enrich_graph(graph)
+    enrich_graph(graph)
+    comp = graph.components[0]
+    node = graph.ros2_nodes[0]
+    assert comp.power_rail_id == "rail.000"
+    assert comp.data_bus_id == "bus.000"
+    assert node.component_ids.count("comp.000") == 1
+
+
+def test_enrich_empty_graph_no_crash():
+    """enrich_graph on a minimal empty graph does not raise."""
+    from backend.app.mission_graph.enrichment import enrich_graph
+    from backend.app.mission_graph.schemas import MissionKnowledgeGraph
+    graph = MissionKnowledgeGraph(
+        graph_id="e007", generated_at="2026-05-24T00:00:00+00:00",
+    )
+    enrich_graph(graph)
+    assert graph.platform_normalized == ""
+
+
+def test_body_regions_inferred_from_morphology():
+    """When morphology exists and body_regions is empty, regions are created."""
+    from backend.app.mission_graph.enrichment import enrich_graph
+    from backend.app.mission_graph.schemas import MissionKnowledgeGraph, Morphology
+    graph = MissionKnowledgeGraph(
+        graph_id="e008", generated_at="2026-05-24T00:00:00+00:00",
+        morphology=[Morphology(id="morph.000", description="Compact 100mm chassis")],
+    )
+    enrich_graph(graph)
+    assert graph.body_regions, "body_regions should have at least one entry after enrichment"
+    assert graph.morphology[0].body_region_ids, "morph.body_region_ids should be populated"
+    region_id = graph.morphology[0].body_region_ids[0]
+    assert region_id in [r.id for r in graph.body_regions]
+
+
+def test_enrichment_called_in_builder(tmp_path):
+    """build_graph returns platform_normalized set, proving enrich_graph is wired."""
+    folder = tmp_path / "mission_enrichment"
+    _write_fixture(folder)
+    graph = build_graph(folder)
+    assert graph.platform_normalized == "ground-rover", (
+        f"Expected 'ground-rover', got '{graph.platform_normalized}'"
+    )

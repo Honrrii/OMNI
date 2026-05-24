@@ -40,10 +40,11 @@ class Ros2Node(BaseModel):
     id: str
     name: str
     purpose: str = ""
-    publishes_to: List[str] = Field(default_factory=list)   # topic names
-    subscribes_to: List[str] = Field(default_factory=list)  # topic names
+    publishes_to: List[str] = Field(default_factory=list)    # topic names
+    subscribes_to: List[str] = Field(default_factory=list)   # topic names
     services: List[str] = Field(default_factory=list)
     parameters: List[str] = Field(default_factory=list)
+    component_ids: List[str] = Field(default_factory=list)   # Component IDs associated with this node via graph enrichment / structural matching
 
 
 class Ros2Topic(BaseModel):
@@ -141,6 +142,7 @@ class MissionKnowledgeGraph(BaseModel):
     mission_id: Optional[str] = None
     mission_text: str = ""
     platform: str = ""
+    platform_normalized: str = ""
     requirements: List[Requirement] = Field(default_factory=list)
     morphology: List[Morphology] = Field(default_factory=list)
     body_regions: List[BodyRegion] = Field(default_factory=list)
