@@ -780,6 +780,79 @@ function CommandAttentionAnimation() {
   );
 }
 
+const RAIL_NAV = [
+  { id: "command",    label: "Mission"    },
+  { id: "blueprint",  label: "Blueprint"  },
+  { id: "artifacts",  label: "Artifacts"  },
+  { id: "validation", label: "Validation" },
+  { id: "simulation", label: "Simulation" },
+  { id: "memory",     label: "Memory"     },
+];
+
+function getMissionState(missionResult, exportResult, loading, interpreting, exporting) {
+  if (loading)      return { label: "EXECUTING",     cls: "hud-executing" };
+  if (interpreting) return { label: "ECHO ACTIVE",   cls: "hud-echo"      };
+  if (exporting)    return { label: "EXPORTING",     cls: "hud-exporting" };
+  const exp = exportResult?.export || {};
+  if (exp.graph_review?.status === "reviewed")      return { label: "REVIEW ONLINE", cls: "hud-review" };
+  if (exp.ros2_validation?.passed === false)        return { label: "NEEDS REVIEW",  cls: "hud-warn"   };
+  if (exportResult)  return { label: "EXPORT READY",  cls: "hud-ok"     };
+  if (missionResult) return { label: "MISSION ACTIVE", cls: "hud-active" };
+  return { label: "IDLE", cls: "hud-idle" };
+}
+
+function SystemTopBar({ activePage, missionResult, exportResult, loading, interpreting, exporting }) {
+  const pageLabel = PAGE_ITEMS.find(p => p.id === activePage)?.label || "Command";
+  const { label: stateLabel, cls: stateCls } = getMissionState(missionResult, exportResult, loading, interpreting, exporting);
+
+  return (
+    <div className="system-top-bar" role="banner" aria-label="OMNI system status">
+      <div className="stb-left">
+        <span className="stb-brand-dot" aria-hidden="true" />
+        <span className="stb-brand">OMNI</span>
+        <span className="stb-sep" aria-hidden="true" />
+        <span className="stb-system">Command Center</span>
+      </div>
+
+      <div className="stb-center">
+        <span className="stb-page-label" aria-live="polite">{pageLabel}</span>
+      </div>
+
+      <div className="stb-right">
+        <span className={`stb-state-chip ${stateCls}`} aria-live="polite" aria-atomic="true">
+          <span className="stb-state-dot" aria-hidden="true" />
+          {stateLabel}
+        </span>
+        <span className="stb-link" aria-label="Backend: local link active">
+          <span className="stb-link-dot" aria-hidden="true" />
+          LOCAL LINK
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function BottomActionRail({ activePage, setActivePage, missionResult }) {
+  return (
+    <nav className="bottom-action-rail" aria-label="Quick navigation">
+      {RAIL_NAV.map(item => {
+        const needsMission = item.id !== "command" && item.id !== "simulation";
+        const dimmed = needsMission && !missionResult;
+        return (
+          <button
+            key={item.id}
+            className={`bar-btn${activePage === item.id ? " bar-active" : ""}${dimmed ? " bar-dim" : ""}`}
+            onClick={() => setActivePage(item.id)}
+            aria-current={activePage === item.id ? "page" : undefined}
+          >
+            <span className="bar-btn-label">{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 function TopNav({ activePage, setActivePage, missionResult }) {
   return (
     <aside className="omni-sidebar">
@@ -1829,12 +1902,22 @@ function App() {
       <div className="space-scanline" />
       <div className="space-scanline" />
 
-      <main className="omni-app-shell">
-        <TopNav
+      <div className="omni-hud-shell">
+        <SystemTopBar
           activePage={activePage}
-          setActivePage={setActivePage}
           missionResult={missionResult}
+          exportResult={exportResult}
+          loading={loading}
+          interpreting={interpreting}
+          exporting={exporting}
         />
+
+        <main className="omni-app-shell">
+          <TopNav
+            activePage={activePage}
+            setActivePage={setActivePage}
+            missionResult={missionResult}
+          />
 
         <section className="omni-main">
           <header className="mobile-topbar">
@@ -1901,17 +1984,25 @@ function App() {
           {activePage === "memory" && <MemoryPage missionResult={missionResult} />}
         </section>
 
-        {loading && (
-          <LoadingOverlay
-            joke={loadingJoke}
-            message={
-              commandMode === "idea"
-                ? "Echo is interpreting, OMNI is assembling, and exports are being prepared..."
-                : "OMNI is coordinating the intelligence stack..."
-            }
-          />
-        )}
-      </main>
+        </main>
+
+        <BottomActionRail
+          activePage={activePage}
+          setActivePage={setActivePage}
+          missionResult={missionResult}
+        />
+      </div>
+
+      {loading && (
+        <LoadingOverlay
+          joke={loadingJoke}
+          message={
+            commandMode === "idea"
+              ? "Echo is interpreting, OMNI is assembling, and exports are being prepared..."
+              : "OMNI is coordinating the intelligence stack..."
+          }
+        />
+      )}
     </>
   );
 }
