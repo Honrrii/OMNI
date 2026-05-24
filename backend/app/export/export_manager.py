@@ -722,14 +722,15 @@ def _write_graph_review(export_dir: Path) -> Dict[str, Any]:
     review_path = export_dir / "mission_graph_review.json"
     write_json(review_path, review.model_dump(mode="json"))
 
+    review_data = review.model_dump(mode="json")
     return {
         "status": "reviewed",
-        "graph_id": graph.graph_id,
         "graph_path": str(graph_path),
         "review_path": str(review_path),
         "issue_count": len(review.issues),
         "warning_count": len(review.warnings),
         "recommendation_count": len(review.recommendations),
+        **review_data,
     }
 
 

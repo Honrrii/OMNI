@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import "./App.css";
 import { initSpaceBg } from "./space-bg";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
+import MissionGraphReviewPanel from "./components/MissionGraphReviewPanel.jsx";
 import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
 import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
 
@@ -1261,6 +1262,8 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
       <MissionReportPanel exportResult={exportResult} />
 
       <BuildVerificationCard exportResult={exportResult} />
+
+      <MissionGraphReviewPanel exportResult={exportResult} />
 
       <div className="artifact-grid-v2">
         {missionResult.artifacts.map((artifact) => (

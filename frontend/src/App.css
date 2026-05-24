@@ -340,7 +340,8 @@ body::after {
 .agent-detail-panel,
 .forge-panel,
 .sim-panel,
-.mission-report-panel {
+.mission-report-panel,
+.graph-review-panel {
   position: relative;
   border: 1px solid var(--border);
   background:
@@ -2273,6 +2274,262 @@ input::placeholder,
   border-radius: 16px;
   background: rgba(255, 190, 90, 0.07);
   line-height: 1.45;
+}
+
+/* =========================================================
+   Mission Graph Review Panel
+   ========================================================= */
+
+.graph-review-panel {
+  margin-bottom: 26px;
+  padding: 26px;
+  border-radius: var(--radius-lg);
+  border-color: rgba(77, 163, 255, 0.22);
+}
+
+.graph-review-panel.gr-empty-state {
+  padding: 24px;
+}
+
+.gr-empty-message {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.gr-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.gr-header h2 {
+  margin: 0.2rem 0 0;
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+
+.gr-kicker {
+  display: block;
+  color: rgba(210, 225, 255, 0.60);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.70rem;
+  font-weight: 700;
+}
+
+.gr-platform-chip {
+  flex: 0 0 auto;
+  padding: 0.42rem 0.9rem;
+  border: 1px solid rgba(77, 163, 255, 0.38);
+  border-radius: 999px;
+  background: rgba(77, 163, 255, 0.10);
+  color: #a8d4ff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.gr-section {
+  margin-bottom: 22px;
+}
+
+.gr-section-label {
+  margin: 0 0 12px;
+  color: rgba(210, 225, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.70rem;
+  font-weight: 700;
+}
+
+/* --- Coverage grid --- */
+
+.gr-coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .gr-coverage-grid { grid-template-columns: 1fr; }
+}
+
+.gr-coverage-card {
+  padding: 14px 16px;
+  border: 1px solid rgba(220, 230, 255, 0.11);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.gr-coverage-title {
+  margin: 0 0 10px;
+  font-size: 0.80rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(200, 220, 255, 0.75);
+}
+
+.gr-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gr-metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.gr-metric-label {
+  color: var(--muted);
+  font-size: 0.80rem;
+}
+
+.gr-metric-value {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Issue cards --- */
+
+.gr-issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gr-issue-card {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border-left: 3px solid transparent;
+  background: rgba(255, 255, 255, 0.030);
+  border-top: 1px solid rgba(220, 230, 255, 0.08);
+  border-right: 1px solid rgba(220, 230, 255, 0.08);
+  border-bottom: 1px solid rgba(220, 230, 255, 0.08);
+}
+
+.gr-issue-warning {
+  border-left-color: rgba(255, 191, 74, 0.70);
+}
+
+.gr-issue-error {
+  border-left-color: rgba(255, 61, 77, 0.70);
+}
+
+.gr-issue-info {
+  border-left-color: rgba(77, 163, 255, 0.70);
+}
+
+.gr-issue-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.gr-issue-code {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #d6e8ff;
+  letter-spacing: 0.04em;
+}
+
+.gr-issue-category {
+  font-size: 0.70rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--muted);
+}
+
+.gr-issue-message {
+  margin: 0 0 6px;
+  color: var(--muted-strong);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.gr-issue-ids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gr-related-id {
+  padding: 2px 7px;
+  border: 1px solid rgba(173, 223, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(173, 223, 255, 0.06);
+  font-size: 0.72rem;
+  color: #b8d8ff;
+}
+
+/* --- Recommendations --- */
+
+.gr-rec-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gr-rec-list li {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(37, 244, 208, 0.14);
+  background: rgba(37, 244, 208, 0.04);
+  color: var(--muted-strong);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.gr-rec-list li::before {
+  content: "→ ";
+  color: var(--vega);
+  font-weight: 700;
+}
+
+/* --- Consistency warnings --- */
+
+.gr-consistency-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gr-consistency-list li {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 191, 74, 0.15);
+  background: rgba(255, 191, 74, 0.04);
+  color: var(--muted-strong);
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.gr-consistency-list code {
+  margin-right: 6px;
+  color: #ffe085;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 /* =========================================================
