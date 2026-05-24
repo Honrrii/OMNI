@@ -3,6 +3,7 @@ import "./App.css";
 import { initSpaceBg } from "./space-bg";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
 import MissionGraphReviewPanel from "./components/MissionGraphReviewPanel.jsx";
+import OperatorBriefPanel from "./components/OperatorBriefPanel.jsx";
 import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
 import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
 
@@ -1093,7 +1094,7 @@ function VisionPage() {
   );
 }
 
-function BlueprintPage({ missionResult }) {
+function BlueprintPage({ missionResult, exportResult }) {
   if (!missionResult) {
     return <EmptyPage title="Blueprint" message="Run a mission to generate a blueprint." />;
   }
@@ -1104,9 +1105,6 @@ function BlueprintPage({ missionResult }) {
         <div>
           <p className="eyebrow">Blueprint</p>
           <h1 className="mission-title">{missionResult.title}</h1>
-          {missionResult.fullMission && (
-            <p className="mission-subtitle-line">{missionResult.fullMission}</p>
-          )}
           {missionResult.createdAt && <p>Created at: {missionResult.createdAt}</p>}
         </div>
 
@@ -1116,30 +1114,40 @@ function BlueprintPage({ missionResult }) {
         </div>
       </div>
 
-      <div className="blueprint-grid">
-        <div className="panel hero-panel">
-          <p className="eyebrow">OMNI Synthesis</p>
-          <h2>Final Mission Output</h2>
-          <div className="soft-report blueprint-report">
-            <ReportRenderer text={missionResult.finalOutput} />
-          </div>
-        </div>
+      {/* ── Operator Brief — quick cockpit summary ── */}
+      <OperatorBriefPanel missionResult={missionResult} exportResult={exportResult} />
 
-        <div className="panel">
-          <p className="eyebrow">Timeline</p>
-          <h2>Mission Flow</h2>
-          <div className="timeline">
-            {missionResult.timeline.map((item) => (
-              <TimelineItem
-                key={item.step}
-                step={item.step}
-                title={item.title || item.event}
-                description={replaceLegacyNames(item.description)}
-              />
-            ))}
+      {/* ── Full blueprint output — accessible below the brief ── */}
+      <details className="ob-details">
+        <summary>Full Blueprint Output</summary>
+        <div className="blueprint-grid">
+          <div className="panel hero-panel">
+            <p className="eyebrow">OMNI Synthesis</p>
+            <h2>Final Mission Output</h2>
+            {missionResult.fullMission && (
+              <p className="mission-subtitle-line">{missionResult.fullMission}</p>
+            )}
+            <div className="soft-report blueprint-report">
+              <ReportRenderer text={missionResult.finalOutput} />
+            </div>
+          </div>
+
+          <div className="panel">
+            <p className="eyebrow">Timeline</p>
+            <h2>Mission Flow</h2>
+            <div className="timeline">
+              {missionResult.timeline.map((item) => (
+                <TimelineItem
+                  key={item.step}
+                  step={item.step}
+                  title={item.title || item.event}
+                  description={replaceLegacyNames(item.description)}
+                />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </details>
     </section>
   );
 }
@@ -1228,53 +1236,70 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
 
   return (
     <section className="page artifacts-page-v2">
-      <div className="page-header">
+
+      {/* ── Compact page header ── */}
+      <div className="page-header page-header-compact">
         <div>
           <p className="eyebrow">Generated Files</p>
           <h1>Mission Artifacts</h1>
-          <p>
-            Structured outputs from OMNI. These are the pieces that can later become
-            diagrams, files, tables, code, ROS2 packages, CAD prompts, or validation reports.
-          </p>
+        </div>
 
-          <div className="export-action-row">
-            <button className="primary-button" onClick={exportMission} disabled={exporting}>
-              {exporting ? "Exporting + Verifying..." : "Export Mission Files"}
-            </button>
+        <div className="export-action-row">
+          <button className="primary-button" onClick={exportMission} disabled={exporting}>
+            {exporting ? "Exporting + Verifying..." : "Export Mission Files"}
+          </button>
 
-            {exportResult && (
-              <div className="export-result-card">
-                <strong>Export complete</strong>
-                <span>{exportResult.export?.file_count || 0} files generated</span>
-                <code>{exportResult.export?.export_dir}</code>
-
-                {ros2Validation && (
-                  <span className={ros2Validation.passed ? "mini-pass-text" : "mini-fail-text"}>
-                    ROS2 validation: {ros2Validation.passed ? "PASSED" : "NEEDS REVIEW"}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          {exportResult && (
+            <div className="export-result-card">
+              <strong>Export complete</strong>
+              <span>{exportResult.export?.file_count || 0} files</span>
+              <code>{exportResult.export?.export_dir}</code>
+              {ros2Validation && (
+                <span className={ros2Validation.passed ? "mini-pass-text" : "mini-fail-text"}>
+                  ROS2: {ros2Validation.passed ? "PASSED" : "NEEDS REVIEW"}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      <MissionReportPanel exportResult={exportResult} />
+      {/* ── Operator Brief — primary cockpit view ── */}
+      <OperatorBriefPanel missionResult={missionResult} exportResult={exportResult} />
 
-      <BuildVerificationCard exportResult={exportResult} />
+      {/* ── Mission artifacts — primary generated content ── */}
+      {missionResult.artifacts.length > 0 && (
+        <div className="artifact-grid-v2">
+          {missionResult.artifacts.map((artifact) => (
+            <ArtifactCard
+              key={artifact.id || artifact.title}
+              title={replaceLegacyNames(artifact.title)}
+              description={replaceLegacyNames(artifact.description)}
+              content={replaceLegacyNames(artifact.content)}
+            />
+          ))}
+        </div>
+      )}
 
-      <MissionGraphReviewPanel exportResult={exportResult} />
+      {/* ── Deep reports behind collapsible sections ── */}
 
-      <div className="artifact-grid-v2">
-        {missionResult.artifacts.map((artifact) => (
-          <ArtifactCard
-            key={artifact.id || artifact.title}
-            title={replaceLegacyNames(artifact.title)}
-            description={replaceLegacyNames(artifact.description)}
-            content={replaceLegacyNames(artifact.content)}
-          />
-        ))}
-      </div>
+      <details className="ob-details">
+        <summary>Deep Technical Report — Graph Analysis</summary>
+        <MissionGraphReviewPanel exportResult={exportResult} />
+      </details>
+
+      {ros2Validation && (
+        <details className="ob-details">
+          <summary>ROS2 Build Verification</summary>
+          <BuildVerificationCard exportResult={exportResult} />
+        </details>
+      )}
+
+      <details className="ob-details">
+        <summary>Raw Mission Dossier</summary>
+        <MissionReportPanel exportResult={exportResult} />
+      </details>
+
     </section>
   );
 }
@@ -1847,7 +1872,7 @@ function App() {
 
           {activePage === "vision" && <VisionPage />}
 
-          {activePage === "blueprint" && <BlueprintPage missionResult={missionResult} />}
+          {activePage === "blueprint" && <BlueprintPage missionResult={missionResult} exportResult={exportResult} />}
 
           {activePage === "agents" && <AgentsPage missionResult={missionResult} />}
 
