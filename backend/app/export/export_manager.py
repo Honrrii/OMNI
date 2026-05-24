@@ -697,6 +697,43 @@ def run_morphology_gate(export_dir: Path) -> Dict[str, Any]:
 
 
 # -------------------------------------------------------------------------
+# Mission Knowledge Graph + Review helper
+# -------------------------------------------------------------------------
+
+
+def _write_graph_review(export_dir: Path) -> Dict[str, Any]:
+    """
+    Build a MissionKnowledgeGraph from export_dir/mission.json, run the
+    deterministic reviewer, and write both output files into export_dir.
+
+    Assumes mission.json already exists in export_dir (written by
+    export_mission_files before this is called).  May raise; callers are
+    responsible for catching errors.
+    """
+    from backend.app.mission_graph.builder import build_graph
+    from backend.app.mission_graph.reviewer import review_graph
+
+    graph = build_graph(export_dir)
+    review = review_graph(graph)
+
+    graph_path = export_dir / "mission_graph.json"
+    write_json(graph_path, graph.model_dump(mode="json"))
+
+    review_path = export_dir / "mission_graph_review.json"
+    write_json(review_path, review.model_dump(mode="json"))
+
+    return {
+        "status": "reviewed",
+        "graph_id": graph.graph_id,
+        "graph_path": str(graph_path),
+        "review_path": str(review_path),
+        "issue_count": len(review.issues),
+        "warning_count": len(review.warnings),
+        "recommendation_count": len(review.recommendations),
+    }
+
+
+# -------------------------------------------------------------------------
 # Main export function
 # -------------------------------------------------------------------------
 
@@ -824,6 +861,23 @@ def export_mission_files(
     path = export_dir / "validation.json"
     write_json(path, mission_result.get("validation", {}))
     record(path)
+
+    # ---------------------------------------------------------
+    # Mission Knowledge Graph + deterministic review
+    # (mission.json is guaranteed to exist at this point)
+    # ---------------------------------------------------------
+
+    graph_review: Optional[Dict[str, Any]] = None
+
+    try:
+        graph_review = _write_graph_review(export_dir)
+        record(Path(graph_review["graph_path"]))
+        record(Path(graph_review["review_path"]))
+    except Exception as error:
+        graph_review = {"status": "failed", "error": str(error)}
+        path = export_dir / "mission_graph_review.json"
+        write_json(path, graph_review)
+        record(path)
 
     # ---------------------------------------------------------
     # Agent reports
@@ -1211,4 +1265,5 @@ def export_mission_files(
         "kicad_validation": kicad_validation,
         "morphology_validation": morphology_validation,
         "mission_report": mission_report,
+        "graph_review": graph_review,
     }
