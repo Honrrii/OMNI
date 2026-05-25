@@ -469,3 +469,400 @@ def test_generic_vision_does_not_override_strong_graph_score():
     )
     # Vision is 10% weight; strong graph (90% weight) should keep score above 0.5
     assert rpt.semantic_match_score >= 0.50
+
+
+# ===========================================================================
+# Phase 10C — Cortex diagnostic schema tests
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# mission_intent
+# ---------------------------------------------------------------------------
+
+def test_mission_intent_present():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert isinstance(rpt.mission_intent, dict)
+    for key in ("raw_snippet", "extracted_platform", "domain_signals",
+                "word_count", "has_quantitative_requirements"):
+        assert key in rpt.mission_intent, f"mission_intent missing key: {key}"
+
+
+def test_mission_intent_platform_matches_intended():
+    rpt = evaluate_design_understanding("Build a rover for terrain scouting.")
+    assert rpt.mission_intent["extracted_platform"] == "ground-rover"
+    assert rpt.mission_intent["extracted_platform"] == rpt.intended_platform
+
+
+def test_mission_intent_domain_signals_populated():
+    rpt = evaluate_design_understanding("Build a ROS2 rover with LiDAR and IMU.")
+    assert "ros2" in rpt.mission_intent["domain_signals"]
+    assert "lidar" in rpt.mission_intent["domain_signals"]
+
+
+def test_mission_intent_word_count():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert rpt.mission_intent["word_count"] == 3
+
+
+def test_mission_intent_has_quantitative_requirements_false():
+    rpt = evaluate_design_understanding("Build a rover for exploration.")
+    assert rpt.mission_intent["has_quantitative_requirements"] is False
+
+
+def test_mission_intent_has_quantitative_requirements_true():
+    rpt = evaluate_design_understanding("Build a rover weighing 5 kg with top speed 2 m/s.")
+    assert rpt.mission_intent["has_quantitative_requirements"] is True
+
+
+def test_mission_intent_snippet_max_200_chars():
+    long_text = "Build a rover " + "x" * 300
+    rpt = evaluate_design_understanding(long_text)
+    assert len(rpt.mission_intent["raw_snippet"]) <= 200
+
+
+# ---------------------------------------------------------------------------
+# design_envelope
+# ---------------------------------------------------------------------------
+
+def test_design_envelope_present():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert isinstance(rpt.design_envelope, dict)
+    for key in ("platform", "component_count", "ros2_node_count",
+                "morphology_count", "enrichment_run", "review_run"):
+        assert key in rpt.design_envelope, f"design_envelope missing key: {key}"
+
+
+def test_design_envelope_counts_with_graph():
+    graph = _graph(
+        platform_normalized="ground-rover",
+        components=[Component(id="c1", name="Motor"), Component(id="c2", name="IMU")],
+        ros2_nodes=[Ros2Node(id="n1", name="nav_node")],
+        morphology=[Morphology(id="m1", description="dome frame")],
+    )
+    rpt = evaluate_design_understanding("Build a rover.", graph=graph)
+    assert rpt.design_envelope["component_count"] == 2
+    assert rpt.design_envelope["ros2_node_count"] == 1
+    assert rpt.design_envelope["morphology_count"] == 1
+
+
+def test_design_envelope_no_graph_zeros():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert rpt.design_envelope["component_count"] == 0
+    assert rpt.design_envelope["ros2_node_count"] == 0
+
+
+def test_design_envelope_enrichment_run_true():
+    graph = _graph(platform="rover", platform_normalized="ground-rover")
+    rpt = evaluate_design_understanding("Build a rover.", graph=graph)
+    assert rpt.design_envelope["enrichment_run"] is True
+
+
+def test_design_envelope_review_run_true():
+    review = _review(comp_total=2, comp_power=1, comp_bus=1, comp_region=1)
+    rpt = evaluate_design_understanding("Build a rover.", graph_review=review)
+    assert rpt.design_envelope["review_run"] is True
+
+
+def test_design_envelope_review_run_false_without_review():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert rpt.design_envelope["review_run"] is False
+
+
+# ---------------------------------------------------------------------------
+# detected_domains
+# ---------------------------------------------------------------------------
+
+def test_detected_domains_is_list():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert isinstance(rpt.detected_domains, list)
+
+
+def test_detected_domains_ros2_from_mission_text():
+    rpt = evaluate_design_understanding("Build a ROS2 ground rover.")
+    assert "ros2" in rpt.detected_domains
+
+
+def test_detected_domains_navigation_from_mission():
+    rpt = evaluate_design_understanding("Build a rover with LiDAR for autonomous navigation.")
+    assert "navigation" in rpt.detected_domains
+
+
+def test_detected_domains_electronics_from_graph():
+    graph = _graph(
+        platform_normalized="ground-rover",
+        components=[Component(id="c1", name="motor controller")],
+    )
+    rpt = evaluate_design_understanding("Build a rover.", graph=graph)
+    assert "electronics" in rpt.detected_domains
+
+
+def test_detected_domains_mechanical_from_graph_morphology():
+    graph = _graph(
+        platform_normalized="ground-rover",
+        morphology=[Morphology(id="m1", description="chassis frame")],
+    )
+    rpt = evaluate_design_understanding("Build a rover.", graph=graph)
+    assert "mechanical" in rpt.detected_domains
+
+
+def test_detected_domains_empty_on_minimal_input():
+    rpt = evaluate_design_understanding("Build something cool.")
+    assert isinstance(rpt.detected_domains, list)
+
+
+# ---------------------------------------------------------------------------
+# design_candidates
+# ---------------------------------------------------------------------------
+
+def test_design_candidates_is_list():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert isinstance(rpt.design_candidates, list)
+
+
+def test_design_candidates_rover_present():
+    rpt = evaluate_design_understanding("Build a rover for terrain scouting.")
+    platforms = [c["platform"] for c in rpt.design_candidates]
+    assert "ground-rover" in platforms
+
+
+def test_design_candidates_primary_flag():
+    rpt = evaluate_design_understanding("Build a rover for terrain scouting.")
+    primary = [c for c in rpt.design_candidates if c["is_primary"]]
+    assert len(primary) == 1
+    assert primary[0]["platform"] == "ground-rover"
+
+
+def test_design_candidates_confidence_range():
+    rpt = evaluate_design_understanding("Build a hexacopter drone.")
+    for c in rpt.design_candidates:
+        assert 0.0 <= c["confidence"] <= 1.0
+
+
+def test_design_candidates_empty_when_no_platform():
+    rpt = evaluate_design_understanding("Build something cool.")
+    assert rpt.design_candidates == []
+
+
+def test_design_candidates_matched_keyword_present():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert all("matched_keyword" in c for c in rpt.design_candidates)
+
+
+# ---------------------------------------------------------------------------
+# constraint_links
+# ---------------------------------------------------------------------------
+
+def test_constraint_links_is_list():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert isinstance(rpt.constraint_links, list)
+
+
+def test_constraint_links_empty_without_graph():
+    rpt = evaluate_design_understanding("Build a rover for terrain scouting.")
+    assert rpt.constraint_links == []
+
+
+def test_constraint_links_populated_from_graph():
+    graph = _graph(
+        platform_normalized="ground-rover",
+        ros2_nodes=[Ros2Node(id="n1", name="navigation_node")],
+    )
+    rpt = evaluate_design_understanding(
+        "Build a rover with navigation capabilities.", graph=graph
+    )
+    assert len(rpt.constraint_links) >= 1
+
+
+def test_constraint_links_have_required_keys():
+    graph = _graph(
+        platform_normalized="ground-rover",
+        components=[Component(id="c1", name="lidar sensor")],
+    )
+    rpt = evaluate_design_understanding("Build a rover with lidar.", graph=graph)
+    for link in rpt.constraint_links:
+        for key in ("constraint", "linked_to", "evidence", "source"):
+            assert key in link, f"constraint_link missing key: {key}"
+
+
+def test_constraint_links_capped_at_ten():
+    graph = _graph(
+        platform_normalized="ground-rover",
+        components=[Component(id=f"c{i}", name=f"motor sensor lidar camera part{i}") for i in range(20)],
+    )
+    rpt = evaluate_design_understanding(
+        "Build a rover with motor sensor lidar camera.", graph=graph
+    )
+    assert len(rpt.constraint_links) <= 10
+
+
+# ---------------------------------------------------------------------------
+# provenance_summary
+# ---------------------------------------------------------------------------
+
+def test_provenance_summary_present():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert isinstance(rpt.provenance_summary, dict)
+    for key in ("sources_used", "source_count", "has_graph",
+                "has_graph_review", "has_vision", "vision_is_domain_grounded"):
+        assert key in rpt.provenance_summary
+
+
+def test_provenance_sources_mission_only():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert rpt.provenance_summary["sources_used"] == ["mission_text"]
+    assert rpt.provenance_summary["source_count"] == 1
+
+
+def test_provenance_sources_with_graph_and_review():
+    review = _review(comp_total=2, comp_power=2, comp_bus=2, comp_region=2)
+    graph = _graph(platform_normalized="ground-rover")
+    rpt = evaluate_design_understanding("Build a rover.", graph=graph, graph_review=review)
+    assert "mission_text" in rpt.provenance_summary["sources_used"]
+    assert "mission_graph" in rpt.provenance_summary["sources_used"]
+    assert "graph_review" in rpt.provenance_summary["sources_used"]
+    assert rpt.provenance_summary["source_count"] == 3
+
+
+def test_provenance_vision_is_domain_grounded_flag():
+    vp = _vision("rover", is_domain_grounded=True)
+    rpt = evaluate_design_understanding("Build a rover.", vision_prediction=vp)
+    assert rpt.provenance_summary["vision_is_domain_grounded"] is True
+
+
+# ---------------------------------------------------------------------------
+# validation_gaps
+# ---------------------------------------------------------------------------
+
+def test_validation_gaps_is_list():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert isinstance(rpt.validation_gaps, list)
+
+
+def test_validation_gaps_no_review_message():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert any("Graph review not available" in g for g in rpt.validation_gaps)
+
+
+def test_validation_gaps_detected_from_review():
+    review = _review(comp_total=4, comp_power=0, comp_bus=0, comp_region=0)
+    rpt = evaluate_design_understanding("Build a rover.", graph_review=review)
+    assert any("power_rail_id" in g for g in rpt.validation_gaps)
+    assert any("data_bus_id" in g for g in rpt.validation_gaps)
+    assert any("body_region_id" in g for g in rpt.validation_gaps)
+
+
+def test_validation_gaps_ros2_nodes_unlinked():
+    review = _review(node_total=3, nodes_with_comp=0)
+    rpt = evaluate_design_understanding("Build a rover.", graph_review=review)
+    assert any("ROS2 node" in g for g in rpt.validation_gaps)
+
+
+def test_validation_gaps_none_when_fully_covered():
+    review = _review(
+        comp_total=2, comp_power=2, comp_bus=2, comp_region=2,
+        node_total=2, nodes_with_comp=2,
+        cad_total=2, cad_region=2,
+    )
+    rpt = evaluate_design_understanding("Build a rover.", graph_review=review)
+    assert any("No validation gaps" in g for g in rpt.validation_gaps)
+
+
+# ---------------------------------------------------------------------------
+# open_questions
+# ---------------------------------------------------------------------------
+
+def test_open_questions_is_list():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert isinstance(rpt.open_questions, list)
+
+
+def test_open_questions_always_non_empty():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert len(rpt.open_questions) > 0
+
+
+def test_open_questions_vision_absent():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert any("vision classifier" in q for q in rpt.open_questions)
+
+
+def test_open_questions_no_physics_simulation():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert any("Physics simulation" in q for q in rpt.open_questions)
+
+
+def test_open_questions_no_graph():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert any("No mission graph" in q for q in rpt.open_questions)
+
+
+def test_open_questions_no_quantitative_requirements():
+    rpt = evaluate_design_understanding("Build a rover for exploration.")
+    assert any("quantitative" in q for q in rpt.open_questions)
+
+
+# ---------------------------------------------------------------------------
+# cortex_score
+# ---------------------------------------------------------------------------
+
+def test_cortex_score_present():
+    rpt = evaluate_design_understanding("Build a rover.")
+    from backend.app.cortex.design_evaluator import CortexScore
+    assert isinstance(rpt.cortex_score, CortexScore)
+
+
+def test_cortex_score_all_fields_in_range():
+    rpt = evaluate_design_understanding("Build a ROS2 rover with LiDAR.")
+    cs = rpt.cortex_score
+    for field in ("intent_clarity", "constraint_traceability",
+                  "physics_grounding", "artifact_provenance", "execution_evidence"):
+        value = getattr(cs, field)
+        assert 0.0 <= value <= 1.0, f"cortex_score.{field} = {value} out of range"
+
+
+def test_cortex_score_intent_clarity_higher_with_platform_and_domains():
+    rpt_rich = evaluate_design_understanding("Build a ROS2 rover with LiDAR and IMU sensors.")
+    rpt_bare = evaluate_design_understanding("Build something cool.")
+    assert rpt_rich.cortex_score.intent_clarity > rpt_bare.cortex_score.intent_clarity
+
+
+def test_cortex_score_constraint_traceability_improves_with_review():
+    review_good = _review(comp_total=4, comp_power=4, comp_bus=4, comp_region=4)
+    review_bad  = _review(comp_total=4, comp_power=0, comp_bus=0, comp_region=0)
+    rpt_good = evaluate_design_understanding("Build a rover.", graph_review=review_good)
+    rpt_bad  = evaluate_design_understanding("Build a rover.", graph_review=review_bad)
+    assert rpt_good.cortex_score.constraint_traceability > rpt_bad.cortex_score.constraint_traceability
+
+
+def test_cortex_score_artifact_provenance_zero_without_graph():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert rpt.cortex_score.artifact_provenance == 0.0
+
+
+def test_cortex_score_artifact_provenance_positive_with_full_graph():
+    graph = _graph(
+        platform_normalized="ground-rover",
+        components=[Component(id="c1", name="motor")],
+        ros2_nodes=[Ros2Node(id="n1", name="nav_node")],
+        morphology=[Morphology(id="m1", description="frame")],
+    )
+    rpt = evaluate_design_understanding("Build a rover.", graph=graph)
+    assert rpt.cortex_score.artifact_provenance > 0.0
+
+
+def test_cortex_score_execution_evidence_with_linked_nodes():
+    review = _review(node_total=2, nodes_with_comp=2)
+    rpt = evaluate_design_understanding("Build a rover.", graph_review=review)
+    # review with no graph nodes means ros2_coverage.total=2, linked=2 but graph has no ros2_nodes
+    # execution_evidence should still be non-negative
+    assert rpt.cortex_score.execution_evidence >= 0.0
+
+
+def test_cortex_score_serializes_as_dict():
+    rpt = evaluate_design_understanding("Build a rover.")
+    data = rpt.model_dump(mode="json")
+    cs = data["cortex_score"]
+    assert isinstance(cs, dict)
+    for key in ("intent_clarity", "constraint_traceability",
+                "physics_grounding", "artifact_provenance", "execution_evidence"):
+        assert key in cs

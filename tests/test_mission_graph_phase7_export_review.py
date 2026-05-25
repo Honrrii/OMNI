@@ -423,3 +423,120 @@ def test_export_design_understanding_failure_does_not_break_export(tmp_path, mon
     # Cortex key must still be present, with a failed status
     assert result["cortex"]["design_understanding"]["status"] == "failed"
     assert "error" in result["cortex"]["design_understanding"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 10C — design_understanding_report.json contains new diagnostic fields
+# ---------------------------------------------------------------------------
+
+def test_design_understanding_report_has_phase10c_fields(tmp_path, monkeypatch):
+    """design_understanding_report.json includes all Phase 10C diagnostic fields."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design a ROS2 ground rover for terrain scouting.",
+        "result_id": "phase10c-schema",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+    export_dir = Path(result["export_dir"])
+    report = json.loads((export_dir / "design_understanding_report.json").read_text())
+
+    for key in (
+        "mission_intent", "design_envelope", "detected_domains",
+        "design_candidates", "constraint_links", "provenance_summary",
+        "validation_gaps", "open_questions", "cortex_score",
+    ):
+        assert key in report, f"design_understanding_report.json missing Phase 10C key: {key}"
+
+
+def test_design_understanding_report_cortex_score_has_five_axes(tmp_path, monkeypatch):
+    """cortex_score in the written report contains all five scoring axes."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design a ROS2 ground rover for terrain scouting.",
+        "result_id": "phase10c-cortex-score",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+    export_dir = Path(result["export_dir"])
+    report = json.loads((export_dir / "design_understanding_report.json").read_text())
+
+    cs = report["cortex_score"]
+    for axis in ("intent_clarity", "constraint_traceability",
+                 "physics_grounding", "artifact_provenance", "execution_evidence"):
+        assert axis in cs, f"cortex_score missing axis: {axis}"
+        assert 0.0 <= cs[axis] <= 1.0, f"cortex_score.{axis} out of range"
+
+
+def test_design_understanding_report_provenance_lists_sources(tmp_path, monkeypatch):
+    """provenance_summary in the written report lists at least mission_text as a source."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design a ROS2 ground rover for terrain scouting.",
+        "result_id": "phase10c-provenance",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+    export_dir = Path(result["export_dir"])
+    report = json.loads((export_dir / "design_understanding_report.json").read_text())
+
+    prov = report["provenance_summary"]
+    assert "mission_text" in prov["sources_used"]
+    assert prov["source_count"] >= 1
+
+
+def test_design_understanding_report_validation_gaps_is_list(tmp_path, monkeypatch):
+    """validation_gaps in the written report is a non-empty list."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design a ROS2 ground rover for terrain scouting.",
+        "result_id": "phase10c-gaps",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+    export_dir = Path(result["export_dir"])
+    report = json.loads((export_dir / "design_understanding_report.json").read_text())
+
+    assert isinstance(report["validation_gaps"], list)
+    assert len(report["validation_gaps"]) >= 1
+
+
+def test_design_understanding_report_open_questions_non_empty(tmp_path, monkeypatch):
+    """open_questions in the written report is a non-empty list."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design a ROS2 ground rover for terrain scouting.",
+        "result_id": "phase10c-questions",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+    export_dir = Path(result["export_dir"])
+    report = json.loads((export_dir / "design_understanding_report.json").read_text())
+
+    assert isinstance(report["open_questions"], list)
+    assert len(report["open_questions"]) >= 1
