@@ -563,3 +563,109 @@ def test_enrichment_called_in_builder(tmp_path):
     assert graph.platform_normalized == "ground-rover", (
         f"Expected 'ground-rover', got '{graph.platform_normalized}'"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 10E — Shared platform intent resolver integration tests
+# ---------------------------------------------------------------------------
+
+def _write_mission_json_simple(folder: Path, mission: str) -> None:
+    """Write a minimal mission.json for builder tests."""
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "mission.json").write_text(
+        json.dumps({
+            "mission": mission,
+            "result_id": "phase10e-test",
+            "agents": {},
+            "artifacts": {},
+            "status": "complete",
+        }),
+        encoding="utf-8",
+    )
+
+
+def test_ambiguous_drone_rover_mission_resolves_to_ground_rover(tmp_path):
+    """The squid-dome / inspection-drone / metal-surface pattern resolves to ground-rover."""
+    folder = tmp_path / "squid_rover"
+    _write_mission_json_simple(
+        folder,
+        "Design and develop a small rover inspired by a squid dome shape which will serve "
+        "as an inspection drone capable of traversing metal surfaces.",
+    )
+    graph = build_graph(folder)
+    assert graph.platform_normalized == "ground-rover", (
+        f"Expected 'ground-rover', got '{graph.platform_normalized}'"
+    )
+
+
+def test_ambiguous_mission_platform_keyword_is_rover(tmp_path):
+    """graph.platform should be the raw matched keyword 'rover', not 'drone'."""
+    folder = tmp_path / "squid_rover_kw"
+    _write_mission_json_simple(
+        folder,
+        "A small rover / metal-surface inspection drone capable of traversing metal surfaces.",
+    )
+    graph = build_graph(folder)
+    assert graph.platform == "rover", (
+        f"Expected raw keyword 'rover', got '{graph.platform}'"
+    )
+    assert graph.platform_normalized == "ground-rover"
+
+
+def test_drone_with_aerial_context_resolves_to_drone_uav(tmp_path):
+    """Drone mission with explicit aerial context → drone-uav in the mission graph."""
+    folder = tmp_path / "aerial_drone"
+    _write_mission_json_simple(
+        folder,
+        "Inspection drone with quadcopter rotors for aerial mapping and hover capability.",
+    )
+    graph = build_graph(folder)
+    assert graph.platform_normalized == "drone-uav", (
+        f"Expected 'drone-uav', got '{graph.platform_normalized}'"
+    )
+
+
+def test_underwater_rov_resolves_in_builder(tmp_path):
+    """Mission with 'ROV' and underwater context → rov platform in the graph."""
+    folder = tmp_path / "underwater_rov"
+    _write_mission_json_simple(
+        folder,
+        "Deploy an underwater ROV for subsea pipeline inspection.",
+    )
+    graph = build_graph(folder)
+    assert graph.platform_normalized == "rov", (
+        f"Expected 'rov', got '{graph.platform_normalized}'"
+    )
+
+
+def test_rover_keyword_does_not_produce_rov_platform(tmp_path):
+    """'rov' must not fire as a substring of 'rover' — platform must not be 'rov'."""
+    folder = tmp_path / "rover_no_rov"
+    _write_mission_json_simple(
+        folder,
+        "Build a six-wheeled rover for planetary terrain exploration.",
+    )
+    graph = build_graph(folder)
+    assert graph.platform != "rov", (
+        f"'rov' should not match inside 'rover'; got platform='{graph.platform}'"
+    )
+    assert graph.platform_normalized == "ground-rover"
+
+
+def test_shared_resolver_and_cortex_agree_on_platform(tmp_path):
+    """builder + enrichment must agree with Cortex on platform_normalized."""
+    from backend.app.cortex.design_evaluator import evaluate_design_understanding
+
+    mission = (
+        "A small rover / metal-surface inspection drone capable of traversing metal surfaces."
+    )
+    folder = tmp_path / "agree"
+    _write_mission_json_simple(folder, mission)
+    graph = build_graph(folder)
+
+    cortex_report = evaluate_design_understanding(mission)
+
+    assert graph.platform_normalized == cortex_report.intended_platform, (
+        f"Mission graph ({graph.platform_normalized}) and Cortex "
+        f"({cortex_report.intended_platform}) disagree on platform."
+    )

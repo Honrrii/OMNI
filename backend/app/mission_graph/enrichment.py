@@ -14,19 +14,6 @@ from backend.app.mission_graph.schemas import BodyRegion, MissionKnowledgeGraph
 
 _VOLT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*[Vv](?:olt)?")
 
-_PLATFORM_ALIASES: Dict[str, str] = {
-    "manta ray": "manta-ray-uuv",
-    "insect robot": "insect-robot",
-    "hexapod": "hexapod",
-    "quadruped": "quadruped",
-    "robot arm": "robot-arm",
-    "humanoid": "humanoid",
-    "drone": "drone-uav",
-    "uav": "drone-uav",
-    "auv": "auv",
-    "rov": "rov",
-    "rover": "ground-rover",
-}
 
 
 def _slugify(text: str) -> str:
@@ -34,13 +21,12 @@ def _slugify(text: str) -> str:
 
 
 def _normalize_platform(graph: MissionKnowledgeGraph) -> None:
-    raw = (graph.platform or graph.mission_text or "").lower()
-    # Longer keys are more specific — check them first to avoid "rov" matching "rover".
-    for key in sorted(_PLATFORM_ALIASES, key=len, reverse=True):
-        if key in raw:
-            graph.platform_normalized = _PLATFORM_ALIASES[key]
-            return
-    if graph.platform:
+    from backend.app.platform_intent import resolve_platform_slug
+    text = graph.platform or graph.mission_text or ""
+    slug = resolve_platform_slug(text)
+    if slug:
+        graph.platform_normalized = slug
+    elif graph.platform:
         graph.platform_normalized = _slugify(graph.platform)
 
 

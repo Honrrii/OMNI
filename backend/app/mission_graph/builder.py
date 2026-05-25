@@ -47,10 +47,6 @@ _KNOWN_PROTOCOLS = [
     "PWM", "Ethernet", "Wi-Fi", "Bluetooth", "MQTT",
 ]
 
-_PLATFORM_KEYWORDS = [
-    "manta ray", "insect robot", "hexapod", "quadruped",
-    "robot arm", "humanoid", "drone", "uav", "auv", "rov", "rover",
-]
 
 _EXT_TO_TYPE: Dict[str, str] = {
     ".py":    "ros2",
@@ -101,11 +97,8 @@ def _safe_str(val: Any) -> str:
 # ---------------------------------------------------------------------------
 
 def _extract_platform(mission_text: str) -> str:
-    lower = mission_text.lower()
-    for kw in sorted(_PLATFORM_KEYWORDS, key=len, reverse=True):
-        if kw in lower:
-            return kw
-    return ""
+    from backend.app.platform_intent import resolve_platform_keyword
+    return resolve_platform_keyword(mission_text)
 
 
 def _extract_ros2(sky: dict) -> Tuple[List[Ros2Node], List[Ros2Topic]]:
