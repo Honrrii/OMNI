@@ -49,15 +49,15 @@ class AgentCouncil:
         return mission_state
 
     def _cross_review(self, mission_state: MissionState) -> MissionState:
-        sky = mission_state.get_contribution(AgentRole.ROBOTICS)
-        isy = mission_state.get_contribution(AgentRole.PHYSICS)
-        oli = mission_state.get_contribution(AgentRole.CAD)
+        sky = mission_state.get_contribution(AgentRole.SKY)
+        isy = mission_state.get_contribution(AgentRole.ISY)
+        oli = mission_state.get_contribution(AgentRole.OLI)
 
         if sky and isy:
             mission_state = send_agent_message(
                 mission_state=mission_state,
-                sender=AgentRole.ROBOTICS,
-                receiver=AgentRole.CAD,
+                sender=AgentRole.SKY,
+                receiver=AgentRole.OLI,
                 message_type=MessageType.REVIEW,
                 summary="Robotics reviewed CAD morphology for motion compatibility.",
                 conclusions=[
@@ -74,8 +74,8 @@ class AgentCouncil:
         if oli and isy:
             mission_state = send_agent_message(
                 mission_state=mission_state,
-                sender=AgentRole.HARDWARE,
-                receiver=AgentRole.CAD,
+                sender=AgentRole.KORVA,
+                receiver=AgentRole.OLI,
                 message_type=MessageType.REVIEW,
                 summary="Electronics reviewed CAD morphology for PCB, battery, and wiring compatibility.",
                 conclusions=[

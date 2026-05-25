@@ -7,19 +7,15 @@ from pydantic import BaseModel, Field
 
 
 class AgentRole(str, Enum):
-    ECHO = "Echo"
-    SUPERVISOR = "Omni"
-
-    DESIGN = "Vega"
-    ROBOTICS = "Sky"
-    HARDWARE = "Korva"
-    PHYSICS = "Isy"
-    CAD = "Oli"
-
-    CRITIQUE = "Pluto"
-    VALIDATION = "QaZ"
-
-    # Final packaging / artifact synthesis role.
+    ECHO  = "Echo"    # mission interpreter
+    OMNI  = "Omni"   # supervisor / system orchestrator
+    VEGA  = "Vega"   # creative design and morphology
+    SKY   = "Sky"    # robotics, ROS2, autonomy
+    KORVA = "Korva"  # hardware, electronics, PCB, wiring
+    ISY   = "Isy"    # physics, controls, dynamics
+    OLI   = "Oli"    # CAD, Fusion 360, visual artifacts
+    PLUTO = "Pluto"  # risk, failure analysis, safety gates
+    QAZ   = "QaZ"    # validation and scoring
 
 
 class MessageType(str, Enum):
