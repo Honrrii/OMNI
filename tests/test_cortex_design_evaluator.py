@@ -866,3 +866,149 @@ def test_cortex_score_serializes_as_dict():
     for key in ("intent_clarity", "constraint_traceability",
                 "physics_grounding", "artifact_provenance", "execution_evidence"):
         assert key in cs
+
+
+# ===========================================================================
+# Phase 10D — Platform intent disambiguation and word-boundary matching
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Mixed-signal disambiguation: rover + traversal context beats generic "drone"
+# ---------------------------------------------------------------------------
+
+def test_rover_with_inspection_drone_phrase_resolves_to_ground_rover():
+    """When both 'rover' and 'drone' appear but ground context is stronger, pick ground-rover."""
+    rpt = evaluate_design_understanding(
+        "A small rover / metal-surface inspection drone capable of traversing metal surfaces."
+    )
+    assert rpt.intended_platform == "ground-rover"
+
+
+def test_mixed_platform_primary_candidate_is_ground_rover():
+    rpt = evaluate_design_understanding(
+        "A small rover / metal-surface inspection drone capable of traversing metal surfaces."
+    )
+    primary = [c for c in rpt.design_candidates if c["is_primary"]]
+    assert len(primary) == 1
+    assert primary[0]["platform"] == "ground-rover"
+
+
+def test_drone_with_aerial_context_resolves_to_drone_uav():
+    """When 'drone' + explicit aerial context is present, drone-uav should win."""
+    rpt = evaluate_design_understanding(
+        "Inspection drone with quadcopter rotors for aerial mapping and hover capability."
+    )
+    assert rpt.intended_platform == "drone-uav"
+
+
+def test_drone_quadcopter_aerial_candidate_is_primary():
+    rpt = evaluate_design_understanding(
+        "Inspection drone with quadcopter rotors for aerial mapping."
+    )
+    primary = [c for c in rpt.design_candidates if c["is_primary"]]
+    assert len(primary) == 1
+    assert primary[0]["platform"] == "drone-uav"
+
+
+# ---------------------------------------------------------------------------
+# Underwater ROV disambiguation
+# ---------------------------------------------------------------------------
+
+def test_underwater_rov_resolves_to_rov():
+    rpt = evaluate_design_understanding(
+        "Underwater ROV for subsea inspection and tethered cable deployment."
+    )
+    assert rpt.intended_platform == "rov"
+
+
+def test_underwater_rov_subsea_context_signals_applied():
+    """Context signals (underwater, subsea) should raise rov's score above any noise."""
+    rpt = evaluate_design_understanding(
+        "Deploy an ROV for underwater pipeline inspection in subsea environments."
+    )
+    assert rpt.intended_platform == "rov"
+
+
+# ---------------------------------------------------------------------------
+# Word-boundary matching: 'rov' must not fire inside 'rover'
+# ---------------------------------------------------------------------------
+
+def test_rover_text_does_not_produce_rov_candidate():
+    """'rov' keyword must not match as a substring inside 'rover'."""
+    rpt = evaluate_design_understanding("Build a rover for terrain scouting.")
+    platforms = [c["platform"] for c in rpt.design_candidates]
+    assert "rov" not in platforms
+
+
+def test_six_wheeled_rover_does_not_produce_rov_candidate():
+    rpt = evaluate_design_understanding(
+        "Deploy a six-wheeled rover for planetary exploration."
+    )
+    platforms = [c["platform"] for c in rpt.design_candidates]
+    assert "rov" not in platforms
+    assert "ground-rover" in platforms
+
+
+def test_rover_resolves_to_ground_rover_not_rov():
+    rpt = evaluate_design_understanding("Build a rover.")
+    assert rpt.intended_platform == "ground-rover"
+    assert rpt.intended_platform != "rov"
+
+
+def test_standalone_rov_token_does_match():
+    """When 'ROV' appears as its own word, the rov platform should be detected."""
+    rpt = evaluate_design_understanding("Deploy an ROV for inspection.")
+    assert rpt.intended_platform == "rov"
+
+
+# ---------------------------------------------------------------------------
+# crawler keyword
+# ---------------------------------------------------------------------------
+
+def test_crawler_resolves_to_ground_rover():
+    rpt = evaluate_design_understanding("Build an inspection crawler for metal pipe surfaces.")
+    assert rpt.intended_platform == "ground-rover"
+
+
+def test_crawler_candidate_present():
+    rpt = evaluate_design_understanding("Build an inspection crawler.")
+    platforms = [c["platform"] for c in rpt.design_candidates]
+    assert "ground-rover" in platforms
+
+
+# ---------------------------------------------------------------------------
+# Word-boundary: 'arm' must not fire inside 'swarm' or 'alarm'
+# ---------------------------------------------------------------------------
+
+def test_arm_does_not_match_inside_swarm():
+    rpt = evaluate_design_understanding("Build a drone swarm for search and rescue.")
+    assert rpt.intended_platform != "robot-arm"
+
+
+def test_arm_does_not_match_inside_alarm():
+    rpt = evaluate_design_understanding("Activate an alarm system for the facility.")
+    # 'arm' is in 'alarm'; with word-boundary matching it must NOT fire
+    assert rpt.intended_platform is None
+
+
+# ---------------------------------------------------------------------------
+# design_candidates confidence and ordering
+# ---------------------------------------------------------------------------
+
+def test_primary_candidate_has_highest_confidence():
+    """Primary candidate must always have the highest confidence."""
+    rpt = evaluate_design_understanding(
+        "A small rover / metal-surface inspection drone capable of traversing metal surfaces."
+    )
+    if len(rpt.design_candidates) > 1:
+        primary = next(c for c in rpt.design_candidates if c["is_primary"])
+        others = [c for c in rpt.design_candidates if not c["is_primary"]]
+        assert all(primary["confidence"] >= o["confidence"] for o in others)
+
+
+def test_secondary_candidates_confidence_in_range():
+    rpt = evaluate_design_understanding(
+        "A small rover / metal-surface inspection drone capable of traversing metal surfaces."
+    )
+    for c in rpt.design_candidates:
+        assert 0.0 <= c["confidence"] <= 1.0

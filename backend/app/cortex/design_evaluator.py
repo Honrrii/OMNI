@@ -41,6 +41,7 @@ _PLATFORM_KEYWORDS: Dict[str, str] = {
     "drone":        "drone-uav",
     "uav":          "drone-uav",
     "auv":          "auv",
+    "crawler":      "ground-rover",
     "rov":          "rov",
     "rover":        "ground-rover",
     "arm":          "robot-arm",
@@ -85,6 +86,39 @@ _PERF_WORDS: Set[str] = {
     "weight", "mass", "kg", "gram", "speed", "velocity",
     "range", "battery", "watt", "volt", "meter", "payload",
     "altitude", "depth", "torque", "rpm", "frequency",
+}
+
+# Context signals used to disambiguate when multiple platform keywords match.
+# Checked via substring so "traverse" matches "traversing", "rotor" matches "rotors".
+# Score = keyword_length + 2 × context_hits — the higher-scoring platform wins.
+_PLATFORM_CONTEXT_SIGNALS: Dict[str, Set[str]] = {
+    "ground-rover": {
+        "rover", "crawler", "crawl", "traverse", "traversing",
+        "wheel", "wheeled", "track", "tracked", "magnetic",
+        "terrain", "ground", "metal", "surface", "rolling", "floor",
+    },
+    "drone-uav": {
+        "drone", "fly", "flying", "aerial", "propeller", "rotor",
+        "airborne", "altitude", "hover", "flight", "sky",
+        "quadcopter", "hexacopter", "uav",
+    },
+    "rov": {
+        "underwater", "subsea", "tethered", "ocean", "sea",
+        "marine", "submerged", "depth", "remotely operated",
+    },
+    "auv": {
+        "underwater", "subsea", "autonomous", "ocean", "sea",
+        "marine", "submerged",
+    },
+    "manta-ray-uuv": {"underwater", "ray", "ocean", "marine", "fin"},
+    "robot-arm": {
+        "manipulation", "pick", "place", "grasp", "dof",
+        "joint", "wrist", "elbow", "shoulder",
+    },
+    "hexapod": {"hexapod", "six", "leg", "legged", "walking"},
+    "quadruped": {"four", "leg", "legged", "walking", "canine"},
+    "humanoid": {"bipedal", "biped", "walk", "human", "upright"},
+    "insect-robot": {"insect", "leg", "legged", "walking", "six"},
 }
 
 
@@ -155,13 +189,48 @@ class DesignUnderstandingReport(BaseModel):
 # Internal helpers — Phase 10A
 # ---------------------------------------------------------------------------
 
-def _extract_platform(text: str) -> Optional[str]:
-    """Return the platform slug for the first keyword found (longest match first)."""
+def _word_present(keyword: str, text_lower: str) -> bool:
+    """True iff keyword appears as a complete token — prevents 'rov' matching inside 'rover'."""
+    return bool(re.search(r"\b" + re.escape(keyword) + r"\b", text_lower))
+
+
+def _rank_platform_matches(text: str) -> List[Tuple[float, str, str]]:
+    """
+    Return (score, platform, matched_keyword) for every keyword present in text,
+    sorted by score descending.
+
+    score = keyword_length + 2 × context_signal_hits.
+
+    Matching is word-boundary-aware so short keywords like 'rov' cannot fire as
+    substrings of longer words like 'rover'.  Only the first (longest-keyword)
+    match per platform is kept.
+    """
     lower = text.lower()
+    seen: Set[str] = set()
+    ranked: List[Tuple[float, str, str]] = []
+
     for key in sorted(_PLATFORM_KEYWORDS, key=len, reverse=True):
-        if key in lower:
-            return _PLATFORM_KEYWORDS[key]
-    return None
+        if not _word_present(key, lower):
+            continue
+        platform = _PLATFORM_KEYWORDS[key]
+        if platform in seen:
+            continue
+        seen.add(platform)
+        ctx_hits = sum(
+            1 for sig in _PLATFORM_CONTEXT_SIGNALS.get(platform, set())
+            if sig in lower
+        )
+        score = float(len(key) + ctx_hits * 2)
+        ranked.append((score, platform, key))
+
+    ranked.sort(key=lambda t: t[0], reverse=True)
+    return ranked
+
+
+def _extract_platform(text: str) -> Optional[str]:
+    """Return the best-scoring platform slug, or None when no keywords match."""
+    ranked = _rank_platform_matches(text)
+    return ranked[0][1] if ranked else None
 
 
 def _extract_domain_signals(text: str) -> List[str]:
@@ -279,24 +348,24 @@ def _build_design_candidates(
     mission_text: str,
     intended_platform: Optional[str],
 ) -> List[Dict[str, Any]]:
-    """Ranked list of platform candidates matched in the mission text."""
-    lower = mission_text.lower()
+    """Ranked list of platform candidates, ordered by context-aware match score."""
+    ranked = _rank_platform_matches(mission_text)
+    if not ranked:
+        return []
+    max_score = ranked[0][0]
     candidates: List[Dict[str, Any]] = []
-    seen: Set[str] = set()
-
-    for key in sorted(_PLATFORM_KEYWORDS, key=len, reverse=True):
-        if key in lower:
-            platform = _PLATFORM_KEYWORDS[key]
-            if platform not in seen:
-                is_primary = platform == intended_platform
-                candidates.append({
-                    "platform": platform,
-                    "matched_keyword": key,
-                    "confidence": 0.90 if is_primary else 0.55,
-                    "is_primary": is_primary,
-                })
-                seen.add(platform)
-
+    for score, platform, key in ranked:
+        is_primary = platform == intended_platform
+        if is_primary:
+            confidence = 0.90
+        else:
+            confidence = round(max(0.40, min(0.80, score / max(max_score, 1.0) * 0.85)), 2)
+        candidates.append({
+            "platform": platform,
+            "matched_keyword": key,
+            "confidence": confidence,
+            "is_primary": is_primary,
+        })
     return candidates
 
 
