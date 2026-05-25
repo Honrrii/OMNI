@@ -734,6 +734,45 @@ def _write_graph_review(export_dir: Path) -> Dict[str, Any]:
     }
 
 
+def _write_design_understanding(
+    export_dir: Path,
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Build the mission graph and review, evaluate design understanding, and write
+    design_understanding_report.json into export_dir.
+
+    Rebuilds the graph/review objects so this helper stays self-contained and
+    does not require callers to thread live objects through.  May raise; callers
+    are responsible for catching errors.
+    """
+    from backend.app.mission_graph.builder import build_graph
+    from backend.app.mission_graph.reviewer import review_graph
+    from backend.app.cortex.design_evaluator import evaluate_design_understanding
+
+    graph = build_graph(export_dir)
+    review = review_graph(graph)
+
+    report = evaluate_design_understanding(
+        mission_text,
+        graph=graph,
+        graph_review=review,
+    )
+
+    report_path = export_dir / "design_understanding_report.json"
+    write_json(report_path, report.model_dump(mode="json"))
+
+    return {
+        "status": "evaluated",
+        "report_path": str(report_path),
+        "intended_platform": report.intended_platform,
+        "semantic_match_score": report.semantic_match_score,
+        "strength_count": len(report.strengths),
+        "mismatch_count": len(report.mismatches),
+        "next_action_count": len(report.next_design_actions),
+    }
+
+
 # -------------------------------------------------------------------------
 # Main export function
 # -------------------------------------------------------------------------
@@ -878,6 +917,22 @@ def export_mission_files(
         graph_review = {"status": "failed", "error": str(error)}
         path = export_dir / "mission_graph_review.json"
         write_json(path, graph_review)
+        record(path)
+
+    # ---------------------------------------------------------
+    # Cortex — design understanding evaluation
+    # (depends on mission_graph.json written above)
+    # ---------------------------------------------------------
+
+    design_understanding: Optional[Dict[str, Any]] = None
+
+    try:
+        design_understanding = _write_design_understanding(export_dir, mission)
+        record(Path(design_understanding["report_path"]))
+    except Exception as error:
+        design_understanding = {"status": "failed", "error": str(error)}
+        path = export_dir / "design_understanding_report.json"
+        write_json(path, design_understanding)
         record(path)
 
     # ---------------------------------------------------------
@@ -1267,4 +1322,7 @@ def export_mission_files(
         "morphology_validation": morphology_validation,
         "mission_report": mission_report,
         "graph_review": graph_review,
+        "cortex": {
+            "design_understanding": design_understanding,
+        },
     }

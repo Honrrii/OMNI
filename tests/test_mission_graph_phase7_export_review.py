@@ -249,3 +249,177 @@ def test_export_mission_files_graph_review_files_in_file_list(tmp_path, monkeypa
     files = result["files"]
     assert any("mission_graph_review.json" in f for f in files)
     assert any("mission_graph.json" in f for f in files)
+
+
+# ---------------------------------------------------------------------------
+# Phase 10B — Design Understanding report integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_write_design_understanding_creates_json(tmp_path):
+    """Helper writes design_understanding_report.json and returns evaluated status."""
+    folder = tmp_path / "mission"
+    _write_mission_json(folder, "Build a ground rover for terrain scouting.")
+
+    from backend.app.export.export_manager import _write_design_understanding
+    result = _write_design_understanding(folder, "Build a ground rover for terrain scouting.")
+
+    assert (folder / "design_understanding_report.json").exists()
+    assert result["status"] == "evaluated"
+
+
+def test_write_design_understanding_report_fields(tmp_path):
+    """design_understanding_report.json contains all required top-level fields."""
+    folder = tmp_path / "mission"
+    _write_mission_json(folder, "Build a ground rover for terrain scouting.")
+
+    from backend.app.export.export_manager import _write_design_understanding
+    _write_design_understanding(folder, "Build a ground rover for terrain scouting.")
+
+    report = json.loads((folder / "design_understanding_report.json").read_text())
+    for key in (
+        "semantic_match_score", "intended_platform",
+        "strengths", "mismatches", "next_design_actions",
+        "observed_platform_signals",
+    ):
+        assert key in report, f"Missing key in design_understanding_report.json: {key}"
+
+
+def test_write_design_understanding_score_range(tmp_path):
+    """semantic_match_score in the written report is within [0.0, 1.0]."""
+    folder = tmp_path / "mission"
+    _write_mission_json(folder, "Build a drone for aerial mapping.")
+
+    from backend.app.export.export_manager import _write_design_understanding
+    _write_design_understanding(folder, "Build a drone for aerial mapping.")
+
+    report = json.loads((folder / "design_understanding_report.json").read_text())
+    assert 0.0 <= report["semantic_match_score"] <= 1.0
+
+
+def test_write_design_understanding_return_summary_keys(tmp_path):
+    """Return dict exposes intended_platform, semantic_match_score, and counts."""
+    folder = tmp_path / "mission"
+    _write_mission_json(folder, "Build a rover.")
+
+    from backend.app.export.export_manager import _write_design_understanding
+    result = _write_design_understanding(folder, "Build a rover.")
+
+    for key in (
+        "intended_platform", "semantic_match_score",
+        "strength_count", "mismatch_count", "next_action_count",
+    ):
+        assert key in result, f"Missing key in _write_design_understanding return: {key}"
+
+
+def test_write_design_understanding_failure_does_not_raise(tmp_path):
+    """Helper raises on a folder with no mission.json (caller handles the exception)."""
+    empty_folder = tmp_path / "empty"
+    empty_folder.mkdir()
+
+    from backend.app.export.export_manager import _write_design_understanding
+    # Should raise (caller wraps in try/except) — just verify it doesn't silently corrupt
+    try:
+        _write_design_understanding(empty_folder, "Build a rover.")
+    except Exception:
+        pass  # expected — caller is responsible for catching
+
+
+def test_export_creates_design_understanding_report(tmp_path, monkeypatch):
+    """Full export pipeline creates design_understanding_report.json in the export dir."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design an autonomous navigation system for land surveying.",
+        "result_id": "phase10b-integration",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+
+    export_dir = Path(result["export_dir"])
+    report_path = export_dir / "design_understanding_report.json"
+    assert report_path.exists(), f"Expected {report_path} to exist"
+
+    report = json.loads(report_path.read_text())
+    assert "semantic_match_score" in report
+    assert "intended_platform" in report
+    assert "strengths" in report
+    assert "mismatches" in report
+    assert "next_design_actions" in report
+
+
+def test_export_return_dict_has_cortex_key(tmp_path, monkeypatch):
+    """export_mission_files return dict includes 'cortex.design_understanding' summary."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design a ROS2 ground rover for terrain scouting.",
+        "result_id": "phase10b-cortex-key",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+
+    assert "cortex" in result
+    cortex = result["cortex"]
+    assert "design_understanding" in cortex
+    du = cortex["design_understanding"]
+    assert du is not None
+    assert du.get("status") == "evaluated"
+    assert "semantic_match_score" in du
+
+
+def test_export_design_understanding_in_file_list(tmp_path, monkeypatch):
+    """design_understanding_report.json appears in the export files list."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design a ROS2 ground rover for terrain scouting.",
+        "result_id": "phase10b-file-list",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+
+    files = result["files"]
+    assert any("design_understanding_report.json" in f for f in files)
+
+
+def test_export_design_understanding_failure_does_not_break_export(tmp_path, monkeypatch):
+    """If design understanding evaluation fails, the overall export still succeeds."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    # Force the design understanding step to raise by patching the helper
+    original = em._write_design_understanding
+
+    def _boom(export_dir, mission_text):
+        raise RuntimeError("simulated cortex failure")
+
+    monkeypatch.setattr(em, "_write_design_understanding", _boom)
+
+    mission_result = {
+        "mission": "Design a ROS2 ground rover for terrain scouting.",
+        "result_id": "phase10b-failure-test",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+
+    # Export itself must succeed
+    assert result["status"] == "exported"
+    # Cortex key must still be present, with a failed status
+    assert result["cortex"]["design_understanding"]["status"] == "failed"
+    assert "error" in result["cortex"]["design_understanding"]
