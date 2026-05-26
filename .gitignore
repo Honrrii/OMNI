@@ -43,6 +43,7 @@ knowledge/processed/
 knowledge/index/
 *.zip
 memory/project_memory.json
+memory/omni_memory.json
 
 logs/telemetry/*.jsonl
 # Raw imported knowledge cards

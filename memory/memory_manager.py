@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 MEMORY_DIR = Path("memory")
-MEMORY_FILE = MEMORY_DIR / "project_memory.json"
+MEMORY_FILE = MEMORY_DIR / "omni_memory.json"
 
 MAX_MISSIONS_TO_KEEP = 25
 MAX_SUMMARY_CHARS = 1400
@@ -110,9 +110,9 @@ def add_mission_to_memory(mission, summary):
     save_memory(memory)
 
 
-def get_recent_memory(limit=3):
+def get_recent_memory(n=5):
     memory = load_memory()
-    recent = memory["missions"][-limit:]
+    recent = memory["missions"][-n:]
 
     if not recent:
         return "No previous mission memory yet."
