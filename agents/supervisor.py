@@ -14,6 +14,7 @@ from agents.design_agent import DesignAgent
 from agents.design_candidates import extract_design_candidates_from_text
 from agents.candidate_evaluator import evaluate_design_candidates
 from backend.app.omni_core.mission_intent import compile_mission_intent
+from backend.app.omni_core.safety_gate import evaluate_safety_gate
 from agents.artifact_synthesizer import synthesize_artifacts
 from agents.validator_agent import ValidatorAgent
 
@@ -1121,6 +1122,13 @@ Give the final go/no-go style decision.
                 )
             except Exception:
                 artifacts["candidate_evaluation"] = {"candidates_evaluated": 0, "error": "evaluation failed"}
+        try:
+            artifacts["pluto_safety_gate"] = evaluate_safety_gate(
+                mission_intent=artifacts.get("mission_intent"),
+                candidate_evaluation=artifacts.get("candidate_evaluation"),
+            )
+        except Exception:
+            artifacts["pluto_safety_gate"] = {"gate": "pluto_safety_gate", "error": "safety gate evaluation failed"}
         artifacts["revision_summary"] = revision_payload
         artifacts["export_manifest"] = export_manifest
 
