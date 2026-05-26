@@ -796,6 +796,43 @@ def _write_candidate_evaluation(
     }
 
 
+def _write_mission_intent(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Write mission_intent_report.json into export_dir.
+
+    Priority order:
+    1. Pre-computed mission_intent from mission_result artifacts.
+    2. Compile from mission_text on-demand.
+    3. Write a failed marker if compilation raises.
+
+    Always writes the file. May raise; callers must catch.
+    """
+    from backend.app.omni_core.mission_intent import compile_mission_intent
+
+    artifacts = as_dict(mission_result.get("artifacts", {}))
+    report_path = export_dir / "mission_intent_report.json"
+
+    precomputed = artifacts.get("mission_intent")
+    if isinstance(precomputed, dict) and precomputed.get("mission_type"):
+        intent = precomputed
+    else:
+        intent = compile_mission_intent(mission_text)
+
+    write_json(report_path, intent)
+    return {
+        "status": "compiled",
+        "report_path": str(report_path),
+        "mission_type": intent.get("mission_type", ""),
+        "platform_intent": intent.get("platform_intent"),
+        "detected_domain_count": len(intent.get("detected_domains") or []),
+        "open_question_count": len(intent.get("open_questions") or []),
+    }
+
+
 def _write_design_understanding(
     export_dir: Path,
     mission_text: str,
@@ -1012,6 +1049,21 @@ def export_mission_files(
         candidate_evaluation_summary = {"status": "failed", "error": str(error)}
         path = export_dir / "candidate_evaluation_report.json"
         write_json(path, candidate_evaluation_summary)
+        record(path)
+
+    # ---------------------------------------------------------
+    # Mission intent export
+    # ---------------------------------------------------------
+
+    mission_intent_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        mission_intent_summary = _write_mission_intent(export_dir, mission_result, mission)
+        record(Path(mission_intent_summary["report_path"]))
+    except Exception as error:
+        mission_intent_summary = {"status": "failed", "error": str(error)}
+        path = export_dir / "mission_intent_report.json"
+        write_json(path, mission_intent_summary)
         record(path)
 
     # ---------------------------------------------------------
@@ -1404,5 +1456,6 @@ def export_mission_files(
         "cortex": {
             "design_understanding": design_understanding,
             "candidate_evaluation": candidate_evaluation_summary,
+            "mission_intent": mission_intent_summary,
         },
     }
