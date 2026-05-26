@@ -15,6 +15,7 @@ from agents.design_candidates import extract_design_candidates_from_text
 from agents.candidate_evaluator import evaluate_design_candidates
 from backend.app.omni_core.mission_intent import compile_mission_intent
 from backend.app.omni_core.safety_gate import evaluate_safety_gate
+from backend.app.omni_core.mission_memory_seed import build_mission_memory_seed
 from agents.artifact_synthesizer import synthesize_artifacts
 from agents.validator_agent import ValidatorAgent
 
@@ -1129,6 +1130,15 @@ Give the final go/no-go style decision.
             )
         except Exception:
             artifacts["pluto_safety_gate"] = {"gate": "pluto_safety_gate", "error": "safety gate evaluation failed"}
+        try:
+            artifacts["mission_memory_seed"] = build_mission_memory_seed(
+                mission_intent=artifacts.get("mission_intent"),
+                candidate_evaluation=artifacts.get("candidate_evaluation"),
+                pluto_safety_gate=artifacts.get("pluto_safety_gate"),
+                mission_text=getattr(state, "mission_text", ""),
+            )
+        except Exception:
+            artifacts["mission_memory_seed"] = {"status": "empty", "error": "memory seed build failed"}
         artifacts["revision_summary"] = revision_payload
         artifacts["export_manifest"] = export_manifest
 
