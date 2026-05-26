@@ -734,6 +734,68 @@ def _write_graph_review(export_dir: Path) -> Dict[str, Any]:
     }
 
 
+def _write_candidate_evaluation(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Write candidate_evaluation_report.json into export_dir.
+
+    Priority order:
+    1. Pre-computed candidate_evaluation from mission_result artifacts.
+    2. Evaluate design_candidates from mission_result artifacts on-demand.
+    3. Write a skipped marker if neither is available.
+
+    Always writes the file. May raise; callers must catch.
+    """
+    from agents.candidate_evaluator import evaluate_design_candidates
+
+    artifacts = as_dict(mission_result.get("artifacts", {}))
+    report_path = export_dir / "candidate_evaluation_report.json"
+
+    candidate_evaluation = artifacts.get("candidate_evaluation")
+    if (
+        isinstance(candidate_evaluation, dict)
+        and candidate_evaluation.get("candidates_evaluated", 0) > 0
+    ):
+        write_json(report_path, candidate_evaluation)
+        return {
+            "status": "evaluated",
+            "report_path": str(report_path),
+            "candidates_evaluated": candidate_evaluation["candidates_evaluated"],
+            "recommended_candidate_id": candidate_evaluation.get("recommended_candidate_id"),
+            "ranking": candidate_evaluation.get("ranking", []),
+        }
+
+    design_candidates = artifacts.get("design_candidates")
+    if isinstance(design_candidates, list) and design_candidates:
+        candidate_evaluation = evaluate_design_candidates(
+            design_candidates, mission_text=mission_text
+        )
+        write_json(report_path, candidate_evaluation)
+        return {
+            "status": "evaluated",
+            "report_path": str(report_path),
+            "candidates_evaluated": candidate_evaluation["candidates_evaluated"],
+            "recommended_candidate_id": candidate_evaluation.get("recommended_candidate_id"),
+            "ranking": candidate_evaluation.get("ranking", []),
+        }
+
+    skipped: Dict[str, Any] = {
+        "status": "skipped",
+        "reason": "No design candidates available for evaluation.",
+    }
+    write_json(report_path, skipped)
+    return {
+        "status": "skipped",
+        "report_path": str(report_path),
+        "candidates_evaluated": 0,
+        "recommended_candidate_id": None,
+        "ranking": [],
+    }
+
+
 def _write_design_understanding(
     export_dir: Path,
     mission_text: str,
@@ -933,6 +995,23 @@ def export_mission_files(
         design_understanding = {"status": "failed", "error": str(error)}
         path = export_dir / "design_understanding_report.json"
         write_json(path, design_understanding)
+        record(path)
+
+    # ---------------------------------------------------------
+    # Candidate evaluation export
+    # ---------------------------------------------------------
+
+    candidate_evaluation_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        candidate_evaluation_summary = _write_candidate_evaluation(
+            export_dir, mission_result, mission
+        )
+        record(Path(candidate_evaluation_summary["report_path"]))
+    except Exception as error:
+        candidate_evaluation_summary = {"status": "failed", "error": str(error)}
+        path = export_dir / "candidate_evaluation_report.json"
+        write_json(path, candidate_evaluation_summary)
         record(path)
 
     # ---------------------------------------------------------
@@ -1324,5 +1403,6 @@ def export_mission_files(
         "graph_review": graph_review,
         "cortex": {
             "design_understanding": design_understanding,
+            "candidate_evaluation": candidate_evaluation_summary,
         },
     }
