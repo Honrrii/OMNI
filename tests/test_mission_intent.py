@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.app.omni_core.mission_intent import compile_mission_intent
+from backend.app.omni_core.mission_intent import compile_mission_intent, clean_mission_text_for_intent
 
 
 # ---------------------------------------------------------------------------
@@ -414,3 +414,114 @@ class TestAssumptions:
         result = compile_mission_intent(ROVER_MISSION)
         combined = " ".join(result["assumptions"]).lower()
         assert "concept" in combined
+
+
+# ---------------------------------------------------------------------------
+# Augmentation stripping — clean_mission_text_for_intent
+# ---------------------------------------------------------------------------
+
+_AUGMENTED_ROVER = (
+    "Build a tracked ground rover with camera and IMU for metal surface inspection.\n\n"
+    "OMNI LOCAL KNOWLEDGE CONTEXT\n\n"
+    "Selected knowledge domains:\n- robotics: detailed robotics knowledge\n\n"
+    "Relevant retrieved knowledge excerpts:\n\n"
+    "[Knowledge Hit 1]\n"
+    "Domain: sensors\nSource: sensor_guide.pdf\n"
+    "Excerpt: LiDAR sensors provide high-resolution depth maps. "
+    "Radar and GPS are commonly used for outdoor navigation. "
+    "Depth sensors and sonar enable underwater operation.\n\n"
+    "Instruction to OMNI Agent Council:\n"
+    "Use the local knowledge context as grounding material.\n"
+)
+
+
+class TestCleanMissionText:
+
+    def test_strips_omni_local_knowledge_context(self):
+        result = clean_mission_text_for_intent(_AUGMENTED_ROVER)
+        assert "OMNI LOCAL KNOWLEDGE CONTEXT" not in result
+
+    def test_strips_relevant_retrieved_excerpts(self):
+        result = clean_mission_text_for_intent(_AUGMENTED_ROVER)
+        assert "Relevant retrieved knowledge excerpts" not in result
+
+    def test_strips_instruction_to_council(self):
+        result = clean_mission_text_for_intent(_AUGMENTED_ROVER)
+        assert "Instruction to OMNI Agent Council" not in result
+
+    def test_preserves_user_mission_text(self):
+        result = clean_mission_text_for_intent(_AUGMENTED_ROVER)
+        assert "tracked ground rover" in result
+        assert "camera and IMU" in result
+        assert "metal surface inspection" in result
+
+    def test_strips_knowledge_hit_marker(self):
+        text = "Build a rover.\n\n[Knowledge Hit 1]\nDomain: sensors\nExcerpt: lidar data."
+        result = clean_mission_text_for_intent(text)
+        assert "[Knowledge Hit 1]" not in result
+        assert "Build a rover" in result
+
+    def test_non_augmented_text_unchanged(self):
+        text = "Build a tracked rover with camera and IMU."
+        assert clean_mission_text_for_intent(text) == text
+
+    def test_empty_string_returns_empty(self):
+        assert clean_mission_text_for_intent("") == ""
+
+    def test_non_string_returns_empty(self):
+        for bad in (None, 42, [], {}):
+            assert clean_mission_text_for_intent(bad) == ""
+
+    def test_only_marker_returns_empty(self):
+        result = clean_mission_text_for_intent("OMNI LOCAL KNOWLEDGE CONTEXT\nsome content")
+        assert result == ""
+
+
+class TestCompileIntentIgnoresAugmentation:
+
+    def test_camera_extracted_from_augmented_mission(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "camera" in result["sensing_requirements"]
+
+    def test_imu_extracted_from_augmented_mission(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "IMU" in result["sensing_requirements"]
+
+    def test_lidar_not_extracted_from_knowledge_context(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "LiDAR" not in result["sensing_requirements"]
+
+    def test_radar_not_extracted_from_knowledge_context(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "radar" not in result["sensing_requirements"]
+
+    def test_gps_not_extracted_from_knowledge_context(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "GPS" not in result["sensing_requirements"]
+
+    def test_depth_sensor_not_extracted_from_knowledge_context(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "depth sensor" not in result["sensing_requirements"]
+
+    def test_sonar_not_extracted_from_knowledge_context(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "sonar" not in result["sensing_requirements"]
+
+    def test_platform_intent_still_ground_rover(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert result["platform_intent"] == "ground-rover"
+
+    def test_raw_mission_does_not_contain_knowledge_marker(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "OMNI LOCAL KNOWLEDGE CONTEXT" not in result["raw_mission"]
+
+    def test_raw_mission_contains_user_text(self):
+        result = compile_mission_intent(_AUGMENTED_ROVER)
+        assert "tracked ground rover" in result["raw_mission"]
+
+    def test_non_augmented_mission_unaffected(self):
+        plain = "Build a tracked rover with camera and IMU."
+        result = compile_mission_intent(plain)
+        assert "camera" in result["sensing_requirements"]
+        assert "IMU" in result["sensing_requirements"]
+        assert result["platform_intent"] == "ground-rover"

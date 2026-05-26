@@ -268,6 +268,40 @@ def _build_open_questions(
 
 
 # ---------------------------------------------------------------------------
+# Augmentation strippers
+# ---------------------------------------------------------------------------
+
+# Markers inserted by main.py / knowledge_context_builder when a mission is
+# sent to the Agent Council.  Everything from any of these markers onward is
+# retrieved context, not the user's mission, and must not pollute extraction.
+_AUGMENTATION_MARKERS: List[str] = [
+    "OMNI LOCAL KNOWLEDGE CONTEXT",
+    "Relevant retrieved knowledge excerpts:",
+    "Instruction to OMNI Agent Council:",
+    # guard against future variants
+    "[Knowledge Hit ",
+    "Real ROS2 package knowledge context",
+]
+
+
+def clean_mission_text_for_intent(text: str) -> str:
+    """
+    Return only the user-authored portion of a (possibly augmented) mission.
+
+    Strips everything from the first known augmentation marker onward so that
+    compile_mission_intent() never extracts sensors, outputs, or domains from
+    retrieved knowledge excerpts or council instructions.
+    """
+    if not isinstance(text, str):
+        return ""
+    for marker in _AUGMENTATION_MARKERS:
+        idx = text.find(marker)
+        if idx != -1:
+            text = text[:idx]
+    return text.strip()
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -286,9 +320,10 @@ def compile_mission_intent(mission_text: str) -> Dict[str, Any]:
     if not isinstance(mission_text, str):
         mission_text = ""
 
-    text_lower = _lower(mission_text)
+    clean_text = clean_mission_text_for_intent(mission_text)
+    text_lower = _lower(clean_text)
 
-    platform_intent = resolve_platform_slug(mission_text)
+    platform_intent = resolve_platform_slug(clean_text)
     mission_type = _infer_mission_type(text_lower)
     detected_domains = _extract_labels(text_lower, _DOMAIN_KEYWORDS)
     operating_environment = _extract_labels(text_lower, _ENV_KEYWORDS)
@@ -305,11 +340,11 @@ def compile_mission_intent(mission_text: str) -> Dict[str, Any]:
     ]
 
     open_questions = _build_open_questions(
-        mission_text, platform_intent, sensing_requirements, mobility_requirements, constraints
+        clean_text, platform_intent, sensing_requirements, mobility_requirements, constraints
     )
 
     return {
-        "raw_mission":           mission_text,
+        "raw_mission":           clean_text,
         "mission_type":          mission_type,
         "platform_intent":       platform_intent,
         "detected_domains":      detected_domains,
