@@ -59,6 +59,55 @@ Return this exact structure:
 - Best option:
 - Why:
 - What Sky, Korva, Isy, Oli, and Pluto should pay attention to:
+
+After the markdown sections above, append this machine-readable block exactly as shown.
+Fill every field. Set recommended: true for exactly one candidate.
+
+```json
+{{
+  "design_candidates": [
+    {{
+      "name": "Alternative 1 name",
+      "concept": "one-line concept",
+      "platform": "ground-rover | drone-uav | auv | rov | hexapod | quadruped | robot-arm | humanoid | unknown",
+      "mobility_type": "wheeled | tracked | legged | aerial | aquatic | hybrid | unknown",
+      "morphology_notes": "brief body/form description",
+      "key_components": ["component1", "component2"],
+      "strengths": ["strength1"],
+      "risks": ["risk1"],
+      "required_validation": ["validation step"],
+      "assumptions": ["assumption"],
+      "recommended": false
+    }},
+    {{
+      "name": "Alternative 2 name",
+      "concept": "one-line concept",
+      "platform": "ground-rover | drone-uav | auv | rov | hexapod | quadruped | robot-arm | humanoid | unknown",
+      "mobility_type": "wheeled | tracked | legged | aerial | aquatic | hybrid | unknown",
+      "morphology_notes": "brief body/form description",
+      "key_components": ["component1"],
+      "strengths": ["strength1"],
+      "risks": ["risk1"],
+      "required_validation": ["validation step"],
+      "assumptions": ["assumption"],
+      "recommended": false
+    }},
+    {{
+      "name": "Alternative 3 name",
+      "concept": "one-line concept",
+      "platform": "ground-rover | drone-uav | auv | rov | hexapod | quadruped | robot-arm | humanoid | unknown",
+      "mobility_type": "wheeled | tracked | legged | aerial | aquatic | hybrid | unknown",
+      "morphology_notes": "brief body/form description",
+      "key_components": ["component1"],
+      "strengths": ["strength1"],
+      "risks": ["risk1"],
+      "required_validation": ["validation step"],
+      "assumptions": ["assumption"],
+      "recommended": true
+    }}
+  ]
+}}
+```
 """
 
         return call_llm(

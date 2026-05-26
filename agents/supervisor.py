@@ -11,6 +11,7 @@ from agents.research_agent import ResearchAgent
 from agents.code_agent import CodeAgent
 from agents.critic_agent import CriticAgent
 from agents.design_agent import DesignAgent
+from agents.design_candidates import extract_design_candidates_from_text
 from agents.artifact_synthesizer import synthesize_artifacts
 from agents.validator_agent import ValidatorAgent
 
@@ -1098,7 +1099,13 @@ Give the final go/no-go style decision.
             "warnings": getattr(state, "warnings", []),
             "errors": getattr(state, "errors", []),
         }
-        artifacts["design_alternatives"] = {"owner": "Vega", "content": design_report}
+        design_candidates = extract_design_candidates_from_text(design_report)
+        artifacts["design_alternatives"] = {
+            "owner": "Vega",
+            "content": design_report,
+            "candidates": design_candidates,
+        }
+        artifacts["design_candidates"] = design_candidates
         artifacts["revision_summary"] = revision_payload
         artifacts["export_manifest"] = export_manifest
 
