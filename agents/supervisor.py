@@ -13,6 +13,7 @@ from agents.critic_agent import CriticAgent
 from agents.design_agent import DesignAgent
 from agents.design_candidates import extract_design_candidates_from_text
 from agents.candidate_evaluator import evaluate_design_candidates
+from backend.app.omni_core.mission_intent import compile_mission_intent
 from agents.artifact_synthesizer import synthesize_artifacts
 from agents.validator_agent import ValidatorAgent
 
@@ -1100,6 +1101,11 @@ Give the final go/no-go style decision.
             "warnings": getattr(state, "warnings", []),
             "errors": getattr(state, "errors", []),
         }
+        try:
+            mission_text = getattr(state, "mission_text", "")
+            artifacts["mission_intent"] = compile_mission_intent(mission_text)
+        except Exception:
+            artifacts["mission_intent"] = {"error": "mission intent compilation failed"}
         design_candidates = extract_design_candidates_from_text(design_report)
         artifacts["design_alternatives"] = {
             "owner": "Vega",
