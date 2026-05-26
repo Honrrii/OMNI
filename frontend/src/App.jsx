@@ -4,6 +4,7 @@ import { initSpaceBg } from "./space-bg";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
 import MissionGraphReviewPanel from "./components/MissionGraphReviewPanel.jsx";
 import CandidateEvaluationPanel from "./components/CandidateEvaluationPanel.jsx";
+import MissionIntentPanel from "./components/MissionIntentPanel.jsx";
 import OperatorBriefPanel from "./components/OperatorBriefPanel.jsx";
 import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
 import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
@@ -1362,6 +1363,7 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
         <MissionGraphReviewPanel exportResult={exportResult} />
       </details>
 
+      <MissionIntentPanel exportResult={exportResult} />
       <CandidateEvaluationPanel exportResult={exportResult} />
 
       {ros2Validation && (

@@ -4192,3 +4192,167 @@ input::placeholder,
     width: 110px;
   }
 }
+
+/* ── MissionIntentPanel ───────────────────────────────────── */
+
+.mi-panel {
+  background: #0e1623;
+  border: 1px solid #1e2d42;
+  border-radius: 10px;
+  padding: 0 0 18px;
+  margin-top: 18px;
+}
+
+.mi-panel-failed {
+  padding: 14px 20px;
+}
+
+.mi-fail-note {
+  margin: 0;
+  font-size: 13px;
+  color: #ffbf4a;
+}
+
+.mi-hud-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #1e2d42;
+  flex-wrap: wrap;
+}
+
+.mi-hud-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4da3ff;
+}
+
+.mi-hud-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mi-chip {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: #162135;
+  color: #cdd8e8;
+  border: 1px solid #1e2d42;
+  white-space: nowrap;
+}
+
+.mi-chip-platform {
+  background: #0d2b1a;
+  border-color: #7cffc8;
+  color: #7cffc8;
+}
+
+.mi-chip-warn {
+  background: #2b1a0a;
+  border-color: #ffbf4a;
+  color: #ffbf4a;
+}
+
+.mi-body {
+  padding: 14px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mi-meta-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.mi-meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mi-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #4da3ff;
+  opacity: 0.72;
+}
+
+.mi-meta-value {
+  font-size: 13px;
+  color: #e0eaff;
+  font-weight: 600;
+}
+
+.mi-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mi-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #4da3ff;
+  opacity: 0.72;
+}
+
+.mi-section-body {
+  font-size: 13px;
+  color: #cdd8e8;
+}
+
+.mi-tag-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mi-tag {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: #111e2e;
+  border: 1px solid #1e2d42;
+  color: #cdd8e8;
+}
+
+.mi-empty {
+  font-size: 12px;
+  color: #8aa2be;
+}
+
+.mi-questions {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mi-question {
+  font-size: 12px;
+  color: #ffbf4a;
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .mi-meta-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
