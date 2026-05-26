@@ -6,9 +6,9 @@ class DesignAgent(BaseAgent):
     def __init__(self):
         super().__init__(
             name="Vega",
-            role="Creative design expansion, unconventional morphology, and concept alternatives",
+            role="Creative design, biomorphic morphology, and concept alternatives",
             system_prompt=(
-                "You are OMNI's Gemini-powered creative design expansion agent. "
+                "You are Vega, OMNI's creative design and morphology intelligence. "
                 "Be imaginative but physically plausible. "
                 "Generate concise, dashboard-friendly design alternatives. "
                 "Do not write the final engineering report."

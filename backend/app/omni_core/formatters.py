@@ -130,6 +130,6 @@ def safe_folder_name(text: str, max_len: int = 80) -> str:
 def safe_agent_name(text: str) -> str:
     """
     Convert an agent name into a safe snake_case identifier.
-    Example: "Gemini Design" → "gemini_design"
+    Example: "Agent Name" → "agent_name"
     """
     return safe_folder_name(text)
