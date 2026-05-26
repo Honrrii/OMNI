@@ -3,6 +3,7 @@ import "./App.css";
 import { initSpaceBg } from "./space-bg";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
 import MissionGraphReviewPanel from "./components/MissionGraphReviewPanel.jsx";
+import CandidateEvaluationPanel from "./components/CandidateEvaluationPanel.jsx";
 import OperatorBriefPanel from "./components/OperatorBriefPanel.jsx";
 import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
 import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
@@ -1360,6 +1361,8 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
         <summary>Deep Technical Report — Graph Analysis</summary>
         <MissionGraphReviewPanel exportResult={exportResult} />
       </details>
+
+      <CandidateEvaluationPanel exportResult={exportResult} />
 
       {ros2Validation && (
         <details className="ob-details">
