@@ -411,7 +411,7 @@ function normalizeArtifacts(artifacts, mission, finalOutput) {
     }));
   }
 
-  const PANEL_RENDERED_KEYS = new Set(["mission_intent", "candidate_evaluation"]);
+  const PANEL_RENDERED_KEYS = new Set(["mission_intent", "candidate_evaluation", "pluto_safety_gate"]);
 
   if (artifacts && typeof artifacts === "object") {
     return Object.entries(artifacts)
