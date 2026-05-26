@@ -219,3 +219,56 @@ def get_recent_memory_seeds(n: int = 5) -> list:
         return seeds[-n:]
     except Exception:
         return []
+
+
+def get_recent_memory_seed_context(n: int = 5) -> str:
+    """
+    Return a compact human-readable text block from recent mission memory seeds.
+
+    Suitable for injection into agent prompts as lightweight prior-mission context.
+    Returns "" if no seeds exist or on any error.
+    Never raises.
+    """
+    try:
+        if n <= 0:
+            return ""
+        seeds = get_recent_memory_seeds(n)
+        if not seeds:
+            return ""
+
+        lines = [f"Recent OMNI mission lessons ({len(seeds)}):"]
+
+        # Present newest first so the most relevant lesson appears first.
+        for seed in reversed(seeds):
+            mission_type    = seed.get("mission_type") or "unknown"
+            platform        = seed.get("platform_intent") or "unknown"
+            safety_status   = seed.get("safety_status") or "unknown"
+            risk_level      = seed.get("risk_level") or "unknown"
+            human_review    = "human review required" if seed.get("required_human_review") else "no human review"
+            lessons         = seed.get("next_design_lessons") or []
+            summary         = str(seed.get("memory_summary") or "").strip()
+
+            # Compact one-line header.
+            header = (
+                f"- {mission_type} / {platform}: "
+                f"Pluto {safety_status}/{risk_level}, {human_review}."
+            )
+
+            # Append up to three lessons, each capped at 80 chars.
+            if lessons:
+                lesson_text = "; ".join(
+                    str(l).strip()[:80] for l in lessons[:3] if str(l).strip()
+                )
+                if lesson_text:
+                    header += f" Lesson: {lesson_text}"
+
+            lines.append(header)
+
+            # One-line summary (max 200 chars) on indented follow-up line.
+            if summary:
+                lines.append(f"  {summary[:200]}")
+
+        return "\n".join(lines)
+
+    except Exception:
+        return ""

@@ -28,7 +28,12 @@ from backend.app.omni_core.formatters import (
     sanitize_payload as format_sanitize_payload,
 )
 
-from memory.memory_manager import get_recent_memory, add_mission_to_memory, add_mission_memory_seed
+from memory.memory_manager import (
+    get_recent_memory,
+    add_mission_to_memory,
+    add_mission_memory_seed,
+    get_recent_memory_seed_context,
+)
 
 
 from backend.app.omni_core.mission_state import MissionState
@@ -1347,6 +1352,12 @@ Give the final go/no-go style decision.
         result_id = str(getattr(state, "mission_id", created_at)).replace(":", "-").replace(".", "-")
         export_manifest = self.build_export_manifest(mission, result_id)
         memory_context = get_recent_memory()
+        try:
+            seed_context = get_recent_memory_seed_context(n=5)
+            if seed_context:
+                memory_context = memory_context + "\n\n" + seed_context
+        except Exception:
+            pass
 
         state.metadata["created_at"] = created_at
         state.metadata["result_id"] = result_id

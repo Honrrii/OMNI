@@ -1,5 +1,5 @@
 """
-Phase 14C — Mission memory seed persistence tests.
+Phase 14C/14D — Mission memory seed persistence and recall tests.
 
 No LLM calls. No network calls.
 """
@@ -13,6 +13,7 @@ import memory.memory_manager as mm
 from memory.memory_manager import (
     add_mission_memory_seed,
     get_recent_memory_seeds,
+    get_recent_memory_seed_context,
     add_mission_to_memory,
     get_recent_memory,
     load_memory,
@@ -416,3 +417,118 @@ class TestSupervisorPersistenceFlag:
         assert "status" in flag
         assert "memory_summary" not in flag
         assert "recurring_risk_themes" not in flag
+
+
+# ---------------------------------------------------------------------------
+# get_recent_memory_seed_context (Phase 14D recall)
+# ---------------------------------------------------------------------------
+
+class TestGetRecentMemorySeedContext:
+
+    def test_no_seeds_returns_empty_string(self):
+        result = get_recent_memory_seed_context()
+        assert result == ""
+
+    def test_returns_string(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert isinstance(result, str)
+
+    def test_one_seed_produces_non_empty_context(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert len(result) > 0
+
+    def test_context_contains_platform(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert "ground-rover" in result
+
+    def test_context_contains_mission_type(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert "inspection" in result
+
+    def test_context_contains_risk_level(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert "high" in result
+
+    def test_context_contains_safety_status(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert "warn" in result
+
+    def test_context_mentions_human_review(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert "human review" in result.lower()
+
+    def test_context_contains_design_lesson(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert "power budget" in result.lower() or "lesson" in result.lower()
+
+    def test_context_contains_memory_summary(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert "vega_candidate_1" in result or "inspection" in result
+
+    def test_multiple_seeds_all_included(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build rover A.")
+        add_mission_memory_seed(_drone_seed(), mission="Build drone B.")
+        result = get_recent_memory_seed_context()
+        assert "ground-rover" in result
+        assert "drone-uav" in result
+
+    def test_multiple_seeds_deterministic(self):
+        for i in range(3):
+            seed = {**_rover_seed(), "memory_summary": f"Summary {i}."}
+            add_mission_memory_seed(seed, mission=f"Mission {i}.")
+        r1 = get_recent_memory_seed_context()
+        r2 = get_recent_memory_seed_context()
+        assert r1 == r2
+
+    def test_context_does_not_contain_raw_json_dump(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        # No raw JSON brackets that would indicate a full dict dump.
+        assert '{"type":' not in result
+        assert '"mission_memory_seed"' not in result
+
+    def test_context_does_not_contain_ranking_field(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context()
+        assert '"ranking"' not in result
+
+    def test_context_is_compact(self):
+        for i in range(5):
+            seed = {**_rover_seed(), "memory_summary": f"Summary {i}."}
+            add_mission_memory_seed(seed, mission=f"Mission {i}.")
+        result = get_recent_memory_seed_context(n=5)
+        # Should be well under 2000 chars for 5 seeds.
+        assert len(result) < 2000
+
+    def test_n_zero_returns_empty(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build a rover.")
+        result = get_recent_memory_seed_context(n=0)
+        assert result == ""
+
+    def test_recall_failure_returns_empty_string(self, monkeypatch):
+        def _bad_seeds(n):
+            raise RuntimeError("storage error")
+        monkeypatch.setattr(mm, "get_recent_memory_seeds", _bad_seeds)
+        result = get_recent_memory_seed_context()
+        assert result == ""
+
+    def test_existing_get_recent_memory_unaffected(self):
+        add_mission_to_memory("Old mission.", "Old summary.")
+        get_recent_memory_seed_context()  # should not touch legacy memory
+        result = get_recent_memory(n=5)
+        assert "Old mission." in result
+
+    def test_header_line_mentions_count(self):
+        add_mission_memory_seed(_rover_seed(), mission="Build rover A.")
+        add_mission_memory_seed(_drone_seed(), mission="Build drone B.")
+        result = get_recent_memory_seed_context()
+        assert "2" in result  # count of seeds in header
