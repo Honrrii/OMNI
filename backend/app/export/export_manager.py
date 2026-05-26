@@ -833,6 +833,47 @@ def _write_mission_intent(
     }
 
 
+def _write_pluto_safety_gate(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Write pluto_safety_gate_report.json into export_dir.
+
+    Priority order:
+    1. Pre-computed pluto_safety_gate from mission_result artifacts.
+    2. Evaluate on-demand from artifacts["mission_intent"] / ["candidate_evaluation"].
+    3. Write a failed marker if evaluation raises.
+
+    Always writes the file. May raise; callers must catch.
+    """
+    from backend.app.omni_core.safety_gate import evaluate_safety_gate
+
+    artifacts = as_dict(mission_result.get("artifacts", {}))
+    report_path = export_dir / "pluto_safety_gate_report.json"
+
+    precomputed = artifacts.get("pluto_safety_gate")
+    if isinstance(precomputed, dict) and precomputed.get("gate") == "pluto_safety_gate":
+        gate = precomputed
+    else:
+        gate = evaluate_safety_gate(
+            mission_intent=artifacts.get("mission_intent"),
+            candidate_evaluation=artifacts.get("candidate_evaluation"),
+            artifacts=artifacts,
+        )
+
+    write_json(report_path, gate)
+    return {
+        "status": gate.get("status", "unknown"),
+        "report_path": str(report_path),
+        "risk_level": gate.get("risk_level", "unknown"),
+        "required_human_review": bool(gate.get("required_human_review", False)),
+        "blocker_count": len(gate.get("blockers") or []),
+        "warning_count": len(gate.get("warnings") or []),
+        "next_check_count": len(gate.get("required_next_checks") or []),
+    }
+
+
 def _write_design_understanding(
     export_dir: Path,
     mission_text: str,
@@ -1064,6 +1105,21 @@ def export_mission_files(
         mission_intent_summary = {"status": "failed", "error": str(error)}
         path = export_dir / "mission_intent_report.json"
         write_json(path, mission_intent_summary)
+        record(path)
+
+    # ---------------------------------------------------------
+    # Pluto safety gate export
+    # ---------------------------------------------------------
+
+    pluto_safety_gate_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        pluto_safety_gate_summary = _write_pluto_safety_gate(export_dir, mission_result)
+        record(Path(pluto_safety_gate_summary["report_path"]))
+    except Exception as error:
+        pluto_safety_gate_summary = {"status": "failed", "error": str(error)}
+        path = export_dir / "pluto_safety_gate_report.json"
+        write_json(path, pluto_safety_gate_summary)
         record(path)
 
     # ---------------------------------------------------------
@@ -1457,5 +1513,6 @@ def export_mission_files(
             "design_understanding": design_understanding,
             "candidate_evaluation": candidate_evaluation_summary,
             "mission_intent": mission_intent_summary,
+            "pluto_safety_gate": pluto_safety_gate_summary,
         },
     }
