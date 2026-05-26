@@ -7,6 +7,7 @@ MEMORY_DIR = Path("memory")
 MEMORY_FILE = MEMORY_DIR / "omni_memory.json"
 
 MAX_MISSIONS_TO_KEEP = 25
+MAX_MEMORY_SEEDS_TO_KEEP = 100
 MAX_SUMMARY_CHARS = 1400
 MAX_MISSION_CHARS = 500
 
@@ -152,3 +153,69 @@ def get_memory_stats():
         "memory_file": str(MEMORY_FILE),
         "max_missions_to_keep": MAX_MISSIONS_TO_KEEP,
     }
+
+
+def add_mission_memory_seed(seed: dict, mission: str = "") -> bool:
+    """
+    Append a compact mission_memory_seed record to omni_memory.json.
+
+    Returns True on successful write, False on any failure.
+    Never raises.
+    """
+    try:
+        if not isinstance(seed, dict):
+            return False
+        if seed.get("status") == "empty":
+            return False
+
+        memory = load_memory()
+        seeds = memory.get("memory_seeds", [])
+        if not isinstance(seeds, list):
+            seeds = []
+
+        mission_clean = clean_text(mission, MAX_MISSION_CHARS)
+        summary = seed.get("memory_summary", "") or ""
+
+        # Deduplicate: skip if same (mission, memory_summary) already stored.
+        for existing in seeds:
+            if (existing.get("mission") == mission_clean and
+                    existing.get("memory_summary") == summary):
+                return False
+
+        record = {
+            "type": "mission_memory_seed",
+            "timestamp": datetime.now().isoformat(),
+            "mission": mission_clean,
+            "mission_type": seed.get("mission_type"),
+            "platform_intent": seed.get("platform_intent"),
+            "recommended_candidate_id": seed.get("recommended_candidate_id"),
+            "risk_level": seed.get("risk_level"),
+            "safety_status": seed.get("safety_status"),
+            "required_human_review": bool(seed.get("required_human_review", False)),
+            "unresolved_questions": list(seed.get("unresolved_questions") or []),
+            "recurring_risk_themes": list(seed.get("recurring_risk_themes") or []),
+            "next_design_lessons": list(seed.get("next_design_lessons") or []),
+            "memory_summary": summary,
+        }
+
+        seeds.append(record)
+        # Cap to the most recent MAX_MEMORY_SEEDS_TO_KEEP entries.
+        seeds = seeds[-MAX_MEMORY_SEEDS_TO_KEEP:]
+        memory["memory_seeds"] = seeds
+        save_memory(memory)
+        return True
+
+    except Exception:
+        return False
+
+
+def get_recent_memory_seeds(n: int = 5) -> list:
+    """Return up to n most recent mission_memory_seed records (newest last)."""
+    try:
+        memory = load_memory()
+        seeds = memory.get("memory_seeds", [])
+        if not isinstance(seeds, list):
+            return []
+        return seeds[-n:]
+    except Exception:
+        return []

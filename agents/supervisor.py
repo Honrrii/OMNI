@@ -28,7 +28,7 @@ from backend.app.omni_core.formatters import (
     sanitize_payload as format_sanitize_payload,
 )
 
-from memory.memory_manager import get_recent_memory, add_mission_to_memory
+from memory.memory_manager import get_recent_memory, add_mission_to_memory, add_mission_memory_seed
 
 
 from backend.app.omni_core.mission_state import MissionState
@@ -1139,6 +1139,15 @@ Give the final go/no-go style decision.
             )
         except Exception:
             artifacts["mission_memory_seed"] = {"status": "empty", "error": "memory seed build failed"}
+        try:
+            _seed = artifacts.get("mission_memory_seed", {})
+            _mission_text = getattr(state, "mission_text", "")
+            _saved = add_mission_memory_seed(_seed, mission=_mission_text)
+            artifacts["mission_memory_persistence"] = {
+                "status": "saved" if _saved else "skipped"
+            }
+        except Exception:
+            artifacts["mission_memory_persistence"] = {"status": "failed"}
         artifacts["revision_summary"] = revision_payload
         artifacts["export_manifest"] = export_manifest
 
