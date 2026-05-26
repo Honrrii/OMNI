@@ -5,6 +5,7 @@ import MissionReportPanel from "./components/MissionReportPanel.jsx";
 import MissionGraphReviewPanel from "./components/MissionGraphReviewPanel.jsx";
 import CandidateEvaluationPanel from "./components/CandidateEvaluationPanel.jsx";
 import MissionIntentPanel from "./components/MissionIntentPanel.jsx";
+import PlutoSafetyGatePanel from "./components/PlutoSafetyGatePanel.jsx";
 import OperatorBriefPanel from "./components/OperatorBriefPanel.jsx";
 import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
 import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
@@ -1368,6 +1369,7 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
       </details>
 
       <MissionIntentPanel exportResult={exportResult} />
+      <PlutoSafetyGatePanel exportResult={exportResult} />
       <CandidateEvaluationPanel exportResult={exportResult} />
 
       {ros2Validation && (

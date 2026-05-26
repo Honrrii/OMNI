@@ -4356,3 +4356,220 @@ input::placeholder,
     gap: 12px;
   }
 }
+
+/* ── PlutoSafetyGatePanel ─────────────────────────────────── */
+
+.sg-panel {
+  border-radius: 10px;
+  padding: 0 0 18px;
+  margin-top: 18px;
+  border: 1px solid #1e2d42;
+  background: #0e1623;
+}
+
+.sg-panel-passed  { border-color: #1a3d2e; }
+.sg-panel-warn    { border-color: #3d2e0f; }
+.sg-panel-blocked { border-color: #3d1a1a; }
+.sg-panel-failed  { padding: 0; }
+
+.sg-fail-note {
+  margin: 0;
+  padding: 14px 20px;
+  font-size: 13px;
+  color: #ffbf4a;
+}
+
+.sg-hud-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #1e2d42;
+  flex-wrap: wrap;
+}
+
+.sg-panel-passed  > .sg-hud-bar { border-color: #1a3d2e; }
+.sg-panel-warn    > .sg-hud-bar { border-color: #3d2e0f; }
+.sg-panel-blocked > .sg-hud-bar { border-color: #3d1a1a; }
+
+.sg-hud-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4da3ff;
+}
+
+.sg-hud-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sg-status-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.08em;
+}
+
+.sg-status-passed  { background: #0d2b1a; color: #7cffc8; border: 1px solid #7cffc8; }
+.sg-status-warn    { background: #2b1a0a; color: #ffbf4a; border: 1px solid #ffbf4a; }
+.sg-status-blocked { background: #2b0f0f; color: #ff6b6b; border: 1px solid #ff6b6b; }
+.sg-status-failed  { background: #2b1a0a; color: #ffbf4a; border: 1px solid #ffbf4a; }
+
+.sg-chip {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: #162135;
+  color: #cdd8e8;
+  border: 1px solid #1e2d42;
+  white-space: nowrap;
+}
+
+.sg-risk-low    { background: #0d2b1a; border-color: #7cffc8; color: #7cffc8; }
+.sg-risk-medium { background: #162135; border-color: #4da3ff; color: #4da3ff; }
+.sg-risk-high   { background: #2b1a0a; border-color: #ffbf4a; color: #ffbf4a; }
+
+.sg-chip-review {
+  background: #2b0f0f;
+  border-color: #ff6b6b;
+  color: #ff6b6b;
+}
+
+.sg-body {
+  padding: 14px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sg-meta-row {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.sg-meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sg-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #4da3ff;
+  opacity: 0.72;
+}
+
+.sg-meta-value {
+  font-size: 13px;
+  color: #e0eaff;
+  font-weight: 600;
+}
+
+.sg-meta-status-passed  { color: #7cffc8; }
+.sg-meta-status-warn    { color: #ffbf4a; }
+.sg-meta-status-blocked { color: #ff6b6b; }
+
+.sg-review-yes { color: #ff6b6b; }
+.sg-review-no  { color: #7cffc8; }
+
+.sg-count-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sg-count-chip {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.sg-count-blocked { background: #2b0f0f; color: #ff6b6b; border: 1px solid #3d1a1a; }
+.sg-count-warn    { background: #2b1a0a; color: #ffbf4a; border: 1px solid #3d2e0f; }
+.sg-count-check   { background: #162135; color: #8aa2be; border: 1px solid #1e2d42; }
+
+.sg-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sg-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #4da3ff;
+  opacity: 0.72;
+}
+
+.sg-section-body {
+  font-size: 13px;
+  color: #cdd8e8;
+}
+
+.sg-issue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sg-issue-item {
+  font-size: 12px;
+  line-height: 1.5;
+  padding-left: 14px;
+  position: relative;
+}
+
+.sg-issue-item::before {
+  content: "▸";
+  position: absolute;
+  left: 0;
+  font-size: 10px;
+}
+
+.sg-item-blocked { color: #ff6b6b; }
+.sg-item-blocked::before { color: #ff6b6b; }
+
+.sg-item-warn { color: #ffbf4a; }
+.sg-item-warn::before { color: #ffbf4a; }
+
+.sg-item-check { color: #8aa2be; }
+.sg-item-check::before { color: #8aa2be; }
+
+.sg-empty {
+  font-size: 12px;
+  color: #8aa2be;
+}
+
+.sg-rationale {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #8aa2be;
+  font-style: italic;
+}
+
+@media (max-width: 600px) {
+  .sg-meta-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .sg-count-row {
+    flex-direction: column;
+  }
+}
