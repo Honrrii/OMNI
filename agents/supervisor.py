@@ -12,6 +12,7 @@ from agents.code_agent import CodeAgent
 from agents.critic_agent import CriticAgent
 from agents.design_agent import DesignAgent
 from agents.design_candidates import extract_design_candidates_from_text
+from agents.candidate_evaluator import evaluate_design_candidates
 from agents.artifact_synthesizer import synthesize_artifacts
 from agents.validator_agent import ValidatorAgent
 
@@ -1106,6 +1107,14 @@ Give the final go/no-go style decision.
             "candidates": design_candidates,
         }
         artifacts["design_candidates"] = design_candidates
+        if design_candidates:
+            try:
+                mission_text = getattr(state, "mission_text", "")
+                artifacts["candidate_evaluation"] = evaluate_design_candidates(
+                    design_candidates, mission_text=mission_text
+                )
+            except Exception:
+                artifacts["candidate_evaluation"] = {"candidates_evaluated": 0, "error": "evaluation failed"}
         artifacts["revision_summary"] = revision_payload
         artifacts["export_manifest"] = export_manifest
 
