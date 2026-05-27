@@ -1428,6 +1428,50 @@ def export_mission_files(
     record(path)
 
     # ---------------------------------------------------------
+    # Visual Bay manifest
+    # ---------------------------------------------------------
+
+    visual_bay_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        from backend.app.visual_bay.manifest import build_visual_bay_manifest
+
+        visual_bay_manifest = build_visual_bay_manifest(
+            export_dir=export_dir,
+            mission_result=mission_result,
+        )
+
+        manifest_path = export_dir / "visual_bay_manifest.json"
+        write_json(manifest_path, visual_bay_manifest)
+        record(manifest_path)
+
+        sim = visual_bay_manifest.get("simulation", {})
+        f360 = visual_bay_manifest.get("fusion360", {})
+        cq   = visual_bay_manifest.get("cadquery", {})
+        r2   = visual_bay_manifest.get("ros2_preview", {})
+
+        visual_bay_summary = {
+            "status":                  visual_bay_manifest["status"],
+            "report_path":             str(manifest_path),
+            "has_cad":                 f360.get("detected", False) or cq.get("detected", False),
+            "has_ros2":                r2.get("detected", False),
+            "has_simulation_assets":   sim.get("status") != "not_available",
+            "browser_preview_ready":   (
+                f360.get("browser_preview_ready", False) or
+                cq.get("browser_preview_ready", False)
+            ),
+            "safe_to_launch":          False,
+        }
+    except Exception as error:
+        visual_bay_summary = {"status": "failed", "error": str(error), "safe_to_launch": False}
+        try:
+            _err_path = export_dir / "visual_bay_manifest.json"
+            write_json(_err_path, visual_bay_summary)
+            record(_err_path)
+        except Exception:
+            pass
+
+    # ---------------------------------------------------------
     # Human-readable README values
     # ---------------------------------------------------------
 
@@ -1600,4 +1644,5 @@ def export_mission_files(
             "pluto_safety_gate": pluto_safety_gate_summary,
         },
         "aeroforge": aeroforge_summary,
+        "visual_bay": visual_bay_summary,
     }
