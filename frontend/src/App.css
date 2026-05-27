@@ -5293,6 +5293,59 @@ input::placeholder,
   line-height: 1.7;
 }
 
+/* ── Asset URL block ── */
+
+.vb-viewer-asset-url {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vb-viewer-url-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.vb-viewer-url-chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.vb-viewer-url-chip-controlled { color: #7cffc8; border-color: rgba(124, 255, 200, 0.30); background: rgba(124, 255, 200, 0.08); }
+.vb-viewer-url-chip-readonly   { color: #8aa2be; border-color: rgba(138, 162, 190, 0.24); background: rgba(138, 162, 190, 0.06); }
+.vb-viewer-url-chip-pending    { color: #ffcc66; border-color: rgba(255, 204, 102, 0.26); background: rgba(255, 204, 102, 0.06); }
+.vb-viewer-url-chip-none       { color: #5d7a9a; border-color: rgba(93, 122, 154, 0.22);  background: rgba(93, 122, 154, 0.06); }
+
+.vb-viewer-url-box {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: #63e7ff;
+  background: rgba(5, 11, 23, 0.32);
+  border: 1px solid rgba(99, 231, 255, 0.18);
+  border-radius: 4px;
+  padding: 6px 10px;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  line-height: 1.55;
+  user-select: text;
+}
+
+.vb-viewer-url-note {
+  font-size: 10px;
+  color: #5d7a9a;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.vb-viewer-url-note-blocked {
+  color: #ff8f8f;
+}
+
 @media (max-width: 600px) {
   .vb-meta-row {
     flex-direction: column;

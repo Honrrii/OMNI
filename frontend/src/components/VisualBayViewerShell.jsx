@@ -70,6 +70,52 @@ function shortLabel(asset) {
   return parts[parts.length - 1] || asset.path;
 }
 
+function UrlChip({ label, variant }) {
+  return (
+    <span className={`vb-viewer-url-chip vb-viewer-url-chip-${variant}`}>
+      {label}
+    </span>
+  );
+}
+
+function AssetUrlBlock({ asset }) {
+  const hasUrl = !!asset?.asset_url;
+
+  if (hasUrl) {
+    return (
+      <div className="vb-viewer-asset-url">
+        <div className="vb-viewer-url-chips">
+          <UrlChip label="Controlled URL"   variant="controlled" />
+          <UrlChip label="Read-only serving" variant="readonly"   />
+          <UrlChip label="Rendering pending" variant="pending"    />
+        </div>
+        <div className="vb-viewer-url-box">{asset.asset_url}</div>
+        <p className="vb-viewer-url-note">
+          Serving is read-only; rendering not enabled in this phase.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="vb-viewer-asset-url">
+      <div className="vb-viewer-url-chips">
+        <UrlChip label="No URL exposed" variant="none" />
+      </div>
+      {asset?.execution_blocked && (
+        <p className="vb-viewer-url-note vb-viewer-url-note-blocked">
+          Asset is blocked from serving.
+        </p>
+      )}
+      {asset?.engineering_only && !asset?.execution_blocked && (
+        <p className="vb-viewer-url-note">
+          External engineering tool may be required.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function VisualBayViewerShell({ previewAssets }) {
   const assets = previewAssets ?? [];
   const [selected, setSelected] = useState(() => defaultIndex(assets));
@@ -121,6 +167,7 @@ export default function VisualBayViewerShell({ previewAssets }) {
                 {asset.notes.map((n, i) => <li key={i}>{n}</li>)}
               </ul>
             )}
+            <AssetUrlBlock asset={asset} />
           </div>
 
           {/* ── Viewer placeholder stage ── */}
