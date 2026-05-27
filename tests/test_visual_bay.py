@@ -1195,3 +1195,282 @@ class TestPreviewAssetDeterminism:
         r1 = _build(tmp_path)
         r2 = _build(tmp_path)
         assert [a["path"] for a in r1["preview_assets"]] == [a["path"] for a in r2["preview_assets"]]
+
+
+# ---------------------------------------------------------------------------
+# Phase 16F — Preview asset delivery contract tests
+# ---------------------------------------------------------------------------
+
+ROVER_MISSION_16F = "Build a six-legged autonomous inspection rover with ROS2."
+
+_ALLOWLISTED_FIELDS = frozenset({
+    "path",
+    "kind",
+    "browser_preview_ready",
+    "browser_preview_candidate",
+    "engineering_only",
+    "execution_blocked",
+    "requires_conversion",
+    "requires_external_tool",
+    "notes",
+})
+
+
+def _sanitize(assets, export_dir=None):
+    from backend.app.export.export_manager import _sanitize_preview_assets
+    return _sanitize_preview_assets(assets, export_dir)
+
+
+class TestSanitizePreviewAssetsUnit:
+    """Unit tests for _sanitize_preview_assets helper."""
+
+    def test_empty_input_returns_empty(self):
+        assert _sanitize([]) == []
+
+    def test_none_input_returns_empty(self):
+        assert _sanitize(None) == []  # type: ignore[arg-type]
+
+    def test_allowlisted_fields_only(self):
+        asset = {
+            "path": "model.glb",
+            "kind": "glb",
+            "browser_preview_ready": True,
+            "browser_preview_candidate": True,
+            "engineering_only": False,
+            "execution_blocked": False,
+            "requires_conversion": False,
+            "requires_external_tool": False,
+            "notes": [],
+            "secret_field": "should_be_dropped",
+            "internal_id": 42,
+        }
+        result = _sanitize([asset])
+        assert len(result) == 1
+        assert "secret_field" not in result[0]
+        assert "internal_id" not in result[0]
+        assert result[0].keys() <= _ALLOWLISTED_FIELDS
+
+    def test_all_allowlisted_fields_preserved(self):
+        asset = {
+            "path": "model.glb",
+            "kind": "glb",
+            "browser_preview_ready": True,
+            "browser_preview_candidate": True,
+            "engineering_only": False,
+            "execution_blocked": False,
+            "requires_conversion": False,
+            "requires_external_tool": False,
+            "notes": ["a note"],
+        }
+        result = _sanitize([asset])
+        for field in _ALLOWLISTED_FIELDS:
+            assert field in result[0], f"Missing allowlisted field: {field}"
+
+    def test_max_count_bound(self):
+        from backend.app.export.export_manager import MAX_VISUAL_BAY_PREVIEW_ASSETS
+        assets = [{"path": f"f{i}.stl", "kind": "stl", "notes": []} for i in range(50)]
+        result = _sanitize(assets)
+        assert len(result) <= MAX_VISUAL_BAY_PREVIEW_ASSETS
+        assert len(result) == MAX_VISUAL_BAY_PREVIEW_ASSETS
+
+    def test_path_truncation(self):
+        from backend.app.export.export_manager import MAX_VISUAL_BAY_PATH_CHARS
+        long_path = "a/" * 200 + "model.glb"
+        asset = {"path": long_path, "kind": "glb", "notes": []}
+        result = _sanitize([asset])
+        assert len(result[0]["path"]) <= MAX_VISUAL_BAY_PATH_CHARS
+
+    def test_notes_count_bound(self):
+        from backend.app.export.export_manager import MAX_VISUAL_BAY_NOTES
+        asset = {"path": "x.urdf", "kind": "urdf", "notes": [f"note {i}" for i in range(20)]}
+        result = _sanitize([asset])
+        assert len(result[0]["notes"]) <= MAX_VISUAL_BAY_NOTES
+
+    def test_note_length_truncation(self):
+        from backend.app.export.export_manager import MAX_VISUAL_BAY_NOTE_CHARS
+        long_note = "X" * 500
+        asset = {"path": "x.urdf", "kind": "urdf", "notes": [long_note]}
+        result = _sanitize([asset])
+        assert len(result[0]["notes"][0]) <= MAX_VISUAL_BAY_NOTE_CHARS
+
+    def test_absolute_path_with_export_dir_made_relative(self, tmp_path):
+        abs_path = str(tmp_path / "subdir" / "model.glb")
+        asset = {"path": abs_path, "kind": "glb", "notes": []}
+        result = _sanitize([asset], export_dir=tmp_path)
+        assert not Path(result[0]["path"]).is_absolute()
+        assert "model.glb" in result[0]["path"]
+
+    def test_absolute_path_without_export_dir_uses_filename(self):
+        asset = {"path": "/absolute/deep/model.glb", "kind": "glb", "notes": []}
+        result = _sanitize([asset], export_dir=None)
+        assert not Path(result[0]["path"]).is_absolute()
+        assert result[0]["path"] == "model.glb"
+
+    def test_absolute_path_outside_export_dir_uses_filename(self, tmp_path):
+        asset = {"path": "/other/root/model.glb", "kind": "glb", "notes": []}
+        result = _sanitize([asset], export_dir=tmp_path)
+        assert not Path(result[0]["path"]).is_absolute()
+        assert result[0]["path"] == "model.glb"
+
+    def test_relative_path_unchanged(self):
+        asset = {"path": "generated_fusion360/model.glb", "kind": "glb", "notes": []}
+        result = _sanitize([asset])
+        assert result[0]["path"] == "generated_fusion360/model.glb"
+
+    def test_non_dict_items_skipped(self):
+        assets = [None, "string", 42, {"path": "x.glb", "kind": "glb", "notes": []}]
+        result = _sanitize(assets)  # type: ignore[arg-type]
+        assert len(result) == 1
+        assert result[0]["path"] == "x.glb"
+
+    def test_notes_none_becomes_empty_list(self):
+        asset = {"path": "x.stl", "kind": "stl", "notes": None}
+        result = _sanitize([asset])
+        assert result[0]["notes"] == []
+
+    def test_notes_missing_becomes_empty_list(self):
+        asset = {"path": "x.stl", "kind": "stl"}
+        result = _sanitize([asset])
+        assert result[0]["notes"] == []
+
+
+class TestPreviewAssetDeliveryContract:
+    """Export summary delivers preview_assets[] to the API."""
+
+    MISSION = ROVER_MISSION_16F
+
+    def test_visual_bay_summary_has_preview_assets_key(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        assert "preview_assets" in result["visual_bay"]
+
+    def test_preview_assets_is_list(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        assert isinstance(result["visual_bay"]["preview_assets"], list)
+
+    def test_preview_asset_count_key_present(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        assert "preview_asset_count" in result["visual_bay"]
+
+    def test_preview_asset_count_matches_list_length(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        vb = result["visual_bay"]
+        assert vb["preview_asset_count"] == len(vb["preview_assets"])
+
+    def test_delivered_assets_have_only_allowlisted_fields(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        for asset in result["visual_bay"]["preview_assets"]:
+            assert asset.keys() <= _ALLOWLISTED_FIELDS, (
+                f"Unexpected field(s) in delivered asset: {asset.keys() - _ALLOWLISTED_FIELDS}"
+            )
+
+    def test_no_absolute_paths_in_delivered_assets(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        for asset in result["visual_bay"]["preview_assets"]:
+            assert not Path(asset["path"]).is_absolute(), (
+                f"Absolute path delivered: {asset['path']}"
+            )
+
+    def test_delivered_count_within_bound(self, tmp_path):
+        from backend.app.export.export_manager import MAX_VISUAL_BAY_PREVIEW_ASSETS
+        result = _export_minimal(self.MISSION, tmp_path)
+        assert len(result["visual_bay"]["preview_assets"]) <= MAX_VISUAL_BAY_PREVIEW_ASSETS
+
+    def test_delivered_paths_within_char_bound(self, tmp_path):
+        from backend.app.export.export_manager import MAX_VISUAL_BAY_PATH_CHARS
+        result = _export_minimal(self.MISSION, tmp_path)
+        for asset in result["visual_bay"]["preview_assets"]:
+            assert len(asset["path"]) <= MAX_VISUAL_BAY_PATH_CHARS
+
+    def test_delivered_notes_within_count_bound(self, tmp_path):
+        from backend.app.export.export_manager import MAX_VISUAL_BAY_NOTES
+        result = _export_minimal(self.MISSION, tmp_path)
+        for asset in result["visual_bay"]["preview_assets"]:
+            assert len(asset["notes"]) <= MAX_VISUAL_BAY_NOTES
+
+    def test_delivered_notes_within_char_bound(self, tmp_path):
+        from backend.app.export.export_manager import MAX_VISUAL_BAY_NOTE_CHARS
+        result = _export_minimal(self.MISSION, tmp_path)
+        for asset in result["visual_bay"]["preview_assets"]:
+            for note in asset["notes"]:
+                assert len(note) <= MAX_VISUAL_BAY_NOTE_CHARS
+
+    def test_aggregate_counts_still_present(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        vb = result["visual_bay"]
+        for key in (
+            "browser_preview_ready_count",
+            "browser_preview_candidate_count",
+            "engineering_only_count",
+            "execution_blocked_count",
+        ):
+            assert key in vb
+
+    def test_existing_summary_fields_preserved(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        vb = result["visual_bay"]
+        for key in ("status", "report_path", "has_cad", "has_ros2",
+                    "has_simulation_assets", "browser_preview_ready", "safe_to_launch"):
+            assert key in vb, f"Missing legacy key: {key}"
+
+    def test_safe_to_launch_still_false(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        assert result["visual_bay"]["safe_to_launch"] is False
+
+    def test_manifest_json_still_written(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        export_dir = Path(result["export_dir"])
+        assert (export_dir / "visual_bay_manifest.json").is_file()
+
+    def test_manifest_json_has_full_preview_assets(self, tmp_path):
+        """The file on disk preserves the full (unbounded) list."""
+        result = _export_minimal(self.MISSION, tmp_path)
+        export_dir = Path(result["export_dir"])
+        data = json.loads((export_dir / "visual_bay_manifest.json").read_text())
+        assert "preview_assets" in data
+        assert isinstance(data["preview_assets"], list)
+
+    def test_overall_export_status_still_exported(self, tmp_path):
+        result = _export_minimal(self.MISSION, tmp_path)
+        assert result["status"] == "exported"
+
+    def test_delivery_is_deterministic(self, tmp_path):
+        r1 = _export_minimal(self.MISSION, tmp_path / "r1")
+        r2 = _export_minimal(self.MISSION, tmp_path / "r2")
+        paths1 = [a["path"] for a in r1["visual_bay"]["preview_assets"]]
+        paths2 = [a["path"] for a in r2["visual_bay"]["preview_assets"]]
+        assert paths1 == paths2
+
+    def test_preview_assets_with_glb_file(self, tmp_path):
+        """When a GLB file exists in export dir, delivery includes it."""
+        import backend.app.export.export_manager as em
+        mp = pytest.MonkeyPatch()
+        missions_root = tmp_path / "omni_missions"
+        mp.setattr(em, "OUTPUT_ROOT", missions_root)
+        result = em.export_mission_files(
+            {
+                "status": "complete",
+                "result_id": "vb16f-glb",
+                "mission": self.MISSION,
+                "agents": {},
+                "artifacts": {},
+            },
+            validate_ros2=False,
+        )
+        mp.undo()
+        export_dir = Path(result["export_dir"])
+        (export_dir / "model.glb").write_bytes(b"GLB")
+
+        from backend.app.visual_bay.manifest import build_visual_bay_manifest
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        manifest = build_visual_bay_manifest(export_dir=export_dir)
+        assets = _sanitize_preview_assets(manifest["preview_assets"], export_dir)
+
+        kinds = [a["kind"] for a in assets]
+        assert "glb" in kinds
+
+    def test_frontend_shape_has_path_and_kind(self, tmp_path):
+        """Every delivered asset must have path and kind for VisualBayPanel."""
+        result = _export_minimal(self.MISSION, tmp_path)
+        for asset in result["visual_bay"]["preview_assets"]:
+            assert "path" in asset
+            assert "kind" in asset

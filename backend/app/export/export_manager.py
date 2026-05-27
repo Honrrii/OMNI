@@ -20,6 +20,84 @@ from backend.app.engineering.morphology_gate_validator import validate_morpholog
 
 OUTPUT_ROOT = Path("outputs") / "omni_missions"
 
+# -------------------------------------------------------------------------
+# Visual Bay delivery bounds
+# -------------------------------------------------------------------------
+
+MAX_VISUAL_BAY_PREVIEW_ASSETS = 25
+MAX_VISUAL_BAY_PATH_CHARS     = 240
+MAX_VISUAL_BAY_NOTE_CHARS     = 180
+MAX_VISUAL_BAY_NOTES          = 3
+
+_PREVIEW_ASSET_ALLOWLIST: frozenset = frozenset({
+    "path",
+    "kind",
+    "browser_preview_ready",
+    "browser_preview_candidate",
+    "engineering_only",
+    "execution_blocked",
+    "requires_conversion",
+    "requires_external_tool",
+    "notes",
+})
+
+
+def _sanitize_preview_assets(
+    assets: List[Dict[str, Any]],
+    export_dir: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Bound and sanitize preview_assets before delivering them in the API summary.
+
+    - Caps list to MAX_VISUAL_BAY_PREVIEW_ASSETS.
+    - Strips fields not in the allowlist.
+    - Ensures path is relative; absolute paths are rebased or replaced with filename.
+    - Truncates paths longer than MAX_VISUAL_BAY_PATH_CHARS.
+    - Caps notes to MAX_VISUAL_BAY_NOTES entries, each truncated to MAX_VISUAL_BAY_NOTE_CHARS.
+    """
+    if not isinstance(assets, list):
+        return []
+
+    result: List[Dict[str, Any]] = []
+    for asset in assets[:MAX_VISUAL_BAY_PREVIEW_ASSETS]:
+        if not isinstance(asset, dict):
+            continue
+
+        clean: Dict[str, Any] = {
+            field: asset[field]
+            for field in _PREVIEW_ASSET_ALLOWLIST
+            if field in asset
+        }
+
+        raw_path = str(clean.get("path", ""))
+        if raw_path:
+            p = Path(raw_path)
+            if p.is_absolute():
+                if export_dir is not None:
+                    try:
+                        raw_path = str(p.relative_to(export_dir))
+                    except ValueError:
+                        raw_path = p.name
+                else:
+                    raw_path = p.name
+            if len(raw_path) > MAX_VISUAL_BAY_PATH_CHARS:
+                raw_path = raw_path[:MAX_VISUAL_BAY_PATH_CHARS]
+            clean["path"] = raw_path
+
+        notes = clean.get("notes")
+        if isinstance(notes, list):
+            bounded: List[str] = []
+            for note in notes[:MAX_VISUAL_BAY_NOTES]:
+                s = str(note)
+                bounded.append(s[:MAX_VISUAL_BAY_NOTE_CHARS] if len(s) > MAX_VISUAL_BAY_NOTE_CHARS else s)
+            clean["notes"] = bounded
+        else:
+            clean["notes"] = []
+
+        result.append(clean)
+
+    return result
+
 
 # -------------------------------------------------------------------------
 # Basic file writers
@@ -1450,6 +1528,9 @@ def export_mission_files(
         cq   = visual_bay_manifest.get("cadquery", {})
         r2   = visual_bay_manifest.get("ros2_preview", {})
 
+        raw_preview_assets = visual_bay_manifest.get("preview_assets", [])
+        preview_assets_delivery = _sanitize_preview_assets(raw_preview_assets, export_dir)
+
         visual_bay_summary = {
             "status":                  visual_bay_manifest["status"],
             "report_path":             str(manifest_path),
@@ -1461,10 +1542,12 @@ def export_mission_files(
                 cq.get("browser_preview_ready", False)
             ),
             "safe_to_launch":          False,
-            "browser_preview_ready_count":    visual_bay_manifest.get("browser_preview_ready_count", 0),
+            "browser_preview_ready_count":     visual_bay_manifest.get("browser_preview_ready_count", 0),
             "browser_preview_candidate_count": visual_bay_manifest.get("browser_preview_candidate_count", 0),
-            "engineering_only_count":         visual_bay_manifest.get("engineering_only_count", 0),
-            "execution_blocked_count":        visual_bay_manifest.get("execution_blocked_count", 0),
+            "engineering_only_count":          visual_bay_manifest.get("engineering_only_count", 0),
+            "execution_blocked_count":         visual_bay_manifest.get("execution_blocked_count", 0),
+            "preview_assets":          preview_assets_delivery,
+            "preview_asset_count":     len(preview_assets_delivery),
         }
     except Exception as error:
         visual_bay_summary = {"status": "failed", "error": str(error), "safe_to_launch": False}
