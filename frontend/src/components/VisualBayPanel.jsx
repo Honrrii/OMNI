@@ -1,3 +1,5 @@
+import VisualBayViewerShell from "./VisualBayViewerShell.jsx";
+
 function getVisualBayData(exportResult, missionResult) {
   // Compact summary — preferred source
   const summary =
@@ -299,6 +301,9 @@ export default function VisualBayPanel({ exportResult, missionResult }) {
 
         {/* ── Preview asset contract ── */}
         <PreviewAssetContract manifest={manifest} summary={summary} />
+
+        {/* ── Static viewer shell ── */}
+        <VisualBayViewerShell previewAssets={manifest?.preview_assets} />
 
         {/* ── Blocked actions ── */}
         {blockedActions.length > 0 && (
