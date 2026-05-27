@@ -1215,6 +1215,9 @@ _ALLOWLISTED_FIELDS = frozenset({
     "notes",
 })
 
+# Delivery may also include asset_url for servable assets.
+_ALLOWED_DELIVERY_FIELDS = _ALLOWLISTED_FIELDS | frozenset({"asset_url"})
+
 
 def _sanitize(assets, export_dir=None):
     from backend.app.export.export_manager import _sanitize_preview_assets
@@ -1359,8 +1362,8 @@ class TestPreviewAssetDeliveryContract:
     def test_delivered_assets_have_only_allowlisted_fields(self, tmp_path):
         result = _export_minimal(self.MISSION, tmp_path)
         for asset in result["visual_bay"]["preview_assets"]:
-            assert asset.keys() <= _ALLOWLISTED_FIELDS, (
-                f"Unexpected field(s) in delivered asset: {asset.keys() - _ALLOWLISTED_FIELDS}"
+            assert asset.keys() <= _ALLOWED_DELIVERY_FIELDS, (
+                f"Unexpected field(s) in delivered asset: {asset.keys() - _ALLOWED_DELIVERY_FIELDS}"
             )
 
     def test_no_absolute_paths_in_delivered_assets(self, tmp_path):
@@ -1474,3 +1477,431 @@ class TestPreviewAssetDeliveryContract:
         for asset in result["visual_bay"]["preview_assets"]:
             assert "path" in asset
             assert "kind" in asset
+
+
+# ---------------------------------------------------------------------------
+# Phase 16G — Asset service unit tests
+# ---------------------------------------------------------------------------
+
+def _glb_asset(path="model.glb"):
+    return {
+        "path": path,
+        "kind": "glb",
+        "browser_preview_ready": True,
+        "browser_preview_candidate": True,
+        "engineering_only": False,
+        "execution_blocked": False,
+        "requires_conversion": False,
+        "requires_external_tool": False,
+        "notes": [],
+    }
+
+
+def _blocked_asset(path="script.py"):
+    return {
+        "path": path,
+        "kind": "fusion_script",
+        "browser_preview_ready": False,
+        "browser_preview_candidate": False,
+        "engineering_only": True,
+        "execution_blocked": True,
+        "requires_conversion": False,
+        "requires_external_tool": True,
+        "notes": [],
+    }
+
+
+class TestResolveVisualBayAsset:
+    """Unit tests for resolve_visual_bay_asset."""
+
+    def test_resolves_valid_file(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        (tmp_path / "model.glb").write_bytes(b"GLB")
+        result = resolve_visual_bay_asset(tmp_path, "model.glb")
+        assert result is not None
+        assert result.name == "model.glb"
+
+    def test_returns_none_for_missing_file(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        result = resolve_visual_bay_asset(tmp_path, "missing.glb")
+        assert result is None
+
+    def test_rejects_absolute_path(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        result = resolve_visual_bay_asset(tmp_path, str(tmp_path / "model.glb"))
+        assert result is None
+
+    def test_rejects_traversal_dotdot(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        outside = tmp_path.parent / "secret.glb"
+        outside.write_bytes(b"X")
+        result = resolve_visual_bay_asset(tmp_path, "../secret.glb")
+        assert result is None
+
+    def test_rejects_traversal_nested(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        outside = tmp_path.parent / "secret.glb"
+        outside.write_bytes(b"X")
+        result = resolve_visual_bay_asset(tmp_path, "sub/../../secret.glb")
+        assert result is None
+
+    def test_rejects_path_outside_export_dir(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        other = tmp_path.parent / "other.glb"
+        other.write_bytes(b"X")
+        result = resolve_visual_bay_asset(tmp_path, str(other))
+        assert result is None
+
+    def test_resolves_nested_file(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        sub = tmp_path / "generated_fusion360"
+        sub.mkdir()
+        (sub / "model.glb").write_bytes(b"GLB")
+        result = resolve_visual_bay_asset(tmp_path, "generated_fusion360/model.glb")
+        assert result is not None
+
+    def test_empty_path_returns_none(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        assert resolve_visual_bay_asset(tmp_path, "") is None
+
+
+class TestIsVisualBayAssetServable:
+    """Unit tests for is_visual_bay_asset_servable."""
+
+    def test_glb_servable(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        assert is_visual_bay_asset_servable(_glb_asset()) is True
+
+    def test_gltf_servable(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        assert is_visual_bay_asset_servable(_glb_asset("model.gltf")) is True
+
+    def test_stl_servable(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("part.stl"), "kind": "stl", "browser_preview_ready": False,
+                 "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is True
+
+    def test_step_servable(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("part.step"), "kind": "step", "browser_preview_ready": False,
+                 "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is True
+
+    def test_urdf_servable(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("robot.urdf"), "kind": "urdf", "browser_preview_ready": False,
+                 "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is True
+
+    def test_json_servable(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("data.json"), "kind": "json", "browser_preview_ready": False,
+                 "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is True
+
+    def test_md_servable(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("README.md"), "kind": "md", "browser_preview_ready": False,
+                 "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is True
+
+    def test_py_blocked(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        assert is_visual_bay_asset_servable(_blocked_asset("script.py")) is False
+
+    def test_sh_blocked(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_blocked_asset("run.sh"), "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is False
+
+    def test_launch_py_blocked(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("start.launch.py"), "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is False
+
+    def test_launch_xml_blocked(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("start.launch.xml"), "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is False
+
+    def test_execution_blocked_flag_blocks_regardless_of_extension(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("model.glb"), "execution_blocked": True}
+        assert is_visual_bay_asset_servable(asset) is False
+
+    def test_non_dict_returns_false(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        assert is_visual_bay_asset_servable(None) is False  # type: ignore[arg-type]
+        assert is_visual_bay_asset_servable("model.glb") is False  # type: ignore[arg-type]
+
+    def test_unknown_extension_not_servable(self):
+        from backend.app.visual_bay.asset_service import is_visual_bay_asset_servable
+        asset = {**_glb_asset("data.xyz"), "execution_blocked": False}
+        assert is_visual_bay_asset_servable(asset) is False
+
+
+class TestBuildVisualBayAssetUrl:
+    """Unit tests for build_visual_bay_asset_url."""
+
+    def test_url_structure(self):
+        from backend.app.visual_bay.asset_service import build_visual_bay_asset_url
+        url = build_visual_bay_asset_url("my_mission_slug", "model.glb")
+        assert url == "/api/visual-bay/assets/my_mission_slug/model.glb"
+
+    def test_nested_path(self):
+        from backend.app.visual_bay.asset_service import build_visual_bay_asset_url
+        url = build_visual_bay_asset_url("mission_abc", "generated_fusion360/robot.glb")
+        assert "/api/visual-bay/assets/mission_abc/generated_fusion360/robot.glb" == url
+
+    def test_url_contains_mission_id(self):
+        from backend.app.visual_bay.asset_service import build_visual_bay_asset_url
+        url = build_visual_bay_asset_url("rover_mission_2026", "part.stl")
+        assert "rover_mission_2026" in url
+
+
+class TestAssetUrlInDelivery:
+    """asset_url is injected into servable assets in the export summary."""
+
+    def test_asset_url_added_for_glb(self):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        result = _sanitize_preview_assets([_glb_asset()], mission_id="test_slug")
+        assert "asset_url" in result[0]
+        assert "test_slug" in result[0]["asset_url"]
+
+    def test_asset_url_contains_path(self):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        result = _sanitize_preview_assets([_glb_asset("robot/model.glb")], mission_id="slug")
+        assert "robot/model.glb" in result[0]["asset_url"]
+
+    def test_asset_url_not_added_for_execution_blocked(self):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        result = _sanitize_preview_assets([_blocked_asset()], mission_id="slug")
+        assert "asset_url" not in result[0]
+
+    def test_asset_url_not_added_without_mission_id(self):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        result = _sanitize_preview_assets([_glb_asset()])
+        assert "asset_url" not in result[0]
+
+    def test_asset_url_not_added_for_script_extension(self):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        asset = {**_blocked_asset("generated_fusion360/model.py"), "execution_blocked": False}
+        result = _sanitize_preview_assets([asset], mission_id="slug")
+        assert "asset_url" not in result[0]
+
+    def test_asset_url_not_added_for_launch_py(self):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        asset = {**_glb_asset("start.launch.py"), "execution_blocked": False}
+        result = _sanitize_preview_assets([asset], mission_id="slug")
+        assert "asset_url" not in result[0]
+
+    def test_export_summary_servable_assets_have_asset_url(self, tmp_path):
+        """Integration: export with a GLB file delivers asset_url for that asset."""
+        import backend.app.export.export_manager as em
+        mp = pytest.MonkeyPatch()
+        missions_root = tmp_path / "omni_missions"
+        mp.setattr(em, "OUTPUT_ROOT", missions_root)
+        result = em.export_mission_files(
+            {
+                "status": "complete",
+                "result_id": "vb16g",
+                "mission": "Build a rover.",
+                "agents": {},
+                "artifacts": {},
+            },
+            validate_ros2=False,
+        )
+        mp.undo()
+        export_dir = Path(result["export_dir"])
+        (export_dir / "model.glb").write_bytes(b"GLB")
+
+        from backend.app.visual_bay.manifest import build_visual_bay_manifest
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        manifest = build_visual_bay_manifest(export_dir=export_dir)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], export_dir, mission_id=result["folder_name"]
+        )
+        glb_assets = [a for a in assets if a.get("kind") == "glb"]
+        assert glb_assets, "Expected at least one GLB asset"
+        assert "asset_url" in glb_assets[0]
+        assert result["folder_name"] in glb_assets[0]["asset_url"]
+
+    def test_export_summary_execution_blocked_assets_no_asset_url(self, tmp_path):
+        """Integration: execution-blocked assets do not receive asset_url."""
+        import backend.app.export.export_manager as em
+        mp = pytest.MonkeyPatch()
+        missions_root = tmp_path / "omni_missions"
+        mp.setattr(em, "OUTPUT_ROOT", missions_root)
+        result = em.export_mission_files(
+            {
+                "status": "complete",
+                "result_id": "vb16g-block",
+                "mission": "Build a rover.",
+                "agents": {},
+                "artifacts": {},
+            },
+            validate_ros2=False,
+        )
+        mp.undo()
+        export_dir = Path(result["export_dir"])
+        gen = export_dir / "generated_fusion360"
+        gen.mkdir(parents=True, exist_ok=True)
+        (gen / "fusion360_model_generator.py").write_text("# script")
+
+        from backend.app.visual_bay.manifest import build_visual_bay_manifest
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        manifest = build_visual_bay_manifest(export_dir=export_dir)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], export_dir, mission_id=result["folder_name"]
+        )
+        for asset in assets:
+            if asset.get("execution_blocked"):
+                assert "asset_url" not in asset, (
+                    f"execution_blocked asset must not have asset_url: {asset['path']}"
+                )
+
+
+class TestVisualBayRoutes:
+    """FastAPI route tests for Visual Bay manifest and asset endpoints."""
+
+    def _app_and_client(self, tmp_path):
+        import backend.app.api.visual_bay_routes as vbr
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        vbr.OUTPUT_ROOT = tmp_path
+        test_app = FastAPI()
+        test_app.include_router(vbr.router, prefix="/api/visual-bay")
+        return TestClient(test_app, raise_server_exceptions=False), vbr
+
+    # ── Manifest route ────────────────────────────────────────
+
+    def test_manifest_not_found_when_missing(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        (tmp_path / "my_mission").mkdir()
+        r = client.get("/api/visual-bay/manifest/my_mission")
+        assert r.status_code == 404
+        assert r.json()["status"] == "not_found"
+
+    def test_manifest_returns_json_when_file_exists(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "my_mission"
+        d.mkdir()
+        (d / "visual_bay_manifest.json").write_text(
+            '{"status":"empty","module":"visual_bay"}', encoding="utf-8"
+        )
+        r = client.get("/api/visual-bay/manifest/my_mission")
+        assert r.status_code == 200
+        assert r.json()["status"] == "empty"
+
+    def test_manifest_returns_all_fields(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        payload = {"status": "available", "module": "visual_bay", "preview_assets": []}
+        (d / "visual_bay_manifest.json").write_text(
+            json.dumps(payload), encoding="utf-8"
+        )
+        r = client.get("/api/visual-bay/manifest/m")
+        assert r.status_code == 200
+        assert "preview_assets" in r.json()
+
+    # ── Asset route — blocked extensions ──────────────────────
+
+    def test_asset_route_blocks_py_script(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "script.py").write_text("import os")
+        r = client.get("/api/visual-bay/assets/m/script.py")
+        assert r.status_code == 403
+        assert r.json()["status"] == "blocked"
+
+    def test_asset_route_blocks_sh_script(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "run.sh").write_text("#!/bin/bash")
+        r = client.get("/api/visual-bay/assets/m/run.sh")
+        assert r.status_code == 403
+
+    def test_asset_route_blocks_launch_py(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "start.launch.py").write_text("# launch")
+        r = client.get("/api/visual-bay/assets/m/start.launch.py")
+        assert r.status_code == 403
+        assert r.json()["status"] == "blocked"
+
+    # ── Asset route — served files ────────────────────────────
+
+    def test_asset_route_serves_glb(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "model.glb").write_bytes(b"GLB")
+        r = client.get("/api/visual-bay/assets/m/model.glb")
+        assert r.status_code == 200
+
+    def test_asset_route_serves_stl(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "part.stl").write_bytes(b"STL")
+        r = client.get("/api/visual-bay/assets/m/part.stl")
+        assert r.status_code == 200
+
+    def test_asset_route_serves_json(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "data.json").write_text('{"ok":true}')
+        r = client.get("/api/visual-bay/assets/m/data.json")
+        assert r.status_code == 200
+
+    def test_asset_route_serves_nested_file(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        d = tmp_path / "m" / "sub"
+        d.mkdir(parents=True)
+        (d / "robot.urdf").write_text("<robot/>")
+        r = client.get("/api/visual-bay/assets/m/sub/robot.urdf")
+        assert r.status_code == 200
+
+    # ── Asset route — missing files ───────────────────────────
+
+    def test_asset_route_not_found_for_missing_file(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        (tmp_path / "m").mkdir()
+        r = client.get("/api/visual-bay/assets/m/missing.glb")
+        assert r.status_code == 404
+        assert r.json()["status"] == "not_found"
+
+    def test_asset_route_not_found_for_missing_mission(self, tmp_path):
+        client, _ = self._app_and_client(tmp_path)
+        r = client.get("/api/visual-bay/assets/no_such_mission/model.glb")
+        assert r.status_code == 404
+
+    # ── Traversal via service layer (resolve_visual_bay_asset) ─
+
+    def test_resolve_blocks_traversal_dotdot(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        (tmp_path.parent / "escape.glb").write_bytes(b"X")
+        assert resolve_visual_bay_asset(tmp_path, "../escape.glb") is None
+
+    def test_resolve_blocks_absolute_path(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        assert resolve_visual_bay_asset(tmp_path, "/etc/passwd") is None
+
+    def test_resolve_blocks_windows_traversal(self, tmp_path):
+        from backend.app.visual_bay.asset_service import resolve_visual_bay_asset
+        assert resolve_visual_bay_asset(tmp_path, "..\\escape.glb") is None
+
+    # ── Overall export still succeeds ─────────────────────────
+
+    def test_export_still_returns_exported_status(self, tmp_path):
+        result = _export_minimal(ROVER_MISSION_16F, tmp_path)
+        assert result["status"] == "exported"

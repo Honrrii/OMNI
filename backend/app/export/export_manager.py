@@ -45,6 +45,7 @@ _PREVIEW_ASSET_ALLOWLIST: frozenset = frozenset({
 def _sanitize_preview_assets(
     assets: List[Dict[str, Any]],
     export_dir: Optional[Path] = None,
+    mission_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Bound and sanitize preview_assets before delivering them in the API summary.
@@ -54,9 +55,19 @@ def _sanitize_preview_assets(
     - Ensures path is relative; absolute paths are rebased or replaced with filename.
     - Truncates paths longer than MAX_VISUAL_BAY_PATH_CHARS.
     - Caps notes to MAX_VISUAL_BAY_NOTES entries, each truncated to MAX_VISUAL_BAY_NOTE_CHARS.
+    - Adds asset_url for servable (non-execution-blocked, allowed-extension) assets when
+      mission_id is provided; omits asset_url for blocked/script assets.
     """
     if not isinstance(assets, list):
         return []
+
+    # Import asset service once; skip silently if unavailable.
+    _svc = None
+    if mission_id:
+        try:
+            from backend.app.visual_bay import asset_service as _svc  # type: ignore[assignment]
+        except Exception:
+            pass
 
     result: List[Dict[str, Any]] = []
     for asset in assets[:MAX_VISUAL_BAY_PREVIEW_ASSETS]:
@@ -93,6 +104,16 @@ def _sanitize_preview_assets(
             clean["notes"] = bounded
         else:
             clean["notes"] = []
+
+        # Attach asset_url only for servable, non-execution-blocked assets.
+        if _svc is not None and mission_id and clean.get("path"):
+            try:
+                if _svc.is_visual_bay_asset_servable(clean):
+                    clean["asset_url"] = _svc.build_visual_bay_asset_url(
+                        mission_id, clean["path"]
+                    )
+            except Exception:
+                pass
 
         result.append(clean)
 
@@ -1529,7 +1550,9 @@ def export_mission_files(
         r2   = visual_bay_manifest.get("ros2_preview", {})
 
         raw_preview_assets = visual_bay_manifest.get("preview_assets", [])
-        preview_assets_delivery = _sanitize_preview_assets(raw_preview_assets, export_dir)
+        preview_assets_delivery = _sanitize_preview_assets(
+            raw_preview_assets, export_dir, mission_id=folder_name
+        )
 
         visual_bay_summary = {
             "status":                  visual_bay_manifest["status"],
