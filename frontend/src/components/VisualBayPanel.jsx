@@ -77,6 +77,94 @@ function SubSectionCard({ title, detected, children }) {
   );
 }
 
+function AssetChip({ label, variant }) {
+  return (
+    <span className={`vb-preview-asset-chip vb-preview-asset-chip-${variant}`}>
+      {label}
+    </span>
+  );
+}
+
+function PreviewAssetCard({ asset }) {
+  const chips = [];
+  if (asset.browser_preview_ready)   chips.push(<AssetChip key="ready"      label="Browser asset ready"       variant="ready"       />);
+  if (asset.browser_preview_candidate && !asset.browser_preview_ready)
+                                     chips.push(<AssetChip key="candidate"   label="Preview candidate"         variant="candidate"   />);
+  if (asset.engineering_only)        chips.push(<AssetChip key="eng"         label="Engineering-only"          variant="engineering" />);
+  if (asset.execution_blocked)       chips.push(<AssetChip key="blocked"     label="Execution blocked"         variant="blocked"     />);
+  if (asset.requires_conversion)     chips.push(<AssetChip key="conv"        label="Conversion/parser required" variant="conversion" />);
+  if (asset.requires_external_tool)  chips.push(<AssetChip key="ext"         label="External tool required"    variant="external"    />);
+
+  const cardVariant = asset.execution_blocked ? "blocked"
+    : asset.browser_preview_ready             ? "ready"
+    : asset.engineering_only                  ? "engineering"
+    : "default";
+
+  return (
+    <div className={`vb-preview-asset-card vb-preview-asset-card-${cardVariant}`}>
+      <div className="vb-preview-asset-path">{asset.path}</div>
+      <div className="vb-preview-asset-kind">{asset.kind}</div>
+      {chips.length > 0 && <div className="vb-preview-asset-chips">{chips}</div>}
+      {asset.notes && asset.notes.length > 0 && (
+        <ul className="vb-preview-asset-notes">
+          {asset.notes.map((n, i) => <li key={i}>{n}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function PreviewAssetContract({ manifest, summary }) {
+  const assets = manifest?.preview_assets ?? [];
+
+  const readyCount     = summary?.browser_preview_ready_count    ?? manifest?.browser_preview_ready_count    ?? null;
+  const candidateCount = summary?.browser_preview_candidate_count ?? manifest?.browser_preview_candidate_count ?? null;
+  const engCount       = summary?.engineering_only_count          ?? manifest?.engineering_only_count          ?? null;
+  const blockedCount   = summary?.execution_blocked_count         ?? manifest?.execution_blocked_count         ?? null;
+
+  const hasCounts = readyCount !== null || candidateCount !== null || engCount !== null || blockedCount !== null;
+
+  if (!hasCounts && assets.length === 0) return null;
+
+  return (
+    <VbSection label="Preview Asset Contract">
+      {hasCounts && (
+        <div className="vb-preview-asset-counts">
+          {readyCount !== null && (
+            <span className="vb-preview-count vb-preview-count-ready">
+              {readyCount} browser ready
+            </span>
+          )}
+          {candidateCount !== null && (
+            <span className="vb-preview-count vb-preview-count-candidate">
+              {candidateCount} candidate
+            </span>
+          )}
+          {engCount !== null && (
+            <span className="vb-preview-count vb-preview-count-engineering">
+              {engCount} engineering-only
+            </span>
+          )}
+          {blockedCount !== null && (
+            <span className="vb-preview-count vb-preview-count-blocked">
+              {blockedCount} execution-blocked
+            </span>
+          )}
+        </div>
+      )}
+      {assets.length > 0 ? (
+        <div className="vb-preview-assets">
+          {assets.map((asset, i) => (
+            <PreviewAssetCard key={i} asset={asset} />
+          ))}
+        </div>
+      ) : (
+        <p className="vb-preview-empty">No preview assets found in export directory.</p>
+      )}
+    </VbSection>
+  );
+}
+
 export default function VisualBayPanel({ exportResult, missionResult }) {
   const { summary, manifest } = getVisualBayData(exportResult, missionResult);
 
@@ -208,6 +296,9 @@ export default function VisualBayPanel({ exportResult, missionResult }) {
             )}
           </div>
         )}
+
+        {/* ── Preview asset contract ── */}
+        <PreviewAssetContract manifest={manifest} summary={summary} />
 
         {/* ── Blocked actions ── */}
         {blockedActions.length > 0 && (
