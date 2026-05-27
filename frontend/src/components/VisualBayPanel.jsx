@@ -116,8 +116,8 @@ function PreviewAssetCard({ asset }) {
   );
 }
 
-function PreviewAssetContract({ manifest, summary }) {
-  const assets = manifest?.preview_assets ?? [];
+function PreviewAssetContract({ manifest, summary, previewAssets }) {
+  const assets = Array.isArray(previewAssets) ? previewAssets : [];
 
   const readyCount     = summary?.browser_preview_ready_count    ?? manifest?.browser_preview_ready_count    ?? null;
   const candidateCount = summary?.browser_preview_candidate_count ?? manifest?.browser_preview_candidate_count ?? null;
@@ -189,6 +189,12 @@ export default function VisualBayPanel({ exportResult, missionResult }) {
   const nextSteps      = manifest?.next_steps      || [];
 
   const hasFullDetail = !!(fusion360 || cadquery || ros2 || simulation);
+
+  const previewAssets = Array.isArray(manifest?.preview_assets)
+    ? manifest.preview_assets
+    : Array.isArray(summary?.preview_assets)
+      ? summary.preview_assets
+      : [];
 
   if (status === "failed") {
     return (
@@ -300,10 +306,10 @@ export default function VisualBayPanel({ exportResult, missionResult }) {
         )}
 
         {/* ── Preview asset contract ── */}
-        <PreviewAssetContract manifest={manifest} summary={summary} />
+        <PreviewAssetContract manifest={manifest} summary={summary} previewAssets={previewAssets} />
 
         {/* ── Static viewer shell ── */}
-        <VisualBayViewerShell previewAssets={manifest?.preview_assets} />
+        <VisualBayViewerShell previewAssets={previewAssets} />
 
         {/* ── Blocked actions ── */}
         {blockedActions.length > 0 && (
