@@ -1905,3 +1905,349 @@ class TestVisualBayRoutes:
     def test_export_still_returns_exported_status(self, tmp_path):
         result = _export_minimal(ROVER_MISSION_16F, tmp_path)
         assert result["status"] == "exported"
+
+
+# ---------------------------------------------------------------------------
+# Phase 16J — GLB/GLTF smoke fixture pipeline tests
+# ---------------------------------------------------------------------------
+
+# Minimal valid GLTF 2.0 — text-based, no binary geometry, no LLM calls.
+_GLTF_FIXTURE = (
+    '{"asset":{"version":"2.0"},'
+    '"scene":0,'
+    '"scenes":[{"nodes":[0]}],'
+    '"nodes":[{"name":"smoke_fixture"}],'
+    '"meshes":[]}'
+)
+
+# Minimal valid GLB header (12-byte header: magic + version + length = 0).
+# Just enough for file-presence tests; Three.js is not invoked in tests.
+_GLB_FIXTURE = (
+    b"glTF"      # magic
+    b"\x02\x00\x00\x00"  # version 2
+    b"\x0c\x00\x00\x00"  # total length = 12 (header only)
+)
+
+
+class TestGltfFixturePipeline:
+    """
+    Verify the full GLTF fixture pipeline:
+    manifest scanner → preview_assets → sanitizer → asset_url → route serving.
+    """
+
+    def _write_gltf(self, directory: Path, name: str = "smoke_model.gltf") -> Path:
+        p = directory / name
+        p.write_text(_GLTF_FIXTURE, encoding="utf-8")
+        return p
+
+    def _write_glb(self, directory: Path, name: str = "smoke_model.glb") -> Path:
+        p = directory / name
+        p.write_bytes(_GLB_FIXTURE)
+        return p
+
+    # ── Manifest scanner detects .gltf ────────────────────────
+
+    def test_gltf_appears_in_preview_assets(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        kinds = [a["kind"] for a in r["preview_assets"]]
+        assert "gltf" in kinds
+
+    def test_gltf_browser_preview_ready_true(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        gltf = next(a for a in r["preview_assets"] if a["kind"] == "gltf")
+        assert gltf["browser_preview_ready"] is True
+
+    def test_gltf_execution_blocked_false(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        gltf = next(a for a in r["preview_assets"] if a["kind"] == "gltf")
+        assert gltf["execution_blocked"] is False
+
+    def test_gltf_browser_preview_candidate_true(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        gltf = next(a for a in r["preview_assets"] if a["kind"] == "gltf")
+        assert gltf["browser_preview_candidate"] is True
+
+    def test_gltf_engineering_only_false(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        gltf = next(a for a in r["preview_assets"] if a["kind"] == "gltf")
+        assert gltf["engineering_only"] is False
+
+    def test_gltf_requires_conversion_false(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        gltf = next(a for a in r["preview_assets"] if a["kind"] == "gltf")
+        assert gltf["requires_conversion"] is False
+
+    def test_gltf_requires_external_tool_false(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        gltf = next(a for a in r["preview_assets"] if a["kind"] == "gltf")
+        assert gltf["requires_external_tool"] is False
+
+    def test_gltf_notes_empty(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        gltf = next(a for a in r["preview_assets"] if a["kind"] == "gltf")
+        assert gltf["notes"] == []
+
+    def test_glb_appears_in_preview_assets(self, tmp_path):
+        self._write_glb(tmp_path)
+        r = _build(tmp_path)
+        kinds = [a["kind"] for a in r["preview_assets"]]
+        assert "glb" in kinds
+
+    def test_glb_browser_preview_ready_true(self, tmp_path):
+        self._write_glb(tmp_path)
+        r = _build(tmp_path)
+        glb = next(a for a in r["preview_assets"] if a["kind"] == "glb")
+        assert glb["browser_preview_ready"] is True
+
+    def test_glb_execution_blocked_false(self, tmp_path):
+        self._write_glb(tmp_path)
+        r = _build(tmp_path)
+        glb = next(a for a in r["preview_assets"] if a["kind"] == "glb")
+        assert glb["execution_blocked"] is False
+
+    def test_aggregate_count_increments_for_gltf(self, tmp_path):
+        self._write_gltf(tmp_path)
+        r = _build(tmp_path)
+        assert r["browser_preview_ready_count"] >= 1
+
+    # ── Sanitizer adds asset_url for GLTF/GLB ─────────────────
+
+    def test_gltf_gets_asset_url_from_sanitizer(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        self._write_gltf(tmp_path)
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="smoke_mission"
+        )
+        gltf = next(a for a in assets if a["kind"] == "gltf")
+        assert "asset_url" in gltf
+
+    def test_gltf_asset_url_contains_mission_id(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        self._write_gltf(tmp_path)
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="smoke_mission"
+        )
+        gltf = next(a for a in assets if a["kind"] == "gltf")
+        assert "smoke_mission" in gltf["asset_url"]
+
+    def test_gltf_asset_url_contains_filename(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        self._write_gltf(tmp_path, "my_robot.gltf")
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m"
+        )
+        gltf = next(a for a in assets if a["kind"] == "gltf")
+        assert "my_robot.gltf" in gltf["asset_url"]
+
+    def test_gltf_asset_url_starts_with_api_path(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        self._write_gltf(tmp_path)
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m"
+        )
+        gltf = next(a for a in assets if a["kind"] == "gltf")
+        assert gltf["asset_url"].startswith("/api/visual-bay/assets/")
+
+    def test_glb_gets_asset_url_from_sanitizer(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        self._write_glb(tmp_path)
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m"
+        )
+        glb = next(a for a in assets if a["kind"] == "glb")
+        assert "asset_url" in glb
+
+    # ── Route serves GLTF fixture ──────────────────────────────
+
+    def _route_client(self, tmp_path):
+        import backend.app.api.visual_bay_routes as vbr
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        vbr.OUTPUT_ROOT = tmp_path
+        app = FastAPI()
+        app.include_router(vbr.router, prefix="/api/visual-bay")
+        return TestClient(app, raise_server_exceptions=False), vbr
+
+    def test_route_serves_gltf_fixture(self, tmp_path):
+        client, _ = self._route_client(tmp_path)
+        d = tmp_path / "smoke_mission"
+        d.mkdir()
+        (d / "smoke_model.gltf").write_text(_GLTF_FIXTURE, encoding="utf-8")
+        r = client.get("/api/visual-bay/assets/smoke_mission/smoke_model.gltf")
+        assert r.status_code == 200
+
+    def test_route_serves_gltf_with_correct_content(self, tmp_path):
+        client, _ = self._route_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "test.gltf").write_text(_GLTF_FIXTURE, encoding="utf-8")
+        r = client.get("/api/visual-bay/assets/m/test.gltf")
+        assert r.status_code == 200
+        assert "2.0" in r.text
+
+    def test_route_serves_glb_fixture(self, tmp_path):
+        client, _ = self._route_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "model.glb").write_bytes(_GLB_FIXTURE)
+        r = client.get("/api/visual-bay/assets/m/model.glb")
+        assert r.status_code == 200
+
+    def test_route_returns_not_found_for_missing_gltf(self, tmp_path):
+        client, _ = self._route_client(tmp_path)
+        (tmp_path / "m").mkdir()
+        r = client.get("/api/visual-bay/assets/m/nonexistent.gltf")
+        assert r.status_code == 404
+
+    def test_route_blocks_py_in_same_dir_as_gltf(self, tmp_path):
+        client, _ = self._route_client(tmp_path)
+        d = tmp_path / "m"
+        d.mkdir()
+        (d / "smoke_model.gltf").write_text(_GLTF_FIXTURE, encoding="utf-8")
+        (d / "script.py").write_text("import os")
+        # GLB is served
+        r_gltf = client.get("/api/visual-bay/assets/m/smoke_model.gltf")
+        assert r_gltf.status_code == 200
+        # Script is blocked
+        r_py = client.get("/api/visual-bay/assets/m/script.py")
+        assert r_py.status_code == 403
+
+
+class TestNonGltfAssetsRemainPlaceholderOnly:
+    """
+    Non-GLB/GLTF assets must not receive browser_preview_ready=True
+    or asset_url (when execution_blocked).
+    """
+
+    def test_stl_not_browser_preview_ready(self, tmp_path):
+        (tmp_path / "part.stl").write_bytes(b"solid\nendsolid")
+        r = _build(tmp_path)
+        stl = next((a for a in r["preview_assets"] if a["kind"] == "stl"), None)
+        assert stl is not None
+        assert stl["browser_preview_ready"] is False
+
+    def test_stl_is_browser_preview_candidate(self, tmp_path):
+        (tmp_path / "part.stl").write_bytes(b"solid\nendsolid")
+        r = _build(tmp_path)
+        stl = next(a for a in r["preview_assets"] if a["kind"] == "stl")
+        assert stl["browser_preview_candidate"] is True
+
+    def test_stl_not_execution_blocked(self, tmp_path):
+        (tmp_path / "part.stl").write_bytes(b"solid\nendsolid")
+        r = _build(tmp_path)
+        stl = next(a for a in r["preview_assets"] if a["kind"] == "stl")
+        assert stl["execution_blocked"] is False
+
+    def test_step_not_browser_preview_ready(self, tmp_path):
+        (tmp_path / "part.step").write_text("ISO-10303-21;")
+        r = _build(tmp_path)
+        step = next((a for a in r["preview_assets"] if a["kind"] == "step"), None)
+        assert step is not None
+        assert step["browser_preview_ready"] is False
+
+    def test_step_engineering_only(self, tmp_path):
+        (tmp_path / "part.step").write_text("ISO-10303-21;")
+        r = _build(tmp_path)
+        step = next(a for a in r["preview_assets"] if a["kind"] == "step")
+        assert step["engineering_only"] is True
+
+    def test_urdf_not_browser_preview_ready(self, tmp_path):
+        (tmp_path / "robot.urdf").write_text("<robot/>")
+        r = _build(tmp_path)
+        urdf = next((a for a in r["preview_assets"] if a["kind"] == "urdf"), None)
+        assert urdf is not None
+        assert urdf["browser_preview_ready"] is False
+
+    def test_urdf_requires_conversion(self, tmp_path):
+        (tmp_path / "robot.urdf").write_text("<robot/>")
+        r = _build(tmp_path)
+        urdf = next(a for a in r["preview_assets"] if a["kind"] == "urdf")
+        assert urdf["requires_conversion"] is True
+
+    def test_launch_py_execution_blocked(self, tmp_path):
+        p = tmp_path / "start.launch.py"
+        p.write_text("# launch")
+        r = _build(tmp_path)
+        launch = next((a for a in r["preview_assets"] if a["kind"] == "ros2_launch"), None)
+        assert launch is not None
+        assert launch["execution_blocked"] is True
+
+    def test_launch_py_no_asset_url(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        (tmp_path / "start.launch.py").write_text("# launch")
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m"
+        )
+        launch = next((a for a in assets if a["kind"] == "ros2_launch"), None)
+        assert launch is not None
+        assert "asset_url" not in launch
+
+    def test_fusion_script_execution_blocked(self, tmp_path):
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        r = _build(tmp_path)
+        script = next((a for a in r["preview_assets"] if a["kind"] == "fusion_script"), None)
+        assert script is not None
+        assert script["execution_blocked"] is True
+
+    def test_fusion_script_no_asset_url(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m"
+        )
+        script = next((a for a in assets if a["kind"] == "fusion_script"), None)
+        assert script is not None
+        assert "asset_url" not in script
+
+    def test_mixed_dir_only_gltf_is_browser_ready(self, tmp_path):
+        """GLTF and STL coexist; only GLTF gets browser_preview_ready=True."""
+        (tmp_path / "model.gltf").write_text(_GLTF_FIXTURE, encoding="utf-8")
+        (tmp_path / "part.stl").write_bytes(b"solid\nendsolid")
+        (tmp_path / "robot.urdf").write_text("<robot/>")
+        r = _build(tmp_path)
+        pa = {a["kind"]: a for a in r["preview_assets"]}
+        assert pa["gltf"]["browser_preview_ready"] is True
+        assert pa["stl"]["browser_preview_ready"] is False
+        assert pa["urdf"]["browser_preview_ready"] is False
+
+    def test_mixed_dir_gltf_and_launch_only_gltf_gets_asset_url(self, tmp_path):
+        """GLTF (servable) gets asset_url; execution-blocked launch file does not."""
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        (tmp_path / "model.gltf").write_text(_GLTF_FIXTURE, encoding="utf-8")
+        (tmp_path / "start.launch.py").write_text("# launch")  # execution_blocked
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m"
+        )
+        pa = {a["kind"]: a for a in assets}
+        assert "asset_url" in pa["gltf"]
+        assert "asset_url" not in pa["ros2_launch"]
+
+    def test_gltf_is_only_kind_with_browser_preview_ready_true_in_mixed(self, tmp_path):
+        (tmp_path / "model.gltf").write_text(_GLTF_FIXTURE, encoding="utf-8")
+        (tmp_path / "part.step").write_text("ISO-10303-21;")
+        r = _build(tmp_path)
+        not_ready = [a for a in r["preview_assets"] if a["kind"] != "gltf"]
+        for a in not_ready:
+            assert a["browser_preview_ready"] is False, (
+                f"{a['kind']} should not be browser_preview_ready"
+            )
