@@ -1461,6 +1461,10 @@ def export_mission_files(
                 cq.get("browser_preview_ready", False)
             ),
             "safe_to_launch":          False,
+            "browser_preview_ready_count":    visual_bay_manifest.get("browser_preview_ready_count", 0),
+            "browser_preview_candidate_count": visual_bay_manifest.get("browser_preview_candidate_count", 0),
+            "engineering_only_count":         visual_bay_manifest.get("engineering_only_count", 0),
+            "execution_blocked_count":        visual_bay_manifest.get("execution_blocked_count", 0),
         }
     except Exception as error:
         visual_bay_summary = {"status": "failed", "error": str(error), "safe_to_launch": False}

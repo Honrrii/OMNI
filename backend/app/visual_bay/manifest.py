@@ -1,9 +1,13 @@
 """
-OMNI Phase 16A — Visual Bay manifest: deterministic mission visual artifact scanner.
+OMNI Phase 16A/16C — Visual Bay manifest: deterministic mission visual artifact scanner.
 
 Summarizes which CAD, CadQuery, Fusion 360, ROS2, and simulation assets exist
 inside an export directory. Does NOT render 3D, launch simulators, or execute
 generated scripts.
+
+Phase 16C adds a preview_assets contract: each discovered file gets a compact
+object describing its browser-preview readiness, execution safety, and next-step
+requirements.
 
 No LLM calls. No network calls. No file execution.
 """
@@ -91,6 +95,180 @@ def _rglob_launch_files(base: Path) -> List[str]:
             except ValueError:
                 results.append(str(path))
     return sorted(results)
+
+
+# ---------------------------------------------------------------------------
+# Preview asset contract (Phase 16C)
+# ---------------------------------------------------------------------------
+
+def _classify_asset_file(
+    path: Path,
+    export_dir: Path,
+) -> Optional[Dict[str, Any]]:
+    """
+    Classify a single file into a preview asset object.
+
+    Returns None for files that are not visual/CAD/ROS2/simulation assets
+    (e.g. plain JSON, Markdown, CSV) so they are excluded from preview_assets.
+    """
+    name   = path.name.lower()
+    suffix = path.suffix.lower()
+
+    try:
+        rel = str(path.relative_to(export_dir))
+    except ValueError:
+        rel = str(path)
+
+    # .glb / .gltf — browser-ready
+    if suffix in (".glb", ".gltf"):
+        return {
+            "path":                    rel,
+            "kind":                    suffix.lstrip("."),
+            "browser_preview_ready":   True,
+            "browser_preview_candidate": True,
+            "engineering_only":        False,
+            "execution_blocked":       False,
+            "requires_conversion":     False,
+            "requires_external_tool":  False,
+            "notes":                   [],
+        }
+
+    # .stl / .obj — mesh present, viewer support pending
+    if suffix in (".stl", ".obj"):
+        return {
+            "path":                    rel,
+            "kind":                    "stl",
+            "browser_preview_ready":   False,
+            "browser_preview_candidate": True,
+            "engineering_only":        False,
+            "execution_blocked":       False,
+            "requires_conversion":     False,
+            "requires_external_tool":  False,
+            "notes":                   ["Viewer support pending"],
+        }
+
+    # .step / .stp / .iges / .igs — engineering CAD only
+    if suffix in (".step", ".stp", ".iges", ".igs"):
+        return {
+            "path":                    rel,
+            "kind":                    "step",
+            "browser_preview_ready":   False,
+            "browser_preview_candidate": False,
+            "engineering_only":        True,
+            "execution_blocked":       False,
+            "requires_conversion":     False,
+            "requires_external_tool":  True,
+            "notes":                   [],
+        }
+
+    # .urdf / .xacro — preview candidate, parser not implemented
+    if suffix in (".urdf", ".xacro"):
+        return {
+            "path":                    rel,
+            "kind":                    "urdf",
+            "browser_preview_ready":   False,
+            "browser_preview_candidate": True,
+            "engineering_only":        False,
+            "execution_blocked":       False,
+            "requires_conversion":     True,
+            "requires_external_tool":  False,
+            "notes":                   ["URDF preview parser not implemented yet"],
+        }
+
+    # .rviz — execution blocked, external tool required
+    if suffix == ".rviz":
+        return {
+            "path":                    rel,
+            "kind":                    "rviz",
+            "browser_preview_ready":   False,
+            "browser_preview_candidate": False,
+            "engineering_only":        True,
+            "execution_blocked":       True,
+            "requires_conversion":     False,
+            "requires_external_tool":  True,
+            "notes":                   [],
+        }
+
+    # Launch files (.launch.py / .launch.xml / .launch)
+    if any(name.endswith(s) for s in _LAUNCH_SUFFIXES):
+        return {
+            "path":                    rel,
+            "kind":                    "ros2_launch",
+            "browser_preview_ready":   False,
+            "browser_preview_candidate": False,
+            "engineering_only":        True,
+            "execution_blocked":       True,
+            "requires_conversion":     False,
+            "requires_external_tool":  True,
+            "notes":                   [],
+        }
+
+    # Fusion 360 model generator script (specific filename)
+    if name == "fusion360_model_generator.py":
+        return {
+            "path":                    rel,
+            "kind":                    "fusion_script",
+            "browser_preview_ready":   False,
+            "browser_preview_candidate": False,
+            "engineering_only":        True,
+            "execution_blocked":       True,
+            "requires_conversion":     False,
+            "requires_external_tool":  True,
+            "notes":                   [],
+        }
+
+    # Python scripts inside generated_fusion360/ — Fusion scripts
+    if suffix == ".py":
+        parts = Path(rel).parts
+        if "generated_fusion360" in parts:
+            return {
+                "path":                    rel,
+                "kind":                    "fusion_script",
+                "browser_preview_ready":   False,
+                "browser_preview_candidate": False,
+                "engineering_only":        True,
+                "execution_blocked":       True,
+                "requires_conversion":     False,
+                "requires_external_tool":  True,
+                "notes":                   [],
+            }
+        # Python scripts inside generated_cad/ — CadQuery scripts
+        if "generated_cad" in parts:
+            return {
+                "path":                    rel,
+                "kind":                    "cadquery_script",
+                "browser_preview_ready":   False,
+                "browser_preview_candidate": False,
+                "engineering_only":        True,
+                "execution_blocked":       True,
+                "requires_conversion":     False,
+                "requires_external_tool":  True,
+                "notes":                   [],
+            }
+
+    return None  # not a visual/CAD/ROS2 asset — exclude
+
+
+def _build_preview_assets(export_dir: Path) -> List[Dict[str, Any]]:
+    """
+    Walk export_dir recursively and classify every visual/CAD/ROS2/sim file
+    into a preview asset object. Returns a deterministically sorted list.
+    """
+    if not export_dir.is_dir():
+        return []
+    assets: List[Dict[str, Any]] = []
+    seen: set = set()
+    for path in sorted(export_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        asset = _classify_asset_file(path, export_dir)
+        if asset is None:
+            continue
+        key = asset["path"]
+        if key not in seen:
+            seen.add(key)
+            assets.append(asset)
+    return assets
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +480,13 @@ def build_visual_bay_manifest(
     if not next_steps:
         next_steps.append("Run a full OMNI mission to generate CAD, ROS2, and simulation artifacts.")
 
+    preview_assets = _build_preview_assets(export_dir)
+
+    browser_preview_ready_count    = sum(1 for a in preview_assets if a["browser_preview_ready"])
+    browser_preview_candidate_count = sum(1 for a in preview_assets if a["browser_preview_candidate"])
+    engineering_only_count         = sum(1 for a in preview_assets if a["engineering_only"])
+    execution_blocked_count        = sum(1 for a in preview_assets if a["execution_blocked"])
+
     return {
         "module":       MODULE_NAME,
         "status":       status,
@@ -318,4 +503,9 @@ def build_visual_bay_manifest(
         "safety_notes":    safety_notes,
         "blocked_actions": _BLOCKED_ACTIONS,
         "next_steps":      next_steps,
+        "preview_assets":               preview_assets,
+        "browser_preview_ready_count":   browser_preview_ready_count,
+        "browser_preview_candidate_count": browser_preview_candidate_count,
+        "engineering_only_count":        engineering_only_count,
+        "execution_blocked_count":       execution_blocked_count,
     }
