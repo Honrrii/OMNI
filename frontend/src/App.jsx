@@ -7,6 +7,7 @@ import CandidateEvaluationPanel from "./components/CandidateEvaluationPanel.jsx"
 import MissionIntentPanel from "./components/MissionIntentPanel.jsx";
 import PlutoSafetyGatePanel from "./components/PlutoSafetyGatePanel.jsx";
 import AeroForgePanel from "./components/AeroForgePanel.jsx";
+import VisualBayPanel from "./components/VisualBayPanel.jsx";
 import OperatorBriefPanel from "./components/OperatorBriefPanel.jsx";
 import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
 import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
@@ -418,6 +419,7 @@ function normalizeArtifacts(artifacts, mission, finalOutput) {
     "pluto_safety_gate",
     "aeroforge_intent",
     "aeroforge_entry_gate",
+    "visual_bay_manifest",
   ]);
 
   if (artifacts && typeof artifacts === "object") {
@@ -1378,6 +1380,7 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
       <MissionIntentPanel exportResult={exportResult} />
       <PlutoSafetyGatePanel exportResult={exportResult} />
       <AeroForgePanel exportResult={exportResult} missionResult={missionResult?.raw} />
+      <VisualBayPanel exportResult={exportResult} missionResult={missionResult?.raw} />
       <CandidateEvaluationPanel exportResult={exportResult} />
 
       {ros2Validation && (
