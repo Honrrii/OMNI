@@ -874,6 +874,69 @@ def _write_pluto_safety_gate(
     }
 
 
+def _write_aeroforge_reports(
+    export_dir: Path,
+    mission_text: str,
+    artifacts: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Write aeroforge_intent_report.json and aeroforge_entry_gate_report.json
+    when aerospace signals are detected.
+
+    Priority order:
+    1. Pre-computed aeroforge_intent / aeroforge_entry_gate from artifacts.
+    2. Classify and evaluate on-demand from mission_text.
+    3. If aerospace is not detected, return status "not_applicable" without
+       writing any report files.
+
+    May raise; callers must catch.
+    """
+    from backend.app.aeroforge.foundation import (
+        classify_aeroforge_intent,
+        evaluate_aeroforge_entry_gate,
+    )
+
+    precomputed_intent = artifacts.get("aeroforge_intent")
+    if isinstance(precomputed_intent, dict):
+        aeroforge_intent = precomputed_intent
+    else:
+        aeroforge_intent = classify_aeroforge_intent(
+            mission_text=mission_text,
+            mission_intent=as_dict(artifacts.get("mission_intent")),
+        )
+
+    if not aeroforge_intent.get("aerospace_detected", False):
+        return {"status": "not_applicable", "aerospace_detected": False}
+
+    precomputed_gate = artifacts.get("aeroforge_entry_gate")
+    if isinstance(precomputed_gate, dict):
+        aeroforge_entry_gate = precomputed_gate
+    else:
+        aeroforge_entry_gate = evaluate_aeroforge_entry_gate(
+            mission_text=mission_text,
+            mission_intent=as_dict(artifacts.get("mission_intent")),
+            readiness=as_dict(artifacts.get("mission_intelligence_readiness")),
+        )
+
+    intent_path = export_dir / "aeroforge_intent_report.json"
+    gate_path = export_dir / "aeroforge_entry_gate_report.json"
+
+    write_json(intent_path, aeroforge_intent)
+    write_json(gate_path, aeroforge_entry_gate)
+
+    return {
+        "status": "detected",
+        "intent_report_path": str(intent_path),
+        "entry_gate_report_path": str(gate_path),
+        "entry_gate_status": aeroforge_entry_gate.get("status"),
+        "aerospace_detected": True,
+        "platform_hint": aeroforge_intent.get("platform_hint"),
+        "domain_count": len(as_list(aeroforge_intent.get("aero_domains", []))),
+        "human_review_required": bool(aeroforge_entry_gate.get("human_review_required", False)),
+        "concept_stage_only": bool(aeroforge_entry_gate.get("concept_stage_only", True)),
+    }
+
+
 def _write_design_understanding(
     export_dir: Path,
     mission_text: str,
@@ -1120,6 +1183,27 @@ def export_mission_files(
         pluto_safety_gate_summary = {"status": "failed", "error": str(error)}
         path = export_dir / "pluto_safety_gate_report.json"
         write_json(path, pluto_safety_gate_summary)
+        record(path)
+
+    # ---------------------------------------------------------
+    # AeroForge aerospace concept reports
+    # ---------------------------------------------------------
+
+    aeroforge_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        aeroforge_summary = _write_aeroforge_reports(
+            export_dir=export_dir,
+            mission_text=mission,
+            artifacts=artifacts,
+        )
+        if aeroforge_summary.get("aerospace_detected"):
+            record(Path(aeroforge_summary["intent_report_path"]))
+            record(Path(aeroforge_summary["entry_gate_report_path"]))
+    except Exception as error:
+        aeroforge_summary = {"status": "failed", "error": str(error)}
+        path = export_dir / "aeroforge_export_error.json"
+        write_json(path, aeroforge_summary)
         record(path)
 
     # ---------------------------------------------------------
@@ -1515,4 +1599,5 @@ def export_mission_files(
             "mission_intent": mission_intent_summary,
             "pluto_safety_gate": pluto_safety_gate_summary,
         },
+        "aeroforge": aeroforge_summary,
     }
