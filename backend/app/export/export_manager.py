@@ -1540,14 +1540,40 @@ def export_mission_files(
             mission_result=mission_result,
         )
 
-        manifest_path = export_dir / "visual_bay_manifest.json"
-        write_json(manifest_path, visual_bay_manifest)
-        record(manifest_path)
-
-        sim = visual_bay_manifest.get("simulation", {})
+        sim  = visual_bay_manifest.get("simulation", {})
         f360 = visual_bay_manifest.get("fusion360", {})
         cq   = visual_bay_manifest.get("cadquery", {})
         r2   = visual_bay_manifest.get("ros2_preview", {})
+
+        has_visual_artifacts = bool(
+            f360.get("detected") or
+            cq.get("detected") or
+            r2.get("detected") or
+            sim.get("status") != "not_available"
+        )
+
+        if has_visual_artifacts:
+            try:
+                from backend.app.visual_bay.gltf_preview import write_visual_bay_gltf_preview
+                _gltf_result = write_visual_bay_gltf_preview(
+                    export_dir, manifest=visual_bay_manifest
+                )
+                if _gltf_result.get("written"):
+                    record(_gltf_result["abs_path"])
+                    visual_bay_manifest = build_visual_bay_manifest(
+                        export_dir=export_dir,
+                        mission_result=mission_result,
+                    )
+                    sim  = visual_bay_manifest.get("simulation", {})
+                    f360 = visual_bay_manifest.get("fusion360", {})
+                    cq   = visual_bay_manifest.get("cadquery", {})
+                    r2   = visual_bay_manifest.get("ros2_preview", {})
+            except Exception:
+                pass
+
+        manifest_path = export_dir / "visual_bay_manifest.json"
+        write_json(manifest_path, visual_bay_manifest)
+        record(manifest_path)
 
         raw_preview_assets = visual_bay_manifest.get("preview_assets", [])
         preview_assets_delivery = _sanitize_preview_assets(

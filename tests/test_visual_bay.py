@@ -2251,3 +2251,269 @@ class TestNonGltfAssetsRemainPlaceholderOnly:
             assert a["browser_preview_ready"] is False, (
                 f"{a['kind']} should not be browser_preview_ready"
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 16K — GLTF preview generation
+# ---------------------------------------------------------------------------
+
+def _write_gltf_preview(export_dir: Path, manifest=None):
+    from backend.app.visual_bay.gltf_preview import write_visual_bay_gltf_preview
+    return write_visual_bay_gltf_preview(export_dir, manifest=manifest)
+
+
+class TestGltfPreviewGeneration:
+    """Phase 16K: write_visual_bay_gltf_preview unit and integration tests."""
+
+    # ── unit: return contract ──────────────────────────────────────────────
+
+    def test_returns_written_true(self, tmp_path):
+        r = _write_gltf_preview(tmp_path)
+        assert r["written"] is True
+
+    def test_returns_path_key(self, tmp_path):
+        r = _write_gltf_preview(tmp_path)
+        assert "path" in r
+
+    def test_returns_abs_path_key(self, tmp_path):
+        r = _write_gltf_preview(tmp_path)
+        assert "abs_path" in r
+
+    # ── unit: file location ────────────────────────────────────────────────
+
+    def test_writes_to_generated_visual_bay_subdir(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        assert (tmp_path / "generated_visual_bay" / "preview_scene.gltf").is_file()
+
+    def test_relative_path_correct(self, tmp_path):
+        r = _write_gltf_preview(tmp_path)
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        assert r["path"] == expected
+
+    def test_abs_path_is_path_object(self, tmp_path):
+        r = _write_gltf_preview(tmp_path)
+        assert isinstance(r["abs_path"], Path)
+
+    def test_abs_path_exists(self, tmp_path):
+        r = _write_gltf_preview(tmp_path)
+        assert r["abs_path"].is_file()
+
+    # ── unit: GLTF 2.0 validity ────────────────────────────────────────────
+
+    def test_parses_as_valid_json(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        json.loads(raw)  # must not raise
+
+    def test_gltf_version_2_0(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert data["asset"]["version"] == "2.0"
+
+    def test_has_scenes_array(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert isinstance(data.get("scenes"), list)
+        assert len(data["scenes"]) >= 1
+
+    def test_has_nodes_array(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert isinstance(data.get("nodes"), list)
+        assert len(data["nodes"]) >= 1
+
+    def test_no_binary_buffers(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert "buffers" not in data
+
+    def test_scene_index_valid(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert data.get("scene") == 0
+
+    # ── unit: extras / safety note ─────────────────────────────────────────
+
+    def test_has_extras(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert "extras" in data
+
+    def test_extras_has_note(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert "note" in data["extras"]
+        assert len(data["extras"]["note"]) > 0
+
+    def test_no_fabrication_ready_claim(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8").lower()
+        assert "fabrication-ready geometry" not in raw
+        assert "ready for fabrication" not in raw
+
+    def test_no_engineering_validation_claim(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8").lower()
+        assert "engineering validation confirmed" not in raw
+        assert "validated for" not in raw
+
+    def test_no_safe_to_launch_claim(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8").lower()
+        assert "safe to launch" not in raw
+        assert "safe to operate" not in raw
+
+    # ── unit: manifest-aware extras ────────────────────────────────────────
+
+    def test_fusion360_source_recorded_in_extras(self, tmp_path):
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        manifest = _build(tmp_path)
+        r = _write_gltf_preview(tmp_path, manifest=manifest)
+        raw = r["abs_path"].read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert "fusion360" in data["extras"].get("artifact_sources", [])
+
+    def test_ros2_source_recorded_in_extras(self, tmp_path):
+        gen = tmp_path / "generated_ros2"
+        gen.mkdir()
+        (gen / "package.xml").write_text("<package/>")
+        manifest = _build(tmp_path)
+        r = _write_gltf_preview(tmp_path, manifest=manifest)
+        raw = r["abs_path"].read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert "ros2" in data["extras"].get("artifact_sources", [])
+
+    def test_no_manifest_no_artifact_sources_key(self, tmp_path):
+        r = _write_gltf_preview(tmp_path, manifest=None)
+        raw = r["abs_path"].read_text(encoding="utf-8")
+        data = json.loads(raw)
+        assert "artifact_sources" not in data["extras"]
+
+    # ── unit: idempotency ─────────────────────────────────────────────────
+
+    def test_idempotent_overwrite(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        r2 = _write_gltf_preview(tmp_path)
+        assert r2["written"] is True
+        assert (tmp_path / "generated_visual_bay" / "preview_scene.gltf").is_file()
+
+    # ── unit: failure containment ─────────────────────────────────────────
+
+    def test_failure_returns_written_false(self, tmp_path):
+        blocked = tmp_path / "generated_visual_bay"
+        blocked.mkdir()
+        blocked.chmod(0o444)
+        try:
+            r = _write_gltf_preview(tmp_path)
+            assert r["written"] is False
+            assert "reason" in r
+        finally:
+            blocked.chmod(0o755)
+
+    # ── integration: manifest picks up generated GLTF ─────────────────────
+
+    def test_generated_gltf_in_manifest_preview_assets(self, tmp_path):
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        _write_gltf_preview(tmp_path)
+        r = _build(tmp_path)
+        paths = [a["path"] for a in r["preview_assets"]]
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        assert expected in paths
+
+    def test_generated_gltf_is_browser_preview_ready(self, tmp_path):
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        _write_gltf_preview(tmp_path)
+        r = _build(tmp_path)
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        asset = next((a for a in r["preview_assets"] if a["path"] == expected), None)
+        assert asset is not None
+        assert asset["browser_preview_ready"] is True
+
+    def test_generated_gltf_gets_asset_url(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        _write_gltf_preview(tmp_path)
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m16k"
+        )
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        asset = next((a for a in assets if a["path"] == expected), None)
+        assert asset is not None
+        assert "asset_url" in asset
+
+    # ── integration: has_visual_artifacts gate ────────────────────────────
+
+    def test_empty_export_no_gltf_generated(self, tmp_path):
+        """Empty export dir has no visual artifacts; GLTF must not be written."""
+        manifest = _build(tmp_path)
+        f360 = manifest.get("fusion360", {})
+        cq   = manifest.get("cadquery", {})
+        r2   = manifest.get("ros2_preview", {})
+        sim  = manifest.get("simulation", {})
+        has_artifacts = bool(
+            f360.get("detected") or cq.get("detected") or
+            r2.get("detected") or sim.get("status") != "not_available"
+        )
+        assert not has_artifacts
+        assert not (tmp_path / "generated_visual_bay" / "preview_scene.gltf").exists()
+
+    def test_fusion360_dir_triggers_has_visual_artifacts(self, tmp_path):
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        manifest = _build(tmp_path)
+        assert manifest["fusion360"]["detected"] is True
+
+    def test_ros2_dir_triggers_has_visual_artifacts(self, tmp_path):
+        gen = tmp_path / "generated_ros2"
+        gen.mkdir()
+        (gen / "package.xml").write_text("<package/>")
+        manifest = _build(tmp_path)
+        assert manifest["ros2_preview"]["detected"] is True
+
+    def test_export_manager_fusion360_writes_gltf(self, tmp_path):
+        """Full export flow: Fusion 360 dir triggers GLTF generation."""
+        result = _export_minimal("mission about a robot arm", tmp_path)
+        export_dir = Path(result.get("export_dir", ""))
+        if not export_dir.is_dir():
+            pytest.skip("export_dir not returned by export_minimal fixture")
+        gen = export_dir / "generated_fusion360"
+        gen.mkdir(exist_ok=True)
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        import backend.app.export.export_manager as em
+        mp = pytest.MonkeyPatch()
+        mp.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+        try:
+            result2 = em.export_mission_files(
+                {
+                    "status": "complete",
+                    "result_id": "vb-test-16k",
+                    "mission": "robot arm test",
+                    "agents": {},
+                    "artifacts": {},
+                },
+                validate_ros2=False,
+            )
+        finally:
+            mp.undo()
+        export2 = Path(result2.get("export_dir", ""))
+        if not export2.is_dir():
+            pytest.skip("second export_dir not available")
+        gltf = export2 / "generated_visual_bay" / "preview_scene.gltf"
+        assert gltf.is_file(), "GLTF preview not written by export_manager for Fusion360 mission"
