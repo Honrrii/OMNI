@@ -1153,6 +1153,16 @@ Give the final go/no-go style decision.
             }
         except Exception:
             artifacts["mission_memory_persistence"] = {"status": "failed"}
+        try:
+            from backend.app.omni_core.intelligence_readiness import (
+                evaluate_mission_intelligence_readiness,
+            )
+            artifacts["mission_intelligence_readiness"] = evaluate_mission_intelligence_readiness(
+                artifacts=artifacts,
+                mission_text=getattr(state, "mission_text", ""),
+            )
+        except Exception:
+            pass
         artifacts["revision_summary"] = revision_payload
         artifacts["export_manifest"] = export_manifest
 
