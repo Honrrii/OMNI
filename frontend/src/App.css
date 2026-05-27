@@ -4573,3 +4573,272 @@ input::placeholder,
     flex-direction: column;
   }
 }
+
+/* ============================================================
+   AeroForge Concept Gate Panel
+   ============================================================ */
+
+.aeroforge-panel {
+  margin: 20px 0;
+  border-radius: 8px;
+  border: 1px solid #1e2440;
+  background: #0d0f1a;
+  overflow: hidden;
+}
+
+.aeroforge-panel-concept { border-color: #1a2c40; }
+.aeroforge-panel-blocked  { border-color: #3d1a1a; }
+.aeroforge-panel-failed   { padding: 0; }
+.aeroforge-panel-unknown  { border-color: #2b1f0a; }
+
+.af-fail-note {
+  padding: 16px 20px;
+  margin: 0;
+  font-size: 12px;
+  color: #ffbf4a;
+}
+
+/* HUD bar */
+.af-hud-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #1e2440;
+  background: #111422;
+  flex-wrap: wrap;
+}
+
+.aeroforge-panel-concept > .af-hud-bar { border-color: #1a2c40; }
+.aeroforge-panel-blocked  > .af-hud-bar { border-color: #3d1a1a; }
+
+.af-hud-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a90d9;
+  white-space: nowrap;
+}
+
+.af-hud-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Domain chip */
+.aeroforge-domain-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  background: #0f1e35;
+  color: #4a90d9;
+  border: 1px solid #1a3050;
+}
+
+/* Gate chip variants */
+.aeroforge-gate-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.aeroforge-gate-chip-concept {
+  background: #0f1e35;
+  color: #4a90d9;
+  border: 1px solid #1a3050;
+}
+.aeroforge-gate-chip-warn {
+  background: #1e1400;
+  color: #c49a2a;
+  border: 1px solid #3d2e0f;
+}
+.aeroforge-gate-chip-review {
+  background: #2b0f0f;
+  color: #ff8f8f;
+  border: 1px solid #4d1a1a;
+}
+.aeroforge-gate-chip-blocked {
+  background: #2b0f0f;
+  color: #ff6b6b;
+  border: 1px solid #3d1a1a;
+}
+.aeroforge-gate-chip-unknown {
+  background: #1a1a2e;
+  color: #8aa2be;
+  border: 1px solid #2a2a40;
+}
+
+/* Body */
+.af-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.af-meta-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.af-meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 120px;
+}
+
+.af-meta-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a6a80;
+}
+
+.af-meta-value {
+  font-size: 13px;
+  color: #c0cce0;
+}
+
+.af-yes { color: #ff8f8f; }
+.af-no  { color: #7cffc8; }
+
+/* Domain chip wrap */
+.af-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Section */
+.af-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a6a80;
+}
+
+.af-section-body {
+  padding-left: 4px;
+}
+
+/* Blocked list */
+.aeroforge-blocked-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.aeroforge-blocked-list li {
+  font-size: 12px;
+  color: #ff8f8f;
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.aeroforge-blocked-list li::before {
+  content: "✕";
+  position: absolute;
+  left: 0;
+  color: #ff6b6b;
+  font-size: 10px;
+  top: 1px;
+}
+
+/* Allowed list */
+.af-allowed-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.af-allowed-list li {
+  font-size: 12px;
+  color: #7cffc8;
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.af-allowed-list li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #3dcc8f;
+  font-size: 10px;
+  top: 1px;
+}
+
+/* Review gate list */
+.af-review-gate-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.af-review-gate-list li {
+  font-size: 12px;
+  color: #c49a2a;
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.af-review-gate-list li::before {
+  content: "⚠";
+  position: absolute;
+  left: 0;
+  color: #c49a2a;
+  font-size: 10px;
+  top: 1px;
+}
+
+/* Rationale */
+.af-rationale {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #8aa2be;
+  font-style: italic;
+}
+
+@media (max-width: 600px) {
+  .af-meta-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .af-hud-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
