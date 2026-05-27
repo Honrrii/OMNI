@@ -1163,6 +1163,25 @@ Give the final go/no-go style decision.
             )
         except Exception:
             pass
+        try:
+            from backend.app.aeroforge.foundation import (
+                classify_aeroforge_intent,
+                evaluate_aeroforge_entry_gate,
+            )
+            _aero_text = getattr(state, "mission_text", "")
+            _aero = classify_aeroforge_intent(
+                mission_text=_aero_text,
+                mission_intent=artifacts.get("mission_intent"),
+            )
+            if _aero.get("aerospace_detected"):
+                artifacts["aeroforge_intent"] = _aero
+                artifacts["aeroforge_entry_gate"] = evaluate_aeroforge_entry_gate(
+                    mission_text=_aero_text,
+                    mission_intent=artifacts.get("mission_intent"),
+                    readiness=artifacts.get("mission_intelligence_readiness"),
+                )
+        except Exception:
+            pass
         artifacts["revision_summary"] = revision_payload
         artifacts["export_manifest"] = export_manifest
 
