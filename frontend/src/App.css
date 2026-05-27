@@ -5346,7 +5346,59 @@ input::placeholder,
   color: #ff8f8f;
 }
 
+/* ── GLB / GLTF viewer ── */
+
+.vb-glb-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.vb-glb-viewer-stage {
+  width: 100%;
+  height: 380px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #01030a;
+  border: 1px solid rgba(99, 231, 255, 0.14);
+  position: relative;
+}
+
+/* Three.js appends a <canvas> here — keep it filling the stage. */
+.vb-glb-viewer-stage canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.vb-glb-viewer-note {
+  font-size: 10px;
+  color: #5d7a9a;
+  margin: 0;
+  line-height: 1.7;
+}
+
+.vb-glb-viewer-loading {
+  color: #8aa2be;
+  font-style: italic;
+}
+
+.vb-glb-viewer-error {
+  font-size: 11px;
+  color: #ff8f8f;
+  background: rgba(255, 60, 60, 0.07);
+  border: 1px solid rgba(255, 143, 143, 0.22);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0;
+  line-height: 1.6;
+}
+
 @media (max-width: 600px) {
+  .vb-glb-viewer-stage {
+    height: 260px;
+  }
   .vb-meta-row {
     flex-direction: column;
     gap: 12px;

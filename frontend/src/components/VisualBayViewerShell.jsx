@@ -1,4 +1,5 @@
 import { useState } from "react";
+import VisualBayGlbViewer from "./VisualBayGlbViewer.jsx";
 
 function placeholderText(asset) {
   if (!asset) return "No asset selected.";
@@ -132,6 +133,14 @@ export default function VisualBayViewerShell({ previewAssets }) {
     : asset.engineering_only                   ? "engineering"
     : "default";
 
+  // Hard gate: ALL conditions must pass before the GLB viewer activates.
+  const canRenderGlb = (
+    (asset.kind === "glb" || asset.kind === "gltf") &&
+    !!asset.asset_url &&
+    asset.browser_preview_ready === true &&
+    asset.execution_blocked !== true
+  );
+
   return (
     <div className="visual-bay-section">
       <span className="vb-section-label">Static Viewer Shell</span>
@@ -170,15 +179,19 @@ export default function VisualBayViewerShell({ previewAssets }) {
             <AssetUrlBlock asset={asset} />
           </div>
 
-          {/* ── Viewer placeholder stage ── */}
-          <div className={`vb-viewer-shell-stage vb-viewer-shell-stage-${stageVariant}`}>
-            <p className="vb-viewer-placeholder">{phText}</p>
-            <p className="vb-viewer-warning">
-              Viewer shell only — rendering not enabled in this phase.
-              <br />
-              No files fetched. No scripts executed. No simulation launched.
-            </p>
-          </div>
+          {/* ── Viewer stage: GLB renderer or safe placeholder ── */}
+          {canRenderGlb ? (
+            <VisualBayGlbViewer asset={asset} />
+          ) : (
+            <div className={`vb-viewer-shell-stage vb-viewer-shell-stage-${stageVariant}`}>
+              <p className="vb-viewer-placeholder">{phText}</p>
+              <p className="vb-viewer-warning">
+                Viewer shell only — rendering not enabled for this asset type.
+                <br />
+                No files fetched. No scripts executed. No simulation launched.
+              </p>
+            </div>
+          )}
 
         </div>
       </div>
