@@ -5398,6 +5398,30 @@ input::placeholder,
   line-height: 1.6;
 }
 
+.vb-glb-viewer-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 380px;
+  border-radius: 8px;
+  background: #01030a;
+  border: 1px solid rgba(99, 231, 255, 0.14);
+  color: #8aa2be;
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 4px;
+  text-align: center;
+  padding: 0 16px;
+}
+.vb-glb-viewer-fallback p { margin: 0; }
+.vb-glb-viewer-fallback-note {
+  font-size: 10px;
+  color: #5d7a9a;
+  font-style: normal;
+}
+
 .vb-glb-viewer-controls {
   display: flex;
   flex-wrap: wrap;
@@ -5441,6 +5465,9 @@ input::placeholder,
 
 @media (max-width: 600px) {
   .vb-glb-viewer-stage {
+    height: 260px;
+  }
+  .vb-glb-viewer-fallback {
     height: 260px;
   }
   .vb-glb-viewer-controls {

@@ -1,5 +1,6 @@
-import { useState } from "react";
-import VisualBayGlbViewer from "./VisualBayGlbViewer.jsx";
+import { lazy, Suspense, useState } from "react";
+
+const VisualBayGlbViewer = lazy(() => import("./VisualBayGlbViewer.jsx"));
 
 function placeholderText(asset) {
   if (!asset) return "No asset selected.";
@@ -198,7 +199,18 @@ export default function VisualBayViewerShell({ previewAssets }) {
 
           {/* ── Viewer stage: GLB renderer or safe placeholder ── */}
           {canRenderGlb ? (
-            <VisualBayGlbViewer asset={asset} />
+            <Suspense fallback={
+              <div className="vb-glb-viewer-fallback">
+                <p>Loading browser visualization shell…</p>
+                <p className="vb-glb-viewer-fallback-note">
+                  No engineering validation implied.
+                  No simulation launched.
+                  No scripts executed.
+                </p>
+              </div>
+            }>
+              <VisualBayGlbViewer asset={asset} />
+            </Suspense>
           ) : (
             <div className={`vb-viewer-shell-stage vb-viewer-shell-stage-${stageVariant}`}>
               <p className="vb-viewer-placeholder">{phText}</p>
