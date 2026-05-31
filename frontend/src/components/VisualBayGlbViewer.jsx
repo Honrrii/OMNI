@@ -15,8 +15,9 @@ function resolveUrl(assetUrl) {
 }
 
 export default function VisualBayGlbViewer({ asset }) {
-  const mountRef  = useRef(null);
-  const [error, setError]   = useState(null);
+  const mountRef        = useRef(null);
+  const resetCameraRef  = useRef(null);   // set after load; cleared on cleanup
+  const [error,  setError]  = useState(null);
   const [loaded, setLoaded] = useState(false);
 
   const fullUrl = resolveUrl(asset?.asset_url);
@@ -27,6 +28,7 @@ export default function VisualBayGlbViewer({ asset }) {
 
     setError(null);
     setLoaded(false);
+    resetCameraRef.current = null;
 
     const width  = mount.clientWidth  || 600;
     const height = mount.clientHeight || 380;
@@ -57,10 +59,10 @@ export default function VisualBayGlbViewer({ asset }) {
 
     // ── OrbitControls ─────────────────────────────────────────
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping  = true;
-    controls.dampingFactor  = 0.08;
-    controls.enablePan      = true;
-    controls.enableZoom     = true;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.enablePan     = true;
+    controls.enableZoom    = true;
 
     // ── Load GLB/GLTF ─────────────────────────────────────────
     const loader = new GLTFLoader();
@@ -83,6 +85,22 @@ export default function VisualBayGlbViewer({ asset }) {
         camera.updateProjectionMatrix();
         controls.target.set(0, 0, 0);
         controls.update();
+
+        // Capture fitted state so Reset camera can restore it without reloading.
+        const fitX    = camera.position.x;
+        const fitY    = camera.position.y;
+        const fitZ    = camera.position.z;
+        const fitNear = camera.near;
+        const fitFar  = camera.far;
+
+        resetCameraRef.current = () => {
+          camera.position.set(fitX, fitY, fitZ);
+          camera.near = fitNear;
+          camera.far  = fitFar;
+          camera.updateProjectionMatrix();
+          controls.target.set(0, 0, 0);
+          controls.update();
+        };
 
         scene.add(gltf.scene);
         setLoaded(true);
@@ -118,6 +136,7 @@ export default function VisualBayGlbViewer({ asset }) {
 
     // ── Cleanup on unmount or asset change ────────────────────
     return () => {
+      resetCameraRef.current = null;
       cancelAnimationFrame(animId);
       ro.disconnect();
       controls.dispose();
@@ -131,6 +150,7 @@ export default function VisualBayGlbViewer({ asset }) {
   return (
     <div className="vb-glb-viewer">
       <div ref={mountRef} className="vb-glb-viewer-stage" />
+
       {!loaded && !error && (
         <p className="vb-glb-viewer-note vb-glb-viewer-loading">
           Loading browser preview…
@@ -139,6 +159,26 @@ export default function VisualBayGlbViewer({ asset }) {
       {error && (
         <p className="vb-glb-viewer-error">{error}</p>
       )}
+
+      {loaded && (
+        <div className="vb-glb-viewer-controls">
+          <button
+            type="button"
+            className="vb-glb-viewer-button"
+            onClick={() => resetCameraRef.current?.()}
+            aria-label="Reset camera to fit view"
+          >
+            Reset camera
+          </button>
+        </div>
+      )}
+
+      <div className="vb-glb-viewer-help">
+        <span>Drag to inspect placeholder.</span>
+        <span>Scroll to zoom.</span>
+        <span>Browser visualization only.</span>
+      </div>
+
       <p className="vb-glb-viewer-note">
         Browser visualization only. Placeholder geometry may not represent the generated CAD or robot structure.
         No engineering validation implied.

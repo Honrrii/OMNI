@@ -5398,9 +5398,58 @@ input::placeholder,
   line-height: 1.6;
 }
 
+.vb-glb-viewer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.vb-glb-viewer-button {
+  font-size: 11px;
+  font-weight: 600;
+  color: #63e7ff;
+  background: rgba(99, 231, 255, 0.07);
+  border: 1px solid rgba(99, 231, 255, 0.22);
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.vb-glb-viewer-button:hover {
+  background: rgba(99, 231, 255, 0.13);
+  border-color: rgba(99, 231, 255, 0.38);
+}
+.vb-glb-viewer-button:active {
+  background: rgba(99, 231, 255, 0.20);
+}
+
+.vb-glb-viewer-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 10px;
+  color: #8aa2be;
+  margin: 0;
+  line-height: 1.6;
+}
+.vb-glb-viewer-help span {
+  white-space: nowrap;
+}
+
 @media (max-width: 600px) {
   .vb-glb-viewer-stage {
     height: 260px;
+  }
+  .vb-glb-viewer-controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .vb-glb-viewer-help {
+    flex-direction: column;
+    gap: 3px;
   }
   .vb-meta-row {
     flex-direction: column;
