@@ -1556,7 +1556,9 @@ def export_mission_files(
             try:
                 from backend.app.visual_bay.gltf_preview import write_visual_bay_gltf_preview
                 _gltf_result = write_visual_bay_gltf_preview(
-                    export_dir, manifest=visual_bay_manifest
+                    export_dir,
+                    manifest=visual_bay_manifest,
+                    mission_result=mission_result,
                 )
                 if _gltf_result.get("written"):
                     record(_gltf_result["abs_path"])

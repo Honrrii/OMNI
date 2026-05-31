@@ -2724,3 +2724,291 @@ class TestGltfPreviewGeometry:
     def test_generator_contains_omni_visual_bay(self, tmp_path):
         data = self._load(tmp_path)
         assert "OMNI Visual Bay" in data["asset"].get("generator", "")
+
+
+# ---------------------------------------------------------------------------
+# Phase 16P — Mission-aware placeholder kind tests
+# ---------------------------------------------------------------------------
+
+def _write_gltf_preview_16p(export_dir: Path, manifest=None, mission_result=None):
+    from backend.app.visual_bay.gltf_preview import write_visual_bay_gltf_preview
+    return write_visual_bay_gltf_preview(
+        export_dir, manifest=manifest, mission_result=mission_result
+    )
+
+
+def _load_gltf_16p(tmp_path, mission_result=None, manifest=None) -> dict:
+    _write_gltf_preview_16p(tmp_path, mission_result=mission_result, manifest=manifest)
+    raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+    return json.loads(raw)
+
+
+class TestPlaceholderKindClassification:
+    """Phase 16P: platform kind is classified from mission context."""
+
+    # ── UAV keyword detection ─────────────────────────────────────────────────
+
+    def test_drone_keyword_gives_uav_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Build a quadcopter drone for inspection."})
+        assert data["extras"]["placeholder_kind"] == "abstract_uav_marker"
+
+    def test_uav_keyword_gives_uav_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Design a UAV for aerial surveillance."})
+        assert data["extras"]["placeholder_kind"] == "abstract_uav_marker"
+
+    def test_aerial_keyword_gives_uav_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Create an aerial robot for mapping."})
+        assert data["extras"]["placeholder_kind"] == "abstract_uav_marker"
+
+    def test_quadrotor_keyword_gives_uav_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Design a quadrotor inspection platform."})
+        assert data["extras"]["placeholder_kind"] == "abstract_uav_marker"
+
+    # ── Rover keyword detection ───────────────────────────────────────────────
+
+    def test_rover_keyword_gives_rover_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Design a Mars rover for geological exploration."})
+        assert data["extras"]["placeholder_kind"] == "abstract_rover_marker"
+
+    def test_crawler_keyword_gives_rover_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Build a magnetic inspection crawler for steel surfaces."})
+        assert data["extras"]["placeholder_kind"] == "abstract_rover_marker"
+
+    def test_wheeled_keyword_gives_rover_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Design a wheeled robot for warehouse logistics."})
+        assert data["extras"]["placeholder_kind"] == "abstract_rover_marker"
+
+    def test_ground_vehicle_keyword_gives_rover_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Build an autonomous ground vehicle for patrol."})
+        assert data["extras"]["placeholder_kind"] == "abstract_rover_marker"
+
+    # ── Manipulator keyword detection ─────────────────────────────────────────
+
+    def test_robot_arm_keyword_gives_manipulator_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Design a robot arm for pick and place operations."})
+        assert data["extras"]["placeholder_kind"] == "abstract_manipulator_marker"
+
+    def test_manipulator_keyword_gives_manipulator_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Build a 6-DOF manipulator for precision assembly."})
+        assert data["extras"]["placeholder_kind"] == "abstract_manipulator_marker"
+
+    def test_gripper_keyword_gives_manipulator_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Design a robotic gripper for surgical assistance."})
+        assert data["extras"]["placeholder_kind"] == "abstract_manipulator_marker"
+
+    def test_robotic_arm_keyword_gives_manipulator_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Build a robotic arm for factory automation."})
+        assert data["extras"]["placeholder_kind"] == "abstract_manipulator_marker"
+
+    # ── Unknown / fallback ────────────────────────────────────────────────────
+
+    def test_unknown_mission_gives_generic_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": "Build an OMNI sensor fusion system."})
+        assert data["extras"]["placeholder_kind"] == "abstract_generic_marker"
+
+    def test_no_mission_result_gives_generic_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, mission_result=None)
+        assert data["extras"]["placeholder_kind"] == "abstract_generic_marker"
+
+    def test_empty_mission_gives_generic_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, {"mission": ""})
+        assert data["extras"]["placeholder_kind"] == "abstract_generic_marker"
+
+    def test_non_dict_mission_result_gives_generic_marker(self, tmp_path):
+        data = _load_gltf_16p(tmp_path, mission_result="not a dict")
+        assert data["extras"]["placeholder_kind"] == "abstract_generic_marker"
+
+    # ── mission_intent.platform_intent takes priority over text ───────────────
+
+    def test_platform_intent_uav_overrides_text(self, tmp_path):
+        mr = {
+            "mission": "Build a ground robot.",
+            "artifacts": {"mission_intent": {"platform_intent": "drone_uav"}},
+        }
+        data = _load_gltf_16p(tmp_path, mr)
+        assert data["extras"]["placeholder_kind"] == "abstract_uav_marker"
+        assert data["extras"]["classification_source"] == "mission_intent.platform_intent"
+
+    def test_platform_intent_rover_overrides_text(self, tmp_path):
+        mr = {
+            "mission": "Build a drone.",
+            "artifacts": {"mission_intent": {"platform_intent": "ground_rover"}},
+        }
+        data = _load_gltf_16p(tmp_path, mr)
+        assert data["extras"]["placeholder_kind"] == "abstract_rover_marker"
+        assert data["extras"]["classification_source"] == "mission_intent.platform_intent"
+
+    def test_platform_intent_arm_overrides_text(self, tmp_path):
+        mr = {
+            "mission": "Build a UAV.",
+            "artifacts": {"mission_intent": {"platform_intent": "robot_arm_manipulator"}},
+        }
+        data = _load_gltf_16p(tmp_path, mr)
+        assert data["extras"]["placeholder_kind"] == "abstract_manipulator_marker"
+        assert data["extras"]["classification_source"] == "mission_intent.platform_intent"
+
+    def test_text_keywords_used_when_no_platform_intent(self, tmp_path):
+        mr = {
+            "mission": "Build a UAV drone.",
+            "artifacts": {"mission_intent": {}},
+        }
+        data = _load_gltf_16p(tmp_path, mr)
+        assert data["extras"]["placeholder_kind"] == "abstract_uav_marker"
+        assert data["extras"]["classification_source"] == "mission_text_keywords"
+
+    # ── extras fields ─────────────────────────────────────────────────────────
+
+    def test_extras_has_placeholder_kind(self, tmp_path):
+        data = _load_gltf_16p(tmp_path)
+        assert "placeholder_kind" in data["extras"]
+
+    def test_extras_has_classification_source(self, tmp_path):
+        data = _load_gltf_16p(tmp_path)
+        assert "classification_source" in data["extras"]
+
+    def test_extras_note_still_present(self, tmp_path):
+        data = _load_gltf_16p(tmp_path)
+        assert "Concept preview placeholder only." in data["extras"].get("note", "")
+
+    def test_extras_phase_is_16p(self, tmp_path):
+        data = _load_gltf_16p(tmp_path)
+        assert data["extras"].get("phase") == "16P"
+
+    # ── GLTF validity for every kind ──────────────────────────────────────────
+
+    def test_all_kinds_produce_valid_json(self, tmp_path):
+        cases = [
+            ("UAV drone",     "abstract_uav_marker"),
+            ("ground rover",  "abstract_rover_marker"),
+            ("robot arm manipulator", "abstract_manipulator_marker"),
+            ("sensor system", "abstract_generic_marker"),
+        ]
+        for label, expected_kind in cases:
+            p = tmp_path / label.replace(" ", "_")
+            p.mkdir()
+            data = _load_gltf_16p(p, {"mission": f"Build a {label}."})
+            assert data["extras"]["placeholder_kind"] == expected_kind, (
+                f"Expected {expected_kind} for '{label}', got {data['extras']['placeholder_kind']}"
+            )
+
+    def test_all_kinds_have_meshes(self, tmp_path):
+        for text in ["UAV drone", "ground rover", "robot arm", "generic thing"]:
+            p = tmp_path / text.replace(" ", "_")
+            p.mkdir()
+            data = _load_gltf_16p(p, {"mission": f"Build a {text}."})
+            assert isinstance(data.get("meshes"), list) and len(data["meshes"]) >= 1
+
+    def test_all_kinds_have_position_accessor(self, tmp_path):
+        for text in ["UAV drone", "ground rover", "robot arm"]:
+            p = tmp_path / text.replace(" ", "_")
+            p.mkdir()
+            data = _load_gltf_16p(p, {"mission": f"Build a {text}."})
+            prim    = data["meshes"][0]["primitives"][0]
+            pos_idx = prim["attributes"]["POSITION"]
+            acc     = data["accessors"][pos_idx]
+            assert acc["type"] == "VEC3"
+            assert acc["componentType"] == 5126
+
+    def test_all_kinds_use_embedded_buffer(self, tmp_path):
+        for text in ["UAV drone", "ground rover", "robot arm", "generic beacon"]:
+            p = tmp_path / text.replace(" ", "_")
+            p.mkdir()
+            data = _load_gltf_16p(p, {"mission": f"Build a {text}."})
+            for buf in data.get("buffers", []):
+                assert buf.get("uri", "").startswith("data:"), (
+                    f"External buffer in '{text}' shape"
+                )
+
+    def test_all_kinds_have_materials(self, tmp_path):
+        for text in ["UAV drone", "ground rover", "robot arm"]:
+            p = tmp_path / text.replace(" ", "_")
+            p.mkdir()
+            data = _load_gltf_16p(p, {"mission": f"Build a {text}."})
+            assert len(data.get("materials", [])) >= 1
+
+    # ── no forbidden claims ───────────────────────────────────────────────────
+
+    def test_no_airworthy_claim_in_uav(self, tmp_path):
+        _write_gltf_preview_16p(tmp_path, mission_result={"mission": "Build a UAV drone."})
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text("utf-8").lower()
+        assert "airworthy" not in raw
+
+    def test_no_safe_to_fly_claim_in_uav(self, tmp_path):
+        _write_gltf_preview_16p(tmp_path, mission_result={"mission": "Build a UAV drone."})
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text("utf-8").lower()
+        assert "safe to fly" not in raw
+
+    def test_no_flight_ready_claim_in_uav(self, tmp_path):
+        _write_gltf_preview_16p(tmp_path, mission_result={"mission": "Build a UAV drone."})
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text("utf-8").lower()
+        assert "flight-ready" not in raw
+
+    def test_no_fabrication_ready_design_across_kinds(self, tmp_path):
+        for text in ["UAV drone", "ground rover", "robot arm"]:
+            p = tmp_path / text.replace(" ", "_")
+            p.mkdir()
+            _write_gltf_preview_16p(p, mission_result={"mission": f"Build a {text}."})
+            raw = (p / "generated_visual_bay" / "preview_scene.gltf").read_text("utf-8").lower()
+            assert "fabrication-ready design" not in raw
+
+    def test_no_engineering_validated_across_kinds(self, tmp_path):
+        for text in ["UAV drone", "ground rover", "robot arm"]:
+            p = tmp_path / text.replace(" ", "_")
+            p.mkdir()
+            _write_gltf_preview_16p(p, mission_result={"mission": f"Build a {text}."})
+            raw = (p / "generated_visual_bay" / "preview_scene.gltf").read_text("utf-8").lower()
+            assert "engineering validated" not in raw
+
+    def test_no_deployment_ready_across_kinds(self, tmp_path):
+        for text in ["UAV drone", "ground rover", "robot arm"]:
+            p = tmp_path / text.replace(" ", "_")
+            p.mkdir()
+            _write_gltf_preview_16p(p, mission_result={"mission": f"Build a {text}."})
+            raw = (p / "generated_visual_bay" / "preview_scene.gltf").read_text("utf-8").lower()
+            assert "deployment-ready" not in raw
+
+    def test_no_dimensionally_accurate_claim(self, tmp_path):
+        data = _load_gltf_16p(tmp_path)
+        assert "dimensionally accurate" not in json.dumps(data).lower()
+
+    # ── manifest / delivery integration ──────────────────────────────────────
+
+    def test_manifest_includes_preview_scene_gltf(self, tmp_path):
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        _write_gltf_preview_16p(tmp_path, mission_result={"mission": "Build a UAV drone."})
+        r = _build(tmp_path)
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        assert expected in [a["path"] for a in r["preview_assets"]]
+
+    def test_asset_url_delivered_with_mission_result(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        _write_gltf_preview_16p(tmp_path, mission_result={"mission": "Build a UAV drone."})
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m16p"
+        )
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        asset = next((a for a in assets if a["path"] == expected), None)
+        assert asset is not None
+        assert "asset_url" in asset
+
+    def test_browser_preview_ready_still_true(self, tmp_path):
+        _write_gltf_preview_16p(tmp_path, mission_result={"mission": "Build a UAV drone."})
+        r = _build(tmp_path)
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        asset = next((a for a in r["preview_assets"] if a["path"] == expected), None)
+        assert asset is not None
+        assert asset["browser_preview_ready"] is True
+
+    def test_execution_blocked_still_false(self, tmp_path):
+        _write_gltf_preview_16p(tmp_path, mission_result={"mission": "Build a UAV drone."})
+        r = _build(tmp_path)
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        asset = next((a for a in r["preview_assets"] if a["path"] == expected), None)
+        assert asset is not None
+        assert asset["execution_blocked"] is False
