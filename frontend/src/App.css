@@ -5180,6 +5180,8 @@ input::placeholder,
   border: 1px solid transparent;
 }
 .vb-preview-asset-chip-ready       { color: #7cffc8; border-color: rgba(124, 255, 200, 0.30); background: rgba(124, 255, 200, 0.09); }
+.vb-preview-asset-chip-active      { color: #7cffc8; border-color: rgba(124, 255, 200, 0.50); background: rgba(124, 255, 200, 0.14); }
+.vb-preview-asset-chip-placeholder { color: #ffbb44; border-color: rgba(255, 187, 68, 0.32);  background: rgba(255, 187, 68, 0.08); }
 .vb-preview-asset-chip-candidate   { color: #63e7ff; border-color: rgba(99, 231, 255, 0.26);  background: rgba(99, 231, 255, 0.07); }
 .vb-preview-asset-chip-engineering { color: #8aa2be; border-color: rgba(138, 162, 190, 0.24); background: rgba(138, 162, 190, 0.07); }
 .vb-preview-asset-chip-blocked     { color: #ff8f8f; border-color: rgba(255, 143, 143, 0.30); background: rgba(255, 80, 80, 0.08); }
@@ -5318,6 +5320,7 @@ input::placeholder,
 }
 .vb-viewer-url-chip-controlled { color: #7cffc8; border-color: rgba(124, 255, 200, 0.30); background: rgba(124, 255, 200, 0.08); }
 .vb-viewer-url-chip-readonly   { color: #8aa2be; border-color: rgba(138, 162, 190, 0.24); background: rgba(138, 162, 190, 0.06); }
+.vb-viewer-url-chip-active     { color: #7cffc8; border-color: rgba(124, 255, 200, 0.50); background: rgba(124, 255, 200, 0.14); }
 .vb-viewer-url-chip-pending    { color: #ffcc66; border-color: rgba(255, 204, 102, 0.26); background: rgba(255, 204, 102, 0.06); }
 .vb-viewer-url-chip-none       { color: #5d7a9a; border-color: rgba(93, 122, 154, 0.22);  background: rgba(93, 122, 154, 0.06); }
 

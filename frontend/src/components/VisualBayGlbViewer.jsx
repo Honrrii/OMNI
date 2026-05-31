@@ -140,7 +140,7 @@ export default function VisualBayGlbViewer({ asset }) {
         <p className="vb-glb-viewer-error">{error}</p>
       )}
       <p className="vb-glb-viewer-note">
-        Browser visualization only.
+        Browser visualization only. Placeholder geometry may not represent the generated CAD or robot structure.
         No engineering validation implied.
         No simulation launched.
         No scripts executed.

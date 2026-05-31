@@ -40,10 +40,20 @@ function ViewerChip({ label, variant }) {
   );
 }
 
-function assetChips(asset) {
+function assetChips(asset, canRenderGlb) {
   const chips = [];
-  if (asset.browser_preview_ready)
-    chips.push(<ViewerChip key="ready"    label="Browser asset available"    variant="ready"       />);
+
+  const isPlaceholder = asset.path?.includes("generated_visual_bay/preview_scene.gltf");
+
+  if (canRenderGlb) {
+    chips.push(<ViewerChip key="active" label="Browser visualization active" variant="active"      />);
+  } else if (asset.browser_preview_ready) {
+    chips.push(<ViewerChip key="ready"  label="Browser asset available"      variant="ready"       />);
+  }
+  if (isPlaceholder) {
+    chips.push(<ViewerChip key="placeholder" label="Placeholder geometry" variant="placeholder" />);
+    chips.push(<ViewerChip key="notcad"      label="Not CAD-accurate"     variant="placeholder" />);
+  }
   if (asset.browser_preview_candidate && !asset.browser_preview_ready)
     chips.push(<ViewerChip key="cand"     label="Preview candidate"          variant="candidate"   />);
   if (asset.engineering_only)
@@ -79,20 +89,26 @@ function UrlChip({ label, variant }) {
   );
 }
 
-function AssetUrlBlock({ asset }) {
+function AssetUrlBlock({ asset, canRenderGlb }) {
   const hasUrl = !!asset?.asset_url;
 
   if (hasUrl) {
     return (
       <div className="vb-viewer-asset-url">
         <div className="vb-viewer-url-chips">
-          <UrlChip label="Controlled URL"   variant="controlled" />
+          <UrlChip label="Controlled URL"    variant="controlled" />
           <UrlChip label="Read-only serving" variant="readonly"   />
-          <UrlChip label="Rendering pending" variant="pending"    />
+          {canRenderGlb
+            ? <UrlChip label="Browser visualization active" variant="active"  />
+            : <UrlChip label="Rendering pending"             variant="pending" />
+          }
         </div>
         <div className="vb-viewer-url-box">{asset.asset_url}</div>
         <p className="vb-viewer-url-note">
-          Serving is read-only; rendering not enabled in this phase.
+          {canRenderGlb
+            ? "Browser visualization active. Read-only serving — no files modified. No engineering validation implied. No simulation launched. No scripts executed."
+            : "Serving is read-only; rendering not enabled for this asset type."
+          }
         </p>
       </div>
     );
@@ -125,7 +141,6 @@ export default function VisualBayViewerShell({ previewAssets }) {
 
   const safeIdx  = Math.min(selected, assets.length - 1);
   const asset    = assets[safeIdx];
-  const chips    = assetChips(asset);
   const phText   = placeholderText(asset);
 
   const stageVariant = asset.execution_blocked ? "blocked"
@@ -140,6 +155,8 @@ export default function VisualBayViewerShell({ previewAssets }) {
     asset.browser_preview_ready === true &&
     asset.execution_blocked !== true
   );
+
+  const chips = assetChips(asset, canRenderGlb);
 
   return (
     <div className="visual-bay-section">
@@ -176,7 +193,7 @@ export default function VisualBayViewerShell({ previewAssets }) {
                 {asset.notes.map((n, i) => <li key={i}>{n}</li>)}
               </ul>
             )}
-            <AssetUrlBlock asset={asset} />
+            <AssetUrlBlock asset={asset} canRenderGlb={canRenderGlb} />
           </div>
 
           {/* ── Viewer stage: GLB renderer or safe placeholder ── */}
