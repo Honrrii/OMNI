@@ -2325,11 +2325,15 @@ class TestGltfPreviewGeneration:
         assert isinstance(data.get("nodes"), list)
         assert len(data["nodes"]) >= 1
 
-    def test_no_binary_buffers(self, tmp_path):
+    def test_buffers_are_embedded_not_external(self, tmp_path):
         _write_gltf_preview(tmp_path)
         raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
         data = json.loads(raw)
-        assert "buffers" not in data
+        # Embedded data-URI buffers are allowed; external .bin file references are not.
+        for buf in data.get("buffers", []):
+            assert buf.get("uri", "").startswith("data:"), (
+                "Buffer must use embedded data URI, not an external .bin file"
+            )
 
     def test_scene_index_valid(self, tmp_path):
         _write_gltf_preview(tmp_path)
@@ -2517,3 +2521,206 @@ class TestGltfPreviewGeneration:
             pytest.skip("second export_dir not available")
         gltf = export2 / "generated_visual_bay" / "preview_scene.gltf"
         assert gltf.is_file(), "GLTF preview not written by export_manager for Fusion360 mission"
+
+
+# ---------------------------------------------------------------------------
+# Phase 16L — GLTF placeholder mesh geometry tests
+# ---------------------------------------------------------------------------
+
+class TestGltfPreviewGeometry:
+    """Phase 16L: preview_scene.gltf must contain a visible placeholder mesh."""
+
+    def _load(self, tmp_path) -> dict:
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        return json.loads(raw)
+
+    # ── mesh structure ────────────────────────────────────────────────────────
+
+    def test_has_meshes_array(self, tmp_path):
+        data = self._load(tmp_path)
+        assert isinstance(data.get("meshes"), list)
+        assert len(data["meshes"]) >= 1
+
+    def test_mesh_has_primitives(self, tmp_path):
+        data = self._load(tmp_path)
+        prim_list = data["meshes"][0].get("primitives", [])
+        assert len(prim_list) >= 1
+
+    def test_primitive_has_position_attribute(self, tmp_path):
+        data = self._load(tmp_path)
+        attrs = data["meshes"][0]["primitives"][0].get("attributes", {})
+        assert "POSITION" in attrs
+
+    # ── accessors ─────────────────────────────────────────────────────────────
+
+    def test_has_accessors(self, tmp_path):
+        data = self._load(tmp_path)
+        assert isinstance(data.get("accessors"), list)
+        assert len(data["accessors"]) >= 1
+
+    def test_position_accessor_is_vec3_float(self, tmp_path):
+        data = self._load(tmp_path)
+        prim     = data["meshes"][0]["primitives"][0]
+        pos_idx  = prim["attributes"]["POSITION"]
+        acc      = data["accessors"][pos_idx]
+        assert acc["type"] == "VEC3"
+        assert acc["componentType"] == 5126  # FLOAT
+
+    def test_position_accessor_count_nonzero(self, tmp_path):
+        data = self._load(tmp_path)
+        prim    = data["meshes"][0]["primitives"][0]
+        pos_idx = prim["attributes"]["POSITION"]
+        assert data["accessors"][pos_idx]["count"] > 0
+
+    # ── buffers / bufferViews ─────────────────────────────────────────────────
+
+    def test_has_buffer_views(self, tmp_path):
+        data = self._load(tmp_path)
+        assert isinstance(data.get("bufferViews"), list)
+        assert len(data["bufferViews"]) >= 1
+
+    def test_has_buffers(self, tmp_path):
+        data = self._load(tmp_path)
+        assert isinstance(data.get("buffers"), list)
+        assert len(data["buffers"]) >= 1
+
+    def test_buffer_uses_embedded_data_uri(self, tmp_path):
+        data = self._load(tmp_path)
+        for buf in data["buffers"]:
+            assert buf.get("uri", "").startswith("data:"), (
+                "Buffer must use embedded data URI, not an external .bin file"
+            )
+
+    def test_buffer_has_positive_byte_length(self, tmp_path):
+        data = self._load(tmp_path)
+        for buf in data["buffers"]:
+            assert buf.get("byteLength", 0) > 0
+
+    # ── materials ─────────────────────────────────────────────────────────────
+
+    def test_has_materials(self, tmp_path):
+        data = self._load(tmp_path)
+        assert isinstance(data.get("materials"), list)
+        assert len(data["materials"]) >= 1
+
+    def test_material_has_pbr_metallic_roughness(self, tmp_path):
+        data = self._load(tmp_path)
+        assert "pbrMetallicRoughness" in data["materials"][0]
+
+    # ── JSON validity and safety metadata ────────────────────────────────────
+
+    def test_gltf_remains_valid_json(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8")
+        json.loads(raw)  # must not raise
+
+    def test_safety_metadata_still_present(self, tmp_path):
+        data = self._load(tmp_path)
+        assert "extras" in data
+        note = data["extras"].get("note", "").lower()
+        assert "placeholder" in note or "not engineering" in note or "not cad" in note
+
+    def test_extras_contain_concept_preview_wording(self, tmp_path):
+        data = self._load(tmp_path)
+        note = data["extras"].get("note", "")
+        assert "Concept preview placeholder only." in note
+
+    def test_extras_contain_not_cad_wording(self, tmp_path):
+        data = self._load(tmp_path)
+        note = data["extras"].get("note", "")
+        assert "Not engineering CAD." in note
+
+    def test_extras_contain_not_fabrication_ready_wording(self, tmp_path):
+        data = self._load(tmp_path)
+        note = data["extras"].get("note", "")
+        assert "Not fabrication-ready." in note
+
+    def test_extras_contain_no_engineering_validation_wording(self, tmp_path):
+        data = self._load(tmp_path)
+        note = data["extras"].get("note", "")
+        assert "No engineering validation implied." in note
+
+    def test_extras_contain_no_simulation_launched_wording(self, tmp_path):
+        data = self._load(tmp_path)
+        note = data["extras"].get("note", "")
+        assert "No simulation launched." in note
+
+    # ── forbidden claims ──────────────────────────────────────────────────────
+
+    def test_no_safe_to_fly_claim(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8").lower()
+        assert "safe to fly" not in raw
+
+    def test_no_airworthy_claim(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8").lower()
+        assert "airworthy" not in raw
+
+    def test_no_fabrication_ready_design_claim(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8").lower()
+        assert "fabrication-ready design" not in raw
+
+    def test_no_engineering_validated_claim(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8").lower()
+        assert "engineering validated" not in raw
+
+    def test_no_deployment_ready_claim(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        raw = (tmp_path / "generated_visual_bay" / "preview_scene.gltf").read_text(encoding="utf-8").lower()
+        assert "deployment-ready" not in raw
+
+    # ── manifest / delivery integration ───────────────────────────────────────
+
+    def test_manifest_includes_preview_scene_gltf(self, tmp_path):
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        _write_gltf_preview(tmp_path)
+        r = _build(tmp_path)
+        paths = [a["path"] for a in r["preview_assets"]]
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        assert expected in paths
+
+    def test_gltf_gets_asset_url_in_delivery(self, tmp_path):
+        from backend.app.export.export_manager import _sanitize_preview_assets
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        _write_gltf_preview(tmp_path)
+        manifest = _build(tmp_path)
+        assets = _sanitize_preview_assets(
+            manifest["preview_assets"], tmp_path, mission_id="m16l"
+        )
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        asset = next((a for a in assets if a["path"] == expected), None)
+        assert asset is not None
+        assert "asset_url" in asset
+
+    def test_gltf_browser_preview_ready_in_manifest(self, tmp_path):
+        gen = tmp_path / "generated_fusion360"
+        gen.mkdir()
+        (gen / "fusion360_model_generator.py").write_text("# fusion")
+        _write_gltf_preview(tmp_path)
+        r = _build(tmp_path)
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        asset = next((a for a in r["preview_assets"] if a["path"] == expected), None)
+        assert asset is not None
+        assert asset["browser_preview_ready"] is True
+
+    def test_gltf_execution_blocked_false_in_manifest(self, tmp_path):
+        _write_gltf_preview(tmp_path)
+        r = _build(tmp_path)
+        expected = str(Path("generated_visual_bay") / "preview_scene.gltf")
+        asset = next((a for a in r["preview_assets"] if a["path"] == expected), None)
+        assert asset is not None
+        assert asset["execution_blocked"] is False
+
+    # ── generator field ───────────────────────────────────────────────────────
+
+    def test_generator_contains_omni_visual_bay(self, tmp_path):
+        data = self._load(tmp_path)
+        assert "OMNI Visual Bay" in data["asset"].get("generator", "")
