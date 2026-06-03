@@ -1076,6 +1076,118 @@ def _write_design_understanding(
 
 
 # -------------------------------------------------------------------------
+# Phase 17E — Engineering Brain export helpers
+# -------------------------------------------------------------------------
+
+
+def _extract_engineering_inputs(
+    mission_result: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """
+    Return explicit engineering inputs from mission_result without inventing values.
+    Checks:
+      1. mission_result.artifacts.engineering_inputs
+      2. mission_result.engineering_inputs
+    Returns None when no valid dict is found.
+    """
+    if not isinstance(mission_result, dict):
+        return None
+    artifacts = mission_result.get("artifacts", {})
+    if isinstance(artifacts, dict):
+        ei = artifacts.get("engineering_inputs")
+        if isinstance(ei, dict) and ei:
+            return ei
+    ei = mission_result.get("engineering_inputs")
+    if isinstance(ei, dict) and ei:
+        return ei
+    return None
+
+
+def _write_engineering_brain(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Build and write the Phase 17 engineering brain reports.
+
+    Writes:
+      engineering_knowledge_selection_report.json
+      engineering_input_readiness_report.json
+      engineering_calculation_report.json
+
+    Returns a compact summary dict.
+    No LLM calls. No internet. No simulation. No engineering validation implied.
+    Concept-stage estimates only.
+    """
+    from backend.app.engineering.knowledge_selection_report import (
+        build_engineering_knowledge_selection_report,
+    )
+    from backend.app.engineering.input_readiness_report import (
+        build_engineering_input_readiness_report,
+    )
+    from backend.app.engineering.calculation_engine import (
+        build_engineering_calculation_report,
+    )
+
+    provided_inputs = _extract_engineering_inputs(mission_result)
+
+    selection_report = build_engineering_knowledge_selection_report(
+        mission_result=mission_result,
+        mission_text=mission_text,
+    )
+    readiness_report = build_engineering_input_readiness_report(
+        mission_result=mission_result,
+        mission_text=mission_text,
+        provided_inputs=provided_inputs,
+    )
+    calc_report = build_engineering_calculation_report(
+        mission_result=mission_result,
+        mission_text=mission_text,
+        provided_inputs=provided_inputs,
+    )
+
+    sel_path      = export_dir / "engineering_knowledge_selection_report.json"
+    readiness_path = export_dir / "engineering_input_readiness_report.json"
+    calc_path     = export_dir / "engineering_calculation_report.json"
+
+    write_json(sel_path, selection_report)
+    write_json(readiness_path, readiness_report)
+    write_json(calc_path, calc_report)
+
+    readiness_summary = readiness_report.get("readiness_summary", {})
+
+    return {
+        "status": "generated",
+        "knowledge_selection": {
+            "schema":                    selection_report.get("schema"),
+            "platform_intent":           selection_report.get("platform_intent"),
+            "platform_resolution_source": selection_report.get("platform_resolution_source"),
+            "selected_check_count":      selection_report.get("selected_check_count"),
+            "report_path":               str(sel_path),
+        },
+        "input_readiness": {
+            "schema":          readiness_report.get("schema"),
+            "platform_intent": readiness_report.get("platform_intent"),
+            "overall_status":  readiness_summary.get("overall_status"),
+            "total_checks":    readiness_summary.get("total_checks"),
+            "ready_count":     readiness_summary.get("ready_count"),
+            "partial_count":   readiness_summary.get("partial_count"),
+            "missing_count":   readiness_summary.get("missing_count"),
+            "report_path":     str(readiness_path),
+        },
+        "calculations": {
+            "schema":                      calc_report.get("schema"),
+            "calculation_performed":       calc_report.get("calculation_performed"),
+            "computed_metric_count":       calc_report.get("computed_metric_count"),
+            "blocked_calculation_count":   calc_report.get("blocked_calculation_count"),
+            "supported_calculation_count": calc_report.get("supported_calculation_count"),
+            "report_path":                 str(calc_path),
+        },
+    }
+
+
+# -------------------------------------------------------------------------
 # Main export function
 # -------------------------------------------------------------------------
 
@@ -1610,6 +1722,30 @@ def export_mission_files(
             pass
 
     # ---------------------------------------------------------
+    # Phase 17E — Engineering Brain reports
+    # ---------------------------------------------------------
+
+    engineering_brain: Optional[Dict[str, Any]] = None
+
+    try:
+        engineering_brain = _write_engineering_brain(
+            export_dir=export_dir,
+            mission_result=mission_result,
+            mission_text=mission,
+        )
+        record(Path(engineering_brain["knowledge_selection"]["report_path"]))
+        record(Path(engineering_brain["input_readiness"]["report_path"]))
+        record(Path(engineering_brain["calculations"]["report_path"]))
+    except Exception as _eb_error:
+        engineering_brain = {"status": "failed", "error": str(_eb_error)[:500]}
+        try:
+            _eb_path = export_dir / "engineering_calculation_report.json"
+            write_json(_eb_path, engineering_brain)
+            record(_eb_path)
+        except Exception:
+            pass
+
+    # ---------------------------------------------------------
     # Human-readable README values
     # ---------------------------------------------------------
 
@@ -1783,4 +1919,5 @@ def export_mission_files(
         },
         "aeroforge": aeroforge_summary,
         "visual_bay": visual_bay_summary,
+        "engineering_brain": engineering_brain,
     }
