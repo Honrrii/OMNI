@@ -9,6 +9,7 @@ import PlutoSafetyGatePanel from "./components/PlutoSafetyGatePanel.jsx";
 import AeroForgePanel from "./components/AeroForgePanel.jsx";
 import VisualBayPanel from "./components/VisualBayPanel.jsx";
 import ConceptDossierPanel from "./components/ConceptDossierPanel.jsx";
+import HenryEngineLoader from "./components/HenryEngineLoader.jsx";
 import OperatorBriefPanel from "./components/OperatorBriefPanel.jsx";
 import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
 import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
@@ -1680,6 +1681,8 @@ function EmptyPage({ title, message }) {
   );
 }
 
+// LoadingOverlay retained for reference; active loading UI is HenryEngineLoader (Phase 18D).
+// eslint-disable-next-line no-unused-vars
 function LoadingOverlay({
   message = "OMNI is coordinating the intelligence stack...",
   joke = getLocalMorbidJoke(),
@@ -2020,13 +2023,11 @@ function App() {
       </div>
 
       {loading && (
-        <LoadingOverlay
+        <HenryEngineLoader
+          isRunning={loading}
+          missionText={commandMode === "idea" ? quickIdea : mission}
+          commandMode={commandMode}
           joke={loadingJoke}
-          message={
-            commandMode === "idea"
-              ? "Echo is interpreting, OMNI is assembling, and exports are being prepared..."
-              : "OMNI is coordinating the intelligence stack..."
-          }
         />
       )}
     </>
