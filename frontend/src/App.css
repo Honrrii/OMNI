@@ -5709,13 +5709,73 @@ input::placeholder,
   gap: 6px;
 }
 
-/* Dossier panel grid */
+/* Dossier detail grid */
+.cd-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+/* Legacy alias — kept for safety */
 .cd-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
 }
 
+/* Panel card (replaces cd-dossier-card) */
+.cd-panel-card {
+  border-radius: 6px;
+  border: 1px solid #221a3a;
+  background: #0f0d1e;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.cd-panel-card-available { border-color: #2a1f50; }
+.cd-panel-card-missing   { border-color: #2a2020; opacity: 0.7; }
+.cd-panel-card-planned   { border-color: #1e2040; opacity: 0.7; }
+.cd-panel-card-unknown   { border-color: #221a3a; }
+
+.cd-panel-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cd-panel-card-title-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cd-panel-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b0a8d0;
+  letter-spacing: 0.02em;
+}
+
+.cd-panel-type {
+  font-size: 10px;
+  color: #5a5070;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cd-panel-render-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #7a6aaa;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* Legacy alias */
 .cd-dossier-card {
   border-radius: 6px;
   border: 1px solid #221a3a;
@@ -5778,7 +5838,8 @@ input::placeholder,
   border: 1px solid #2a2a40;
 }
 
-.cd-dossier-note {
+.cd-dossier-note,
+.cd-panel-note {
   margin: 0;
   font-size: 11px;
   color: #6a6080;
@@ -5827,7 +5888,7 @@ input::placeholder,
   overflow-wrap: anywhere;
 }
 
-/* Safety list */
+/* Safety list (legacy alias) */
 .cd-safety-list {
   margin: 0;
   padding: 0;
@@ -5851,6 +5912,46 @@ input::placeholder,
   position: absolute;
   left: 0;
   color: #6a5a90;
+}
+
+/* Safe list — canonical name */
+.cd-safe-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cd-safe-list li {
+  font-size: 12px;
+  color: #9080c0;
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.cd-safe-list li::before {
+  content: "·";
+  position: absolute;
+  left: 0;
+  color: #6a5a90;
+}
+
+/* Allowed visual modes list */
+.cd-mode-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cd-mode-list li {
+  display: contents;
 }
 
 /* Blocked claims list */
@@ -5879,6 +5980,11 @@ input::placeholder,
   color: #804040;
   font-size: 10px;
   top: 1px;
+}
+
+/* Inline blocked list inside panel cards — smaller */
+.cd-blocked-list-inline li {
+  font-size: 10px;
 }
 
 /* Source reports list */
@@ -5932,5 +6038,19 @@ input::placeholder,
   .cd-source-list li {
     flex-direction: column;
     gap: 2px;
+  }
+
+  .cd-detail-grid,
+  .cd-grid {
+    gap: 6px;
+  }
+
+  .cd-panel-card,
+  .cd-dossier-card {
+    padding: 10px 12px;
+  }
+
+  .cd-mode-list {
+    gap: 5px;
   }
 }
