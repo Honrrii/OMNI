@@ -5493,3 +5493,444 @@ input::placeholder,
     max-width: 100%;
   }
 }
+
+/* ============================================================
+   Concept Dossier Panel  (Phase 18B)
+   ============================================================ */
+
+.cd-panel {
+  margin: 20px 0;
+  border-radius: 8px;
+  border: 1px solid #221a3a;
+  background: #0d0c18;
+  overflow: hidden;
+}
+
+.cd-panel-available { border-color: #2a1f50; }
+.cd-panel-summary   { border-color: #221a3a; }
+.cd-panel-failed    { padding: 0; }
+
+.cd-fail-note {
+  padding: 16px 20px;
+  margin: 0;
+  font-size: 12px;
+  color: #ffbf4a;
+}
+
+/* HUD bar */
+.cd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #221a3a;
+  background: #100e1c;
+  flex-wrap: wrap;
+}
+
+.cd-panel-available > .cd-header { border-color: #2a1f50; }
+
+.cd-header-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9d7aff;
+  white-space: nowrap;
+}
+
+.cd-header-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Safety banner */
+.cd-safety-banner {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 11px;
+  color: #7a6aaa;
+  background: #0e0c1a;
+  border-bottom: 1px solid #1a1630;
+  line-height: 1.5;
+}
+
+/* Chip variants */
+.cd-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cd-chip-concept {
+  background: #180f35;
+  color: #9d7aff;
+  border: 1px solid #2a1f50;
+}
+
+.cd-chip-warn {
+  background: #1e1400;
+  color: #c49a2a;
+  border: 1px solid #3d2e0f;
+}
+
+.cd-chip-review {
+  background: #2b0f0f;
+  color: #ff8f8f;
+  border: 1px solid #4d1a1a;
+}
+
+.cd-chip-mode {
+  background: #180f35;
+  color: #b89aff;
+  border: 1px solid #2a1f50;
+  text-transform: none;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Body */
+.cd-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cd-compact {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Meta row */
+.cd-meta-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.cd-meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 120px;
+  max-width: 280px;
+}
+
+.cd-meta-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a5070;
+}
+
+.cd-meta-value {
+  font-size: 13px;
+  color: #c0b8e0;
+  overflow-wrap: anywhere;
+}
+
+.cd-meta-yes { color: #9d7aff; }
+.cd-meta-no  { color: #7cffc8; }
+
+/* Section */
+.cd-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cd-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a5070;
+}
+
+.cd-section-body {
+  padding-left: 4px;
+}
+
+/* Hero row */
+.cd-hero-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Item row (label: value) */
+.cd-item-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cd-item-label {
+  color: #5a5070;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cd-item-label::after {
+  content: ":";
+}
+
+.cd-item-value {
+  color: #c0b8e0;
+  overflow-wrap: anywhere;
+}
+
+/* Path */
+.cd-path {
+  font-size: 11px;
+  color: #7a6aaa;
+  font-family: monospace;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+/* Chip wrap */
+.cd-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Dossier panel grid */
+.cd-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.cd-dossier-card {
+  border-radius: 6px;
+  border: 1px solid #221a3a;
+  background: #0f0d1e;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cd-dossier-card-available { border-color: #2a1f50; }
+.cd-dossier-card-missing   { border-color: #2a2020; opacity: 0.7; }
+.cd-dossier-card-planned   { border-color: #1e2040; opacity: 0.7; }
+
+.cd-dossier-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cd-dossier-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b0a8d0;
+  letter-spacing: 0.02em;
+}
+
+.cd-panel-status {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.cd-panel-status-available {
+  background: #180f35;
+  color: #9d7aff;
+  border: 1px solid #2a1f50;
+}
+
+.cd-panel-status-missing {
+  background: #200e0e;
+  color: #c06060;
+  border: 1px solid #3a1818;
+}
+
+.cd-panel-status-planned {
+  background: #0f1228;
+  color: #6080c0;
+  border: 1px solid #1e2840;
+}
+
+.cd-panel-status-unknown {
+  background: #1a1a2e;
+  color: #6070a0;
+  border: 1px solid #2a2a40;
+}
+
+.cd-dossier-note {
+  margin: 0;
+  font-size: 11px;
+  color: #6a6080;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* Engineering brain summary inside card */
+.cd-brain-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* List (items with label/value) */
+.cd-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cd-list-item {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.cd-list-item-label {
+  color: #6a5a90;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cd-list-item-label::after {
+  content: " —";
+}
+
+.cd-list-item-value {
+  color: #a090c8;
+  overflow-wrap: anywhere;
+}
+
+/* Safety list */
+.cd-safety-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cd-safety-list li {
+  font-size: 12px;
+  color: #9080c0;
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.cd-safety-list li::before {
+  content: "·";
+  position: absolute;
+  left: 0;
+  color: #6a5a90;
+}
+
+/* Blocked claims list */
+.cd-blocked-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cd-blocked-list li {
+  font-size: 11px;
+  color: #c06060;
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.cd-blocked-list li::before {
+  content: "✕";
+  position: absolute;
+  left: 0;
+  color: #804040;
+  font-size: 10px;
+  top: 1px;
+}
+
+/* Source reports list */
+.cd-source-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cd-source-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.cd-source-key {
+  font-size: 11px;
+  color: #6a5a90;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-transform: capitalize;
+}
+
+.cd-source-key::after {
+  content: ":";
+}
+
+@media (max-width: 600px) {
+  .cd-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cd-meta-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .cd-meta-cell {
+    max-width: 100%;
+  }
+
+  .cd-item-row {
+    flex-wrap: wrap;
+  }
+
+  .cd-source-list li {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
