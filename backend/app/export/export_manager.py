@@ -1188,6 +1188,41 @@ def _write_engineering_brain(
 
 
 # -------------------------------------------------------------------------
+# Phase 18A — Concept Dossier export helper
+# -------------------------------------------------------------------------
+
+
+def _write_concept_dossier(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Build and write the Phase 18A Concept Dossier Manifest.
+    Reads Visual Bay and Engineering Brain reports already present in export_dir.
+    Returns a compact summary dict.
+    No LLM calls. No internet. No simulation. No engineering validation implied.
+    """
+    from backend.app.concept_dossier.manifest import build_concept_dossier_manifest
+
+    manifest = build_concept_dossier_manifest(
+        mission_result=mission_result,
+        mission_text=mission_text,
+        export_dir=export_dir,
+    )
+
+    dossier_path = export_dir / "concept_dossier_manifest.json"
+    write_json(dossier_path, manifest)
+
+    return {
+        "status":      manifest.get("status", "generated"),
+        "schema":      manifest.get("schema"),
+        "panel_count": len(manifest.get("dossier_panels", [])),
+        "report_path": str(dossier_path),
+    }
+
+
+# -------------------------------------------------------------------------
 # Main export function
 # -------------------------------------------------------------------------
 
@@ -1746,6 +1781,28 @@ def export_mission_files(
             pass
 
     # ---------------------------------------------------------
+    # Phase 18A — Concept Dossier manifest
+    # ---------------------------------------------------------
+
+    concept_dossier: Optional[Dict[str, Any]] = None
+
+    try:
+        concept_dossier = _write_concept_dossier(
+            export_dir=export_dir,
+            mission_result=mission_result,
+            mission_text=mission,
+        )
+        record(Path(concept_dossier["report_path"]))
+    except Exception as _cd_error:
+        concept_dossier = {"status": "failed", "error": str(_cd_error)[:500]}
+        try:
+            _cd_path = export_dir / "concept_dossier_manifest.json"
+            write_json(_cd_path, concept_dossier)
+            record(_cd_path)
+        except Exception:
+            pass
+
+    # ---------------------------------------------------------
     # Human-readable README values
     # ---------------------------------------------------------
 
@@ -1920,4 +1977,5 @@ def export_mission_files(
         "aeroforge": aeroforge_summary,
         "visual_bay": visual_bay_summary,
         "engineering_brain": engineering_brain,
+        "concept_dossier":   concept_dossier,
     }
