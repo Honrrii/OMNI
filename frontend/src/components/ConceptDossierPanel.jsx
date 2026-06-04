@@ -17,13 +17,25 @@ function getConceptDossierData(exportResult, missionResult) {
 
 // ── Primitives ─────────────────────────────────────────────────────────────
 
+const CD_CHIP_DS_MAP = {
+  concept: "concept",
+  warn:    "warning",
+  review:  "info",
+  mode:    "muted",
+};
+
 function CdChip({ label, variant }) {
-  return <span className={`cd-chip cd-chip-${variant}`}>{label}</span>;
+  const dsVariant = CD_CHIP_DS_MAP[variant] || "muted";
+  return (
+    <span className={`cd-chip cd-chip-${variant} omni-ds-chip omni-ds-chip-${dsVariant}`}>
+      {label}
+    </span>
+  );
 }
 
 function CdSection({ label, children }) {
   return (
-    <div className="cd-section">
+    <div className="cd-section omni-ds-section">
       <span className="cd-section-label">{label}</span>
       <div className="cd-section-body">{children}</div>
     </div>
@@ -123,7 +135,7 @@ function DossierPanelCard({ panel }) {
       )}
 
       {panel.gltf_preview_path && (
-        <p className="cd-path">{panel.gltf_preview_path}</p>
+        <p className="cd-path omni-ds-path">{panel.gltf_preview_path}</p>
       )}
 
       {blockedClaims.length > 0 && (
@@ -155,7 +167,7 @@ function CompactSummaryView({ summary }) {
       </div>
       {summary.report_path && (
         <CdSection label="Report path">
-          <p className="cd-path">{summary.report_path}</p>
+          <p className="cd-path omni-ds-path">{summary.report_path}</p>
         </CdSection>
       )}
     </div>
@@ -259,7 +271,7 @@ function RichManifestView({ manifest }) {
                 <span className="cd-source-key">
                   {key.replace(/_/g, " ")}
                 </span>
-                <span className="cd-path">{file}</span>
+                <span className="cd-path omni-ds-path">{file}</span>
               </li>
             ))}
           </ul>
@@ -301,7 +313,7 @@ export default function ConceptDossierPanel({ exportResult, missionResult }) {
 
   if (summary?.status === "failed") {
     return (
-      <div className="cd-panel cd-panel-failed">
+      <div className="cd-panel cd-panel-failed omni-ds-panel omni-ds-theme-dossier">
         <div className="cd-header">
           <span className="cd-header-label">Concept Dossier</span>
         </div>
@@ -315,7 +327,7 @@ export default function ConceptDossierPanel({ exportResult, missionResult }) {
   const hasManifest = !!manifest;
 
   return (
-    <div className={`cd-panel${hasManifest ? " cd-panel-available" : " cd-panel-summary"}`}>
+    <div className={`cd-panel${hasManifest ? " cd-panel-available" : " cd-panel-summary"} omni-ds-panel omni-ds-theme-dossier`}>
 
       {/* ── HUD bar ── */}
       <div className="cd-header">

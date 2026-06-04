@@ -26,9 +26,18 @@ function DomainChip({ label }) {
   return <span className="aeroforge-domain-chip">{label}</span>;
 }
 
+const AF_CHIP_DS_MAP = {
+  concept: "concept",
+  warn:    "warning",
+  review:  "info",
+  blocked: "danger",
+  unknown: "muted",
+};
+
 function GateChip({ label, variant }) {
+  const dsVariant = AF_CHIP_DS_MAP[variant] || "muted";
   return (
-    <span className={`aeroforge-gate-chip aeroforge-gate-chip-${variant}`}>
+    <span className={`aeroforge-gate-chip aeroforge-gate-chip-${variant} omni-ds-chip omni-ds-chip-${dsVariant}`}>
       {label}
     </span>
   );
@@ -78,7 +87,7 @@ export default function AeroForgePanel({ exportResult, missionResult }) {
 
   if (status === "failed") {
     return (
-      <div className="aeroforge-panel aeroforge-panel-failed">
+      <div className="aeroforge-panel aeroforge-panel-failed omni-ds-panel omni-ds-theme-aeroforge">
         <div className="af-hud-bar">
           <span className="af-hud-label">AeroForge Concept Gate</span>
         </div>
@@ -107,7 +116,7 @@ export default function AeroForgePanel({ exportResult, missionResult }) {
     "unknown";
 
   return (
-    <div className={`aeroforge-panel aeroforge-panel-${gateVariant}`}>
+    <div className={`aeroforge-panel aeroforge-panel-${gateVariant} omni-ds-panel omni-ds-theme-aeroforge`}>
       <div className="af-hud-bar">
         <span className="af-hud-label">AeroForge Concept Gate</span>
         <div className="af-hud-chips">

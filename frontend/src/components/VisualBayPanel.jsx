@@ -17,9 +17,18 @@ function getVisualBayData(exportResult, missionResult) {
   return { summary, manifest };
 }
 
+const VB_CHIP_DS_MAP = {
+  info:      "info",
+  blocked:   "danger",
+  ready:     "success",
+  warn:      "warning",
+  candidate: "muted",
+};
+
 function VbChip({ label, variant }) {
+  const dsVariant = VB_CHIP_DS_MAP[variant] || "muted";
   return (
-    <span className={`visual-bay-chip visual-bay-chip-${variant}`}>
+    <span className={`visual-bay-chip visual-bay-chip-${variant} omni-ds-chip omni-ds-chip-${dsVariant}`}>
       {label}
     </span>
   );
@@ -104,7 +113,7 @@ function PreviewAssetCard({ asset }) {
 
   return (
     <div className={`vb-preview-asset-card vb-preview-asset-card-${cardVariant}`}>
-      <div className="vb-preview-asset-path">{asset.path}</div>
+      <div className="vb-preview-asset-path omni-ds-path">{asset.path}</div>
       <div className="vb-preview-asset-kind">{asset.kind}</div>
       {chips.length > 0 && <div className="vb-preview-asset-chips">{chips}</div>}
       {asset.notes && asset.notes.length > 0 && (
@@ -198,7 +207,7 @@ export default function VisualBayPanel({ exportResult, missionResult }) {
 
   if (status === "failed") {
     return (
-      <div className="visual-bay-panel visual-bay-panel-failed">
+      <div className="visual-bay-panel visual-bay-panel-failed omni-ds-panel omni-ds-theme-visual-bay">
         <div className="vb-hud-bar">
           <span className="vb-hud-label">Visual Bay Manifest</span>
         </div>
@@ -210,7 +219,7 @@ export default function VisualBayPanel({ exportResult, missionResult }) {
   }
 
   return (
-    <div className={`visual-bay-panel visual-bay-panel-${status}`}>
+    <div className={`visual-bay-panel visual-bay-panel-${status} omni-ds-panel omni-ds-theme-visual-bay`}>
       <div className="vb-hud-bar">
         <span className="vb-hud-label">Visual Bay Manifest</span>
         <div className="vb-hud-chips">

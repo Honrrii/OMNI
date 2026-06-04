@@ -182,7 +182,7 @@ export default function HenryEngineLoader({
 
   return (
     <div
-      className="henry-loader"
+      className="henry-loader omni-ds-theme-cinematic"
       style={cssVars}
       role="status"
       aria-live="polite"

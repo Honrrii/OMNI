@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import "./styles/omni-design-system.css";
 import "./App.css";
 import { initSpaceBg } from "./space-bg";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
