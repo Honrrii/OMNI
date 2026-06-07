@@ -6352,6 +6352,349 @@ input::placeholder,
 }
 
 /* ============================================================
+   Concept Dossier Blueprint Board  (Phase 18H)
+   Presentation contract only. No CAD accuracy, engineering validation,
+   fabrication readiness, flight readiness, deployment readiness, or
+   simulation verification implied.
+   ============================================================ */
+
+/* Outer frame — fine blueprint micro-grid + structural grid overlay */
+.cd-blueprint {
+  position: relative;
+  padding: 14px 18px 16px;
+  border-bottom: 1px solid #18132e;
+  background:
+    linear-gradient(rgba(55, 100, 200, 0.038) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(55, 100, 200, 0.038) 1px, transparent 1px),
+    linear-gradient(rgba(70, 55, 120, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(70, 55, 120, 0.022) 1px, transparent 1px),
+    linear-gradient(170deg, rgba(8, 5, 18, 0.97) 0%, rgba(5, 4, 14, 0.98) 100%);
+  background-size: 14px 14px, 14px 14px, 70px 70px, 70px 70px, auto;
+  overflow: hidden;
+}
+
+/* Top-left corner bracket */
+.cd-blueprint::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 12px;
+  height: 12px;
+  border-top: 1px solid rgba(73, 200, 255, 0.26);
+  border-left: 1px solid rgba(73, 200, 255, 0.26);
+  pointer-events: none;
+}
+
+/* Bottom-right corner bracket */
+.cd-blueprint::after {
+  content: "";
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 12px;
+  height: 12px;
+  border-bottom: 1px solid rgba(73, 200, 255, 0.26);
+  border-right: 1px solid rgba(73, 200, 255, 0.26);
+  pointer-events: none;
+}
+
+/* Board header */
+.cd-blueprint-header {
+  margin-bottom: 10px;
+}
+
+.cd-blueprint-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(73, 200, 255, 0.46);
+  margin-bottom: 5px;
+}
+
+.cd-blueprint-title {
+  margin: 0 0 3px;
+  font-family: var(--omni-ds-font-display, "Rajdhani", "Barlow", sans-serif);
+  font-size: clamp(0.90rem, 1.8vw, 1.15rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #c0d0e8;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.cd-blueprint-platform {
+  margin: 0;
+  font-size: 11px;
+  color: #4a5870;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+
+/* Decorative divider rail — aria-hidden in JSX */
+.cd-blueprint-rail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 12px;
+  margin: 8px 0 10px;
+  overflow: hidden;
+}
+
+.cd-blueprint-rail-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(73, 200, 255, 0.16),
+    transparent
+  );
+}
+
+.cd-blueprint-rail-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid rgba(73, 200, 255, 0.30);
+  background: rgba(73, 200, 255, 0.06);
+  flex-shrink: 0;
+}
+
+/* Board card grid — 3 columns desktop, 2 at ≤900px, 1 at ≤700px */
+.cd-blueprint-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+/* Individual blueprint card */
+.cd-blueprint-card {
+  position: relative;
+  padding: 10px 11px;
+  border: 1px solid rgba(55, 75, 130, 0.24);
+  border-radius: 5px;
+  background: rgba(7, 5, 16, 0.72);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* Subtle top accent line per card */
+.cd-blueprint-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(73, 200, 255, 0.15),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.cd-blueprint-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.cd-blueprint-card-title-col {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.cd-blueprint-card-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #a8bcd8;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.cd-blueprint-type {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #364462;
+  margin-top: 2px;
+}
+
+/* Status chips */
+.cd-blueprint-status {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(55, 75, 130, 0.28);
+  background: rgba(7, 5, 16, 0.50);
+  color: #546082;
+  white-space: nowrap;
+}
+
+.cd-blueprint-status-available {
+  color: #7cffc8;
+  background: rgba(124, 255, 200, 0.06);
+  border-color: rgba(124, 255, 200, 0.20);
+}
+
+.cd-blueprint-status-planned {
+  color: #5878b8;
+  background: rgba(88, 120, 184, 0.06);
+  border-color: rgba(88, 120, 184, 0.20);
+}
+
+.cd-blueprint-status-missing {
+  color: #b85858;
+  background: rgba(184, 88, 88, 0.06);
+  border-color: rgba(184, 88, 88, 0.20);
+}
+
+.cd-blueprint-status-unavailable {
+  color: #6a5a80;
+  background: rgba(106, 90, 128, 0.06);
+  border-color: rgba(106, 90, 128, 0.18);
+}
+
+.cd-blueprint-status-contract-only {
+  color: #9d7aff;
+  background: rgba(157, 122, 255, 0.06);
+  border-color: rgba(157, 122, 255, 0.20);
+}
+
+.cd-blueprint-description {
+  margin: 0;
+  font-size: 10px;
+  color: #50607a;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.cd-blueprint-source {
+  display: block;
+  font-size: 9px;
+  color: #3a4060;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+/* Callouts row — compact mission context chips */
+.cd-blueprint-callouts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 9px;
+  padding: 6px 10px;
+  border: 1px solid rgba(55, 75, 130, 0.16);
+  border-radius: 4px;
+  background: rgba(7, 5, 16, 0.38);
+}
+
+.cd-blueprint-callouts-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #364462;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Chip row — within card or callouts */
+.cd-blueprint-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cd-blueprint-chip {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(55, 75, 130, 0.22);
+  color: #50607a;
+  background: rgba(7, 5, 16, 0.40);
+  white-space: nowrap;
+}
+
+.cd-blueprint-chip-concept {
+  color: #9d7aff;
+  border-color: rgba(157, 122, 255, 0.20);
+  background: rgba(157, 122, 255, 0.05);
+}
+
+.cd-blueprint-chip-mode {
+  color: #4a5878;
+  border-color: rgba(74, 88, 120, 0.18);
+  background: rgba(74, 88, 120, 0.05);
+}
+
+/* Safety notice */
+.cd-blueprint-safety {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 10px;
+  color: #3a3a5a;
+  background: rgba(6, 4, 12, 0.58);
+  border-top: 1px solid rgba(28, 22, 50, 0.48);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .cd-blueprint-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .cd-blueprint-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .cd-blueprint {
+    padding: 12px 14px 14px;
+  }
+  .cd-blueprint-callouts {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 375px) {
+  .cd-blueprint-title {
+    font-size: 0.88rem;
+  }
+}
+
+/* ============================================================
    Henry Engine Loader  (Phase 18F polish)
    Fictional aerospace mission processing visualization.
    No real propulsion, flight readiness, or engineering validation implied.

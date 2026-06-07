@@ -1,3 +1,5 @@
+import ConceptDossierBlueprintBoard from "./ConceptDossierBlueprintBoard.jsx";
+
 function getConceptDossierData(exportResult, missionResult) {
   const summary =
     exportResult?.export?.concept_dossier ||
@@ -528,6 +530,9 @@ export default function ConceptDossierPanel({ exportResult, missionResult }) {
         Concept dossier only. No engineering validation implied. No fabrication, flight,
         deployment, or operational readiness implied.
       </p>
+
+      {/* ── Blueprint board ── */}
+      {hasManifest && <ConceptDossierBlueprintBoard manifest={manifest} />}
 
       {/* ── Content ── */}
       {hasManifest
