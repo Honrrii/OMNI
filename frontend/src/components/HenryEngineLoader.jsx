@@ -15,7 +15,7 @@ const STAGES_IDEA = [
   { id: "planning",   label: "Core planning active"         },
   { id: "agents",     label: "Agent orchestration active"   },
   { id: "validation", label: "Validation gates aligning"    },
-  { id: "export",     label: "Export sequence preparing"    },
+  { id: "export",     label: "Dossier staging active"       },
 ];
 
 // ── Timing helpers ───────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ function NozzleBar({ widthPct }) {
 function EngineBody() {
   return (
     <div className="henry-engine-body" aria-hidden="true">
-      {/* Compressor intake — bars widen toward chamber */}
+      {/* Intake duct — bars widen toward chamber */}
       <div className="henry-engine-intake">
         <IntakeBar widthPct={32} />
         <IntakeBar widthPct={52} />
@@ -76,7 +76,7 @@ function EngineBody() {
         <IntakeBar widthPct={90} />
       </div>
 
-      {/* Combustion chamber */}
+      {/* Processing chamber */}
       <div className="henry-engine-chamber">
         <div className="henry-core">
           <div className="henry-core-ring henry-core-ring-3" />
@@ -86,7 +86,7 @@ function EngineBody() {
         </div>
       </div>
 
-      {/* Nozzle — bars narrow away from chamber */}
+      {/* Output channel — bars narrow away from chamber */}
       <div className="henry-engine-nozzle">
         <NozzleBar widthPct={90} />
         <NozzleBar widthPct={65} />
@@ -116,8 +116,8 @@ function ExhaustPlume({ intensity }) {
 function StageChip({ label, state }) {
   return (
     <span className={`henry-stage-chip henry-stage-${state}`}>
-      {state === "done"   && <span className="henry-stage-icon" aria-hidden="true">✓ </span>}
-      {state === "active" && <span className="henry-stage-icon" aria-hidden="true">▶ </span>}
+      {state === "done"    && <span className="henry-stage-icon" aria-hidden="true">✓ </span>}
+      {state === "active"  && <span className="henry-stage-icon" aria-hidden="true">▶ </span>}
       {state === "pending" && <span className="henry-stage-icon" aria-hidden="true">· </span>}
       {label}
     </span>
@@ -135,7 +135,8 @@ function TelemetryCell({ label, value }) {
 
 function IntensityBar({ intensity }) {
   return (
-    <div className="henry-intensity-bar-wrap" aria-label={`Processing intensity ${Math.round(intensity * 100)}%`}>
+    /* aria-hidden — status communicated via the stage live region */
+    <div className="henry-intensity-bar-wrap" aria-hidden="true">
       <div className="henry-intensity-track">
         <div
           className="henry-intensity-fill"
@@ -143,7 +144,6 @@ function IntensityBar({ intensity }) {
         />
       </div>
       <span className="henry-intensity-pct">{Math.round(intensity * 100)}%</span>
-      {/* Accessible text alternative to color */}
       <span className="henry-intensity-label">processing intensity</span>
     </div>
   );
@@ -166,9 +166,9 @@ export default function HenryEngineLoader({
     return () => clearInterval(timer);
   }, [isRunning]);
 
-  const intensity    = computeIntensity(elapsed);
-  const activeStage  = computeActiveStage(elapsed);
-  const stages       = commandMode === "idea" ? STAGES_IDEA : STAGES_MISSION;
+  const intensity   = computeIntensity(elapsed);
+  const activeStage = computeActiveStage(elapsed);
+  const stages      = commandMode === "idea" ? STAGES_IDEA : STAGES_MISSION;
 
   const cssVars = {
     "--he-intensity":    intensity,
@@ -181,35 +181,54 @@ export default function HenryEngineLoader({
     : null;
 
   return (
+    /*
+     * Outer overlay — NOT a live region. The aria-label gives a static description.
+     * Telemetry and decorative elements are aria-hidden so they don't flood screen readers.
+     * Stage updates are announced via the .henry-sr-only live region inside the card.
+     */
     <div
       className="henry-loader omni-ds-theme-cinematic"
       style={cssVars}
-      role="status"
-      aria-live="polite"
-      aria-label="OMNI processing mission — Henry Engine ignition sequence active"
+      aria-label="OMNI is processing your mission"
     >
       <div className="henry-loader-card">
+
+        {/* ── Decorative corner brackets (aria-hidden) ── */}
+        <span className="henry-corner henry-corner-tl" aria-hidden="true" />
+        <span className="henry-corner henry-corner-tr" aria-hidden="true" />
+        <span className="henry-corner henry-corner-bl" aria-hidden="true" />
+        <span className="henry-corner henry-corner-br" aria-hidden="true" />
+
+        {/* ── Stable live region — only announces when stage advances ── */}
+        <span
+          className="henry-sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {stages[activeStage]?.label}
+        </span>
 
         {/* ── Header ── */}
         <div className="henry-loader-header">
           <p className="henry-eyebrow">HENRY ENGINE</p>
-          <h2 className="henry-title">Mission Ignition Sequence</h2>
+          <h2 className="henry-title">Mission Processing Sequence</h2>
           {preview && (
             <p className="henry-mission-preview">{preview}</p>
           )}
         </div>
 
-        {/* ── Engine visualization ── */}
+        {/* ── Engine visualization — decorative, aria-hidden ── */}
         <div className="henry-engine" aria-hidden="true">
           <EngineBody />
           <ExhaustPlume intensity={intensity} />
         </div>
 
-        {/* ── Intensity bar ── */}
+        {/* ── Intensity bar — aria-hidden, info covered by live region ── */}
         <IntensityBar intensity={intensity} />
 
-        {/* ── Telemetry ── */}
-        <div className="henry-telemetry" aria-label="Engine telemetry readout">
+        {/* ── Telemetry — aria-hidden to avoid per-second announcements ── */}
+        <div className="henry-telemetry" aria-hidden="true">
           <TelemetryCell label="ELAPSED"   value={formatElapsed(elapsed)} />
           <TelemetryCell label="STAGE"     value={`${activeStage + 1} / ${stages.length}`} />
           <TelemetryCell label="INTENSITY" value={`${Math.round(intensity * 100)}%`} />
@@ -217,11 +236,11 @@ export default function HenryEngineLoader({
         </div>
 
         {/* ── Stage chips ── */}
-        <div className="henry-stage-row" aria-label="Mission stages">
+        <div className="henry-stage-row" aria-label="Processing stages">
           {stages.map((stage, i) => {
             const state =
-              i < activeStage  ? "done"   :
-              i === activeStage ? "active" :
+              i < activeStage   ? "done"    :
+              i === activeStage ? "active"  :
               "pending";
             return (
               <StageChip key={stage.id} label={stage.label} state={state} />

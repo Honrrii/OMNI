@@ -6056,7 +6056,7 @@ input::placeholder,
 }
 
 /* ============================================================
-   Henry Engine Loader  (Phase 18D)
+   Henry Engine Loader  (Phase 18F polish)
    Fictional aerospace mission processing visualization.
    No real propulsion, flight readiness, or engineering validation implied.
    ============================================================ */
@@ -6073,16 +6073,65 @@ input::placeholder,
   z-index: 40;
   display: grid;
   place-items: center;
-  background: rgba(2, 4, 14, 0.82);
-  backdrop-filter: blur(14px);
+  /* Vignette darkens edges; inner stays transparent so the card pops */
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 24%, rgba(0, 0, 14, 0.62) 100%),
+    rgba(1, 3, 12, 0.90);
+  backdrop-filter: blur(18px);
 }
 
+/* Blueprint grid texture on overlay */
+.henry-loader::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(49, 120, 255, 0.020) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(49, 120, 255, 0.020) 1px, transparent 1px);
+  background-size: 52px 52px;
+}
+
+/* Slow horizontal scan sweep across the overlay backdrop */
+.henry-loader::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2px;
+  height: 1px;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 5%,
+    rgba(73, 200, 255, 0.22) 30%,
+    rgba(200, 240, 255, 0.52) 50%,
+    rgba(73, 200, 255, 0.22) 70%,
+    transparent 95%
+  );
+  animation: henryOverlayScan 11s ease-in-out infinite;
+}
+
+/* ── Card ── */
 .henry-loader-card {
-  width: min(520px, calc(100% - 32px));
+  position: relative;
+  z-index: 1;
+  width: min(540px, calc(100% - 32px));
   padding: 28px 28px 22px;
-  border-radius: 12px;
-  border: 1px solid #1a2848;
-  background: #060a14;
+  border-radius: var(--omni-ds-radius-md, 14px);
+  border: 1px solid rgba(55, 115, 230, 0.38);
+  background: linear-gradient(
+    162deg,
+    rgba(6, 10, 24, 0.99) 0%,
+    rgba(4, 8, 18, 0.99) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(49, 120, 255, 0.055),
+    0 32px 96px rgba(0, 0, 0, 0.78),
+    inset 0 1px 0 rgba(120, 185, 255, 0.07),
+    inset 0 0 48px rgba(36, 72, 200, 0.04);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -6091,33 +6140,84 @@ input::placeholder,
   overscroll-behavior: contain;
 }
 
+/* ── Corner brackets — decorative technical frame detail ── */
+.henry-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+.henry-corner-tl {
+  top: 9px;
+  left: 9px;
+  border-top: 1px solid rgba(73, 200, 255, 0.44);
+  border-left: 1px solid rgba(73, 200, 255, 0.44);
+}
+
+.henry-corner-tr {
+  top: 9px;
+  right: 9px;
+  border-top: 1px solid rgba(73, 200, 255, 0.44);
+  border-right: 1px solid rgba(73, 200, 255, 0.44);
+}
+
+.henry-corner-bl {
+  bottom: 9px;
+  left: 9px;
+  border-bottom: 1px solid rgba(73, 200, 255, 0.28);
+  border-left: 1px solid rgba(73, 200, 255, 0.28);
+}
+
+.henry-corner-br {
+  bottom: 9px;
+  right: 9px;
+  border-bottom: 1px solid rgba(73, 200, 255, 0.28);
+  border-right: 1px solid rgba(73, 200, 255, 0.28);
+}
+
+/* ── Accessible live region (visually hidden) ── */
+.henry-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── Header ── */
 .henry-loader-header {
   text-align: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(49, 95, 200, 0.18);
 }
 
 .henry-eyebrow {
-  margin: 0 0 4px;
+  margin: 0 0 5px;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  font-weight: 800;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #3a6aaa;
+  color: rgba(73, 180, 255, 0.75);
 }
 
 .henry-title {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.18rem;
   font-weight: 700;
-  color: #c0d8f8;
-  letter-spacing: 0.02em;
+  color: #c8deff;
+  letter-spacing: 0.03em;
 }
 
 .henry-mission-preview {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 11px;
-  color: #4a6080;
-  line-height: 1.5;
+  color: rgba(100, 140, 185, 0.72);
+  line-height: 1.55;
   overflow-wrap: anywhere;
   font-style: italic;
 }
@@ -6139,51 +6239,53 @@ input::placeholder,
   align-items: center;
 }
 
-/* Intake bars — widen toward chamber */
+/* Intake duct — bars widen toward chamber */
 .henry-engine-intake {
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   width: 100%;
   padding-bottom: 6px;
 }
 
 .henry-intake-bar {
-  height: 2px;
-  border-radius: 1px;
+  height: 3px;
+  border-radius: 2px;
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(40, 120, 220, calc(var(--he-intensity, 0.3) * 0.9)),
-    rgba(80, 180, 255, calc(var(--he-intensity, 0.3) * 0.7)),
-    rgba(40, 120, 220, calc(var(--he-intensity, 0.3) * 0.9)),
+    rgba(40, 125, 225, calc(var(--he-intensity, 0.3) * 0.85)),
+    rgba(85, 195, 255, calc(var(--he-intensity, 0.3) * 0.72)),
+    rgba(40, 125, 225, calc(var(--he-intensity, 0.3) * 0.85)),
     transparent
   );
+  box-shadow: 0 0 5px rgba(60, 165, 255, calc(var(--he-intensity, 0.3) * 0.32));
   transition: opacity 0.6s ease;
 }
 
-/* Combustion chamber */
+/* Processing chamber */
 .henry-engine-chamber {
   width: 100%;
-  height: 76px;
-  border: 1px solid rgba(40, 100, 200, calc(var(--he-intensity, 0.3) * 0.9 + 0.1));
-  border-radius: 6px;
+  height: 80px;
+  border: 1px solid rgba(60, 130, 255, calc(var(--he-intensity, 0.3) * 0.85 + 0.12));
+  border-radius: var(--omni-ds-radius-sm, 8px);
   display: grid;
   place-items: center;
   position: relative;
-  background: rgba(4, 10, 28, 0.95);
+  background: rgba(3, 8, 24, 0.97);
   box-shadow:
-    0 0 var(--he-glow-radius, 16px) rgba(0, 140, 255, calc(var(--he-intensity, 0.3) * 0.5)),
-    inset 0 0 var(--he-glow-radius, 16px) rgba(0, 100, 200, calc(var(--he-intensity, 0.3) * 0.15));
+    0 0 var(--he-glow-radius, 16px) rgba(0, 145, 255, calc(var(--he-intensity, 0.3) * 0.46)),
+    0 0 calc(var(--he-glow-radius, 16px) * 0.55) rgba(255, 140, 55, calc(var(--he-intensity, 0.3) * 0.24)),
+    inset 0 0 var(--he-glow-radius, 16px) rgba(0, 100, 200, calc(var(--he-intensity, 0.3) * 0.13));
   transition: box-shadow 0.8s ease;
 }
 
 /* Core */
 .henry-core {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
 }
@@ -6193,11 +6295,12 @@ input::placeholder,
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: rgba(200, 240, 255, var(--he-core-opacity, 0.5));
+  background: rgba(210, 245, 255, var(--he-core-opacity, 0.5));
   box-shadow:
-    0 0 8px  rgba(0, 180, 255, calc(var(--he-intensity, 0.3) * 0.9)),
-    0 0 24px rgba(0, 140, 255, calc(var(--he-intensity, 0.3) * 0.7)),
-    0 0 48px rgba(60, 100, 255, calc(var(--he-intensity, 0.3) * 0.4));
+    0 0 8px  rgba(0, 195, 255, calc(var(--he-intensity, 0.3) * 0.92)),
+    0 0 22px rgba(0, 155, 255, calc(var(--he-intensity, 0.3) * 0.66)),
+    0 0 44px rgba(80, 115, 255, calc(var(--he-intensity, 0.3) * 0.38)),
+    0 0 7px  rgba(255, 165, 55, calc(var(--he-intensity, 0.3) * 0.38));
   animation: henryCorePulse 2.4s ease-in-out infinite;
   transition: box-shadow 0.8s ease;
 }
@@ -6205,53 +6308,53 @@ input::placeholder,
 .henry-core-ring {
   position: absolute;
   border-radius: 50%;
-  border: 1px solid rgba(40, 140, 255, calc(var(--he-intensity, 0.3) * 0.7));
+  border: 1px solid rgba(50, 150, 255, calc(var(--he-intensity, 0.3) * 0.65));
   animation: henryRingExpand 3s ease-in-out infinite;
 }
 
 .henry-core-ring-1 {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   animation-delay: 0s;
 }
 .henry-core-ring-2 {
-  width: 34px;
-  height: 34px;
-  border-color: rgba(40, 120, 220, calc(var(--he-intensity, 0.3) * 0.45));
+  width: 38px;
+  height: 38px;
+  border-color: rgba(40, 130, 230, calc(var(--he-intensity, 0.3) * 0.42));
   animation-delay: -1s;
 }
 .henry-core-ring-3 {
-  width: 44px;
-  height: 44px;
-  border-color: rgba(40, 100, 200, calc(var(--he-intensity, 0.3) * 0.25));
+  width: 48px;
+  height: 48px;
+  border-color: rgba(40, 110, 200, calc(var(--he-intensity, 0.3) * 0.22));
   animation-delay: -2s;
 }
 
-/* Nozzle bars — narrow away from chamber */
+/* Output channel — bars narrow away from chamber, orange energy accent */
 .henry-engine-nozzle {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   width: 100%;
   padding-top: 6px;
 }
 
 .henry-nozzle-bar {
-  height: 2px;
-  border-radius: 1px;
+  height: 3px;
+  border-radius: 2px;
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(40, 100, 200, calc(var(--he-intensity, 0.3) * 0.8)),
-    rgba(60, 160, 255, calc(var(--he-intensity, 0.3) * 0.6)),
-    rgba(40, 100, 200, calc(var(--he-intensity, 0.3) * 0.8)),
+    rgba(255, 120, 40, calc(var(--he-intensity, 0.3) * 0.58)),
+    rgba(255, 185, 75, calc(var(--he-intensity, 0.3) * 0.42)),
+    rgba(255, 120, 40, calc(var(--he-intensity, 0.3) * 0.58)),
     transparent
   );
   transition: opacity 0.6s ease;
 }
 
-/* ── Exhaust plume ── */
+/* ── Exhaust plume — orange base transitions to violet/blue ── */
 .henry-exhaust {
   display: flex;
   flex-direction: column;
@@ -6266,10 +6369,11 @@ input::placeholder,
   border-radius: 0 0 40px 40px;
   background: linear-gradient(
     180deg,
-    rgba(60, 160, 255, 0.85)  0%,
-    rgba(80, 100, 255, 0.55) 30%,
-    rgba(140, 80, 255, 0.30) 60%,
-    rgba(80, 40, 180, 0.10)  80%,
+    rgba(255, 145, 50, 0.72) 0%,
+    rgba(255, 80, 28, 0.50)  14%,
+    rgba(165, 68, 255, 0.36) 38%,
+    rgba(58, 118, 255, 0.22) 62%,
+    rgba(38, 78, 200, 0.10)  82%,
     transparent              100%
   );
   animation: henryExhaustFlow 1.8s ease-in-out infinite;
@@ -6281,15 +6385,16 @@ input::placeholder,
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 8px;
+  width: 6px;
   height: 100%;
   background: linear-gradient(
     180deg,
-    rgba(200, 240, 255, 0.9) 0%,
-    rgba(100, 180, 255, 0.4) 50%,
-    transparent              100%
+    rgba(255, 225, 155, 0.94) 0%,
+    rgba(255, 140, 55, 0.55)  34%,
+    rgba(140, 100, 255, 0.22) 66%,
+    transparent               100%
   );
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 3px 3px;
   animation: henryExhaustFlow 1.4s ease-in-out infinite reverse;
   transition: opacity 0.8s ease;
 }
@@ -6303,10 +6408,10 @@ input::placeholder,
 
 .henry-intensity-track {
   flex: 1;
-  height: 3px;
+  height: 4px;
   border-radius: 2px;
-  background: #0e1428;
-  border: 1px solid #1a2848;
+  background: rgba(8, 16, 40, 0.90);
+  border: 1px solid rgba(30, 72, 165, 0.42);
   overflow: hidden;
 }
 
@@ -6315,16 +6420,18 @@ input::placeholder,
   border-radius: 2px;
   background: linear-gradient(
     90deg,
-    rgba(40, 120, 255, 0.8),
-    rgba(80, 200, 255, 0.9)
+    rgba(38, 128, 255, 0.88),
+    rgba(88, 210, 255, 0.96),
+    rgba(255, 160, 58, 0.72)
   );
+  box-shadow: 0 0 6px rgba(80, 200, 255, 0.38);
   transition: width 1s ease;
 }
 
 .henry-intensity-pct {
   font-size: 11px;
-  font-weight: 600;
-  color: #5090c0;
+  font-weight: 700;
+  color: rgba(90, 162, 225, 0.90);
   letter-spacing: 0.04em;
   min-width: 30px;
   text-align: right;
@@ -6340,13 +6447,13 @@ input::placeholder,
   white-space: nowrap;
 }
 
-/* ── Telemetry ── */
+/* ── Telemetry — aria-hidden in JSX, decorative data panel ── */
 .henry-telemetry {
   display: flex;
   gap: 0;
   flex-wrap: wrap;
-  border: 1px solid #0e1828;
-  border-radius: 6px;
+  border: 1px solid rgba(20, 52, 135, 0.48);
+  border-radius: var(--omni-ds-radius-xs, 4px);
   overflow: hidden;
 }
 
@@ -6355,10 +6462,10 @@ input::placeholder,
   min-width: 80px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 12px;
-  border-right: 1px solid #0e1828;
-  background: #080c18;
+  gap: 3px;
+  padding: 9px 12px;
+  border-right: 1px solid rgba(20, 52, 135, 0.38);
+  background: rgba(4, 8, 22, 0.95);
 }
 
 .henry-telem-cell:last-child {
@@ -6368,15 +6475,15 @@ input::placeholder,
 .henry-telem-label {
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #2a5080;
+  color: rgba(56, 102, 175, 0.92);
 }
 
 .henry-telem-value {
   font-size: 13px;
-  font-weight: 600;
-  color: #70b8e8;
+  font-weight: 700;
+  color: #82caf2;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   animation: henryTelemetryBlink 4s ease-in-out infinite;
@@ -6392,48 +6499,50 @@ input::placeholder,
 .henry-stage-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 4px 10px;
-  border-radius: 12px;
+  gap: 4px;
+  padding: 5px 11px;
+  border-radius: 999px;
   font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   line-height: 1.3;
   border: 1px solid transparent;
   transition: all 0.5s ease;
 }
 
 .henry-stage-pending {
-  background: #080c18;
-  color: #2a4060;
-  border-color: #0e1828;
+  background: rgba(6, 10, 24, 0.82);
+  color: rgba(72, 102, 145, 0.80);
+  border-color: rgba(32, 58, 115, 0.48);
 }
 
 .henry-stage-active {
-  background: #0a1e40;
-  color: #70b8f0;
-  border-color: rgba(60, 140, 255, calc(var(--he-intensity, 0.3) * 0.8 + 0.1));
-  box-shadow: 0 0 8px rgba(40, 120, 255, calc(var(--he-intensity, 0.3) * 0.4));
+  background: rgba(10, 26, 58, 0.95);
+  color: #82cbfa;
+  border-color: rgba(60, 152, 255, calc(var(--he-intensity, 0.3) * 0.80 + 0.16));
+  box-shadow:
+    0 0 10px rgba(42, 132, 255, calc(var(--he-intensity, 0.3) * 0.46)),
+    0 0 4px  rgba(255, 145, 55, calc(var(--he-intensity, 0.3) * 0.20));
   animation: henryStageGlow 2s ease-in-out infinite;
 }
 
 .henry-stage-done {
-  background: #0a1828;
-  color: #3a7060;
-  border-color: #1a3040;
+  background: rgba(8, 18, 32, 0.86);
+  color: rgba(62, 135, 105, 0.92);
+  border-color: rgba(32, 82, 64, 0.58);
 }
 
 .henry-stage-icon {
   font-size: 9px;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 /* ── Morbid humor ── */
 .henry-joke-card {
   padding: 12px 16px;
-  border: 1px solid rgba(60, 80, 200, 0.18);
-  border-radius: 8px;
-  background: rgba(40, 60, 140, 0.06);
+  border: 1px solid rgba(52, 72, 185, 0.22);
+  border-radius: var(--omni-ds-radius-sm, 8px);
+  background: rgba(40, 56, 125, 0.055);
 }
 
 .henry-joke-card .henry-eyebrow {
@@ -6443,45 +6552,53 @@ input::placeholder,
 .henry-joke-text {
   margin: 0;
   font-size: 12px;
-  color: rgba(200, 210, 240, 0.75);
-  line-height: 1.6;
+  color: rgba(192, 208, 238, 0.72);
+  line-height: 1.65;
 }
 
-/* ── Safety note ── */
+/* ── Safety note — increased contrast vs Phase 18D ── */
 .henry-safety-note {
   margin: 0;
   font-size: 10px;
-  color: #2a3850;
-  line-height: 1.5;
+  color: rgba(148, 184, 222, 0.60);
+  line-height: 1.55;
   text-align: center;
-  border-top: 1px solid #0a1020;
+  border-top: 1px solid rgba(30, 62, 125, 0.32);
   padding-top: 12px;
 }
 
 /* ── Keyframes ── */
+
+@keyframes henryOverlayScan {
+  0%   { top: -2px; opacity: 0; }
+  8%   { opacity: 0.70; }
+  88%  { opacity: 0.42; }
+  100% { top: calc(100% + 2px); opacity: 0; }
+}
+
 @keyframes henryCorePulse {
-  0%, 100% { transform: scale(0.88); opacity: 0.70; }
-  50%       { transform: scale(1.18); opacity: 1.00; }
+  0%, 100% { transform: scale(0.88); opacity: 0.72; }
+  50%       { transform: scale(1.16); opacity: 1.00; }
 }
 
 @keyframes henryRingExpand {
-  0%, 100% { transform: scale(0.90); opacity: 0.35; }
-  50%       { transform: scale(1.10); opacity: 0.90; }
+  0%, 100% { transform: scale(0.90); opacity: 0.32; }
+  50%       { transform: scale(1.10); opacity: 0.88; }
 }
 
 @keyframes henryExhaustFlow {
   0%, 100% { transform: scaleX(1.00) scaleY(1.00); opacity: 1.00; }
-  50%       { transform: scaleX(0.92) scaleY(0.96); opacity: 0.80; }
+  50%       { transform: scaleX(0.93) scaleY(0.96); opacity: 0.82; }
 }
 
 @keyframes henryTelemetryBlink {
   0%, 48%, 52%, 100% { opacity: 1; }
-  50%                 { opacity: 0.6; }
+  50%                 { opacity: 0.65; }
 }
 
 @keyframes henryStageGlow {
-  0%, 100% { box-shadow: 0 0 6px  rgba(40, 120, 255, 0.25); }
-  50%       { box-shadow: 0 0 14px rgba(60, 160, 255, 0.55); }
+  0%, 100% { box-shadow: 0 0 7px  rgba(42, 132, 255, 0.28), 0 0 3px rgba(255, 145, 55, 0.12); }
+  50%       { box-shadow: 0 0 16px rgba(62, 172, 255, 0.58), 0 0 6px rgba(255, 165, 78, 0.24); }
 }
 
 /* ── Responsive ── */
@@ -6495,12 +6612,16 @@ input::placeholder,
     width: 160px;
   }
 
+  .henry-exhaust {
+    width: 160px;
+  }
+
   .henry-exhaust-plume {
     width: 64px;
   }
 
   .henry-engine-chamber {
-    height: 62px;
+    height: 66px;
   }
 
   .henry-title {
@@ -6522,7 +6643,7 @@ input::placeholder,
 
   .henry-stage-chip {
     font-size: 9px;
-    padding: 3px 8px;
+    padding: 4px 9px;
   }
 
   .henry-telemetry {
@@ -6531,5 +6652,74 @@ input::placeholder,
 
   .henry-intensity-bar-wrap {
     gap: 6px;
+  }
+}
+
+@media (max-width: 375px) {
+  .henry-loader-card {
+    padding: 16px 14px 14px;
+    gap: 12px;
+    width: calc(100% - 20px);
+  }
+
+  .henry-engine-body {
+    width: 140px;
+  }
+
+  .henry-exhaust {
+    width: 140px;
+  }
+
+  .henry-exhaust-plume {
+    width: 56px;
+  }
+
+  .henry-engine-chamber {
+    height: 58px;
+  }
+
+  .henry-title {
+    font-size: 0.95rem;
+  }
+
+  .henry-telem-cell {
+    min-width: 56px;
+    padding: 5px 8px;
+  }
+
+  .henry-stage-chip {
+    font-size: 8px;
+    padding: 3px 8px;
+  }
+
+  .henry-corner {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .henry-loader::after,
+  .henry-core-dot,
+  .henry-core-ring,
+  .henry-exhaust-plume,
+  .henry-exhaust-core-stream,
+  .henry-telem-value,
+  .henry-stage-chip {
+    animation: none;
+    transition: none;
+  }
+
+  .henry-intensity-fill {
+    transition: none;
+  }
+
+  .henry-exhaust-plume {
+    opacity: 0.55;
+  }
+
+  .henry-exhaust-core-stream {
+    opacity: 0.40;
   }
 }
