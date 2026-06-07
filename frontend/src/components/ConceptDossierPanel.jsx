@@ -62,6 +62,187 @@ function CdItemRow({ label, value }) {
   );
 }
 
+// ── Hero meta item ──────────────────────────────────────────────────────────
+
+function HeroMetaItem({ label, value, accentYes, accentNo, mono }) {
+  let cls = "cd-hero-meta-v";
+  if (accentYes) cls += " cd-hero-meta-accent-yes";
+  if (accentNo)  cls += " cd-hero-meta-accent-no";
+  if (mono)      cls += " cd-hero-meta-mono";
+  return (
+    <div className="cd-hero-meta-item">
+      <span className="cd-hero-meta-k">{label}</span>
+      <span className={cls}>{value}</span>
+    </div>
+  );
+}
+
+// ── Concept Dossier Hero / Reveal ───────────────────────────────────────────
+// Aerospace-style concept reveal section.
+// Concept-stage only. No engineering validation implied.
+
+function ConceptDossierHero({ manifest, summary }) {
+  const title       = manifest?.mission_title || null;
+  const platform    = manifest?.platform_intent || null;
+  const missionType = manifest?.mission_type || null;
+  const schema      = manifest?.schema || summary?.schema || null;
+  const status      = summary?.status || null;
+  const conceptOnly = manifest?.concept_stage_only ?? null;
+  const hero        = manifest?.hero_visual || null;
+  const notCadAcc   = !!(hero?.not_cad_accurate || manifest?.not_cad_accurate);
+  const allowedModes = Array.isArray(manifest?.allowed_visual_modes)
+    ? manifest.allowed_visual_modes : [];
+  const panels       = Array.isArray(manifest?.dossier_panels)
+    ? manifest.dossier_panels : [];
+  const fallbackCount = !panels.length
+    ? (manifest?.panel_count ?? summary?.panel_count ?? null) : null;
+  const reportPath  = !manifest ? (summary?.report_path || null) : null;
+
+  const nAvail   = panels.filter(p => p.status === "available").length;
+  const nPlanned = panels.filter(p => p.status === "planned").length;
+  const nMissing = panels.filter(p => p.status === "missing").length;
+  const nFailed  = panels.filter(p => p.status === "failed").length;
+
+  const hasContent =
+    title || platform || missionType || schema || status ||
+    conceptOnly != null || hero || panels.length > 0 ||
+    fallbackCount != null || allowedModes.length > 0 || reportPath;
+
+  if (!hasContent) return null;
+
+  return (
+    <div className="cd-hero" role="region" aria-label="Concept dossier reveal">
+
+      {/* Kicker */}
+      <div className="cd-hero-kicker">
+        <span aria-hidden="true" className="cd-hero-kicker-icon">◈</span>
+        {manifest ? "Mission Concept Reveal" : "Concept Dossier"}
+      </div>
+
+      {/* Title */}
+      {title && <h3 className="cd-hero-title">{title}</h3>}
+
+      {/* Meta + visual preview grid */}
+      <div className="cd-hero-grid">
+        {(platform || missionType || schema || status || conceptOnly != null || reportPath) && (
+          <div className="cd-hero-meta">
+            {platform    && <HeroMetaItem label="Platform"         value={platform} />}
+            {missionType && <HeroMetaItem label="Mission type"     value={missionType} />}
+            {schema      && <HeroMetaItem label="Schema"           value={schema} />}
+            {status      && <HeroMetaItem label="Status"           value={status} />}
+            {conceptOnly != null && (
+              <HeroMetaItem
+                label="Concept stage only"
+                value={conceptOnly ? "Yes" : "No"}
+                accentYes={!!conceptOnly}
+                accentNo={!conceptOnly}
+              />
+            )}
+            {reportPath && <HeroMetaItem label="Report" value={reportPath} mono />}
+          </div>
+        )}
+
+        {hero && (
+          <div className="cd-hero-visual">
+            <span className="cd-hero-visual-eyebrow">Visual preview</span>
+            {hero.type && (
+              <div className="cd-hero-visual-row">
+                <span className="cd-hero-visual-k">Type</span>
+                <span className="cd-hero-visual-v">{hero.type.replace(/_/g, " ")}</span>
+              </div>
+            )}
+            {hero.label && (
+              <div className="cd-hero-visual-row">
+                <span className="cd-hero-visual-k">Label</span>
+                <span className="cd-hero-visual-v">{hero.label}</span>
+              </div>
+            )}
+            {hero.gltf_exists != null && (
+              <div className="cd-hero-visual-row">
+                <span className="cd-hero-visual-k">GLTF</span>
+                <span className={`cd-hero-visual-v ${hero.gltf_exists ? "cd-hero-vv-present" : "cd-hero-vv-absent"}`}>
+                  {hero.gltf_exists ? "Present" : "Not yet generated"}
+                </span>
+              </div>
+            )}
+            {notCadAcc && (
+              <p className="cd-hero-visual-note">Concept placeholder. Not CAD-accurate.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Dossier panel count summary */}
+      {(panels.length > 0 || fallbackCount != null) && (
+        <div className="cd-hero-counts">
+          <span className="cd-hero-counts-eyebrow">Dossier panels</span>
+          <div className="cd-hero-count-row">
+            {panels.length > 0 ? (
+              <>
+                {nAvail   > 0 && (
+                  <div className="cd-hero-count-card cd-hero-count-avail">
+                    <span className="cd-hero-count-n">{nAvail}</span>
+                    <span className="cd-hero-count-lbl">Available</span>
+                  </div>
+                )}
+                {nPlanned > 0 && (
+                  <div className="cd-hero-count-card cd-hero-count-planned">
+                    <span className="cd-hero-count-n">{nPlanned}</span>
+                    <span className="cd-hero-count-lbl">Planned</span>
+                  </div>
+                )}
+                {nMissing > 0 && (
+                  <div className="cd-hero-count-card cd-hero-count-missing">
+                    <span className="cd-hero-count-n">{nMissing}</span>
+                    <span className="cd-hero-count-lbl">Missing</span>
+                  </div>
+                )}
+                {nFailed  > 0 && (
+                  <div className="cd-hero-count-card cd-hero-count-failed">
+                    <span className="cd-hero-count-n">{nFailed}</span>
+                    <span className="cd-hero-count-lbl">Failed</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="cd-hero-count-card">
+                <span className="cd-hero-count-n">{fallbackCount}</span>
+                <span className="cd-hero-count-lbl">Panels</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Allowed visual modes — compact chip row */}
+      {allowedModes.length > 0 && (
+        <div className="cd-hero-chip-row">
+          {allowedModes.slice(0, 5).map((mode, i) => (
+            <CdChip key={i} label={mode} variant="mode" />
+          ))}
+          {allowedModes.length > 5 && (
+            <span className="cd-hero-chip-more" aria-label={`${allowedModes.length - 5} more modes`}>
+              +{allowedModes.length - 5}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Safety strip */}
+      <div className="cd-hero-safety" role="note">
+        <span className="cd-hero-safety-item">Concept-stage dossier</span>
+        <span className="cd-hero-safety-item">Presentation preview only</span>
+        <span className="cd-hero-safety-item">No engineering validation implied</span>
+        <span className="cd-hero-safety-item">Human review required</span>
+        {notCadAcc && (
+          <span className="cd-hero-safety-item">Not CAD-accurate</span>
+        )}
+      </div>
+
+    </div>
+  );
+}
+
 function PanelStatusChip({ status }) {
   const variant =
     status === "available" ? "available" :
@@ -338,6 +519,9 @@ export default function ConceptDossierPanel({ exportResult, missionResult }) {
           <CdChip label="Human review required" variant="review" />
         </div>
       </div>
+
+      {/* ── Hero / Reveal ── */}
+      <ConceptDossierHero manifest={manifest} summary={summary} />
 
       {/* ── Persistent safety notice ── */}
       <p className="cd-safety-banner">

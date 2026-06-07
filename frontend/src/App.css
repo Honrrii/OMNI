@@ -6056,6 +6056,302 @@ input::placeholder,
 }
 
 /* ============================================================
+   Concept Dossier Hero / Reveal  (Phase 18G)
+   Premium aerospace-style concept reveal section.
+   Concept-stage only. No engineering validation implied.
+   ============================================================ */
+
+/* Outer frame — blueprint micro-grid + corner brackets */
+.cd-hero {
+  position: relative;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid #1e1640;
+  background:
+    linear-gradient(rgba(80, 60, 130, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(80, 60, 130, 0.055) 1px, transparent 1px),
+    linear-gradient(160deg, rgba(20, 12, 40, 0.96) 0%, rgba(10, 8, 22, 0.98) 100%);
+  background-size: 28px 28px, 28px 28px, auto;
+  overflow: hidden;
+}
+
+/* Top-left corner bracket */
+.cd-hero::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 13px;
+  height: 13px;
+  border-top: 1px solid rgba(157, 122, 255, 0.36);
+  border-left: 1px solid rgba(157, 122, 255, 0.36);
+  pointer-events: none;
+}
+
+/* Bottom-right corner bracket */
+.cd-hero::after {
+  content: "";
+  position: absolute;
+  bottom: 7px;
+  right: 7px;
+  width: 13px;
+  height: 13px;
+  border-bottom: 1px solid rgba(157, 122, 255, 0.36);
+  border-right: 1px solid rgba(157, 122, 255, 0.36);
+  pointer-events: none;
+}
+
+/* Kicker — small uppercase label above the title */
+.cd-hero-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(157, 122, 255, 0.58);
+}
+
+.cd-hero-kicker-icon {
+  font-size: 9px;
+  opacity: 0.70;
+}
+
+/* Mission title — main heading */
+.cd-hero-title {
+  margin: 0 0 14px;
+  font-family: var(--omni-ds-font-display, "Rajdhani", "Barlow", sans-serif);
+  font-size: clamp(1.05rem, 2.2vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ddd0ff;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* Two-column grid: meta left, visual preview right */
+.cd-hero-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+/* Meta column */
+.cd-hero-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cd-hero-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cd-hero-meta-k {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #4a3a70;
+}
+
+.cd-hero-meta-v {
+  font-size: 12px;
+  color: #b0a0d8;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.cd-hero-meta-accent-yes { color: #9d7aff; }
+.cd-hero-meta-accent-no  { color: #7cffc8; }
+
+.cd-hero-meta-mono {
+  font-family: var(--omni-ds-font-mono, monospace);
+  font-size: 10px;
+  color: #7a6aaa;
+}
+
+/* Visual preview column */
+.cd-hero-visual {
+  min-width: 130px;
+  max-width: 200px;
+  padding: 9px 11px;
+  border: 1px solid rgba(80, 60, 130, 0.30);
+  border-radius: 6px;
+  background: rgba(14, 10, 30, 0.70);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cd-hero-visual-eyebrow {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(157, 122, 255, 0.52);
+  margin-bottom: 3px;
+}
+
+.cd-hero-visual-row {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  line-height: 1.4;
+  flex-wrap: wrap;
+}
+
+.cd-hero-visual-k {
+  font-size: 9px;
+  color: #4a3a70;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cd-hero-visual-k::after { content: ":"; }
+
+.cd-hero-visual-v {
+  color: #9080c0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.cd-hero-vv-present { color: #7cffc8; }
+.cd-hero-vv-absent  { color: #7a6aaa; font-style: italic; }
+
+.cd-hero-visual-note {
+  margin: 3px 0 0;
+  font-size: 10px;
+  color: #7a6aaa;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Dossier panel count summary */
+.cd-hero-counts {
+  margin-bottom: 10px;
+}
+
+.cd-hero-counts-eyebrow {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #4a3a70;
+  margin-bottom: 6px;
+}
+
+.cd-hero-count-row {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.cd-hero-count-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  border: 1px solid rgba(60, 40, 100, 0.40);
+  border-radius: 6px;
+  background: rgba(14, 10, 30, 0.70);
+  min-width: 48px;
+}
+
+.cd-hero-count-n {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  color: #b0a0d8;
+  font-family: var(--omni-ds-font-display, "Rajdhani", "Barlow", sans-serif);
+}
+
+.cd-hero-count-lbl {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a3a70;
+}
+
+.cd-hero-count-avail                { border-color: rgba(80, 60, 180, 0.38); }
+.cd-hero-count-avail .cd-hero-count-n   { color: #9d7aff; }
+.cd-hero-count-planned              { border-color: rgba(30, 50, 100, 0.38); }
+.cd-hero-count-planned .cd-hero-count-n { color: #6080c0; }
+.cd-hero-count-missing              { border-color: rgba(100, 30, 30, 0.38); }
+.cd-hero-count-missing .cd-hero-count-n { color: #c06060; }
+.cd-hero-count-failed               { border-color: rgba(180, 30, 30, 0.42); }
+.cd-hero-count-failed .cd-hero-count-n  { color: #ff8080; }
+
+/* Allowed visual modes — compact chip row */
+.cd-hero-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.cd-hero-chip-more {
+  font-size: 10px;
+  color: #4a3a70;
+  letter-spacing: 0.04em;
+}
+
+/* Safety strip — compact labelled tags */
+.cd-hero-safety {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(34, 26, 58, 0.55);
+}
+
+.cd-hero-safety-item {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(90, 70, 130, 0.78);
+  padding: 2px 7px;
+  border: 1px solid rgba(50, 35, 80, 0.48);
+  border-radius: 4px;
+  background: rgba(14, 10, 30, 0.50);
+}
+
+@media (max-width: 600px) {
+  .cd-hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .cd-hero-visual {
+    max-width: 100%;
+    min-width: 0;
+  }
+  .cd-hero-title {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 375px) {
+  .cd-hero {
+    padding: 12px 14px 10px;
+  }
+  .cd-hero-title {
+    font-size: 0.95rem;
+  }
+}
+
+/* ============================================================
    Henry Engine Loader  (Phase 18F polish)
    Fictional aerospace mission processing visualization.
    No real propulsion, flight readiness, or engineering validation implied.
