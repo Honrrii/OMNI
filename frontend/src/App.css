@@ -1778,6 +1778,69 @@ input::placeholder,
   }
 }
 
+/* ── Phase 18M: Operator-critical collapsible details ── */
+
+.p18m-details {
+  margin-top: 10px;
+  border: 1px solid rgba(60, 140, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.p18m-details[open] {
+  border-color: rgba(60, 140, 255, 0.14);
+}
+
+.p18m-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  user-select: none;
+  border-radius: 10px;
+}
+
+.p18m-summary::-webkit-details-marker {
+  display: none;
+}
+
+.p18m-summary::before {
+  content: "▸";
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.p18m-details[open] > .p18m-summary::before {
+  content: "▾";
+}
+
+.p18m-summary:hover {
+  color: var(--muted-strong);
+}
+
+.p18m-summary:focus-visible {
+  outline: 2px solid rgba(60, 160, 255, 0.5);
+  outline-offset: 2px;
+}
+
+.p18m-details > :not(summary) {
+  padding: 0 12px 10px;
+}
+
+.artifact-desc-clamped {
+  color: var(--muted);
+}
+
+.artifact-desc-longform {
+  margin-top: 4px;
+}
+
 .export-action-row {
   justify-content: flex-start;
 }

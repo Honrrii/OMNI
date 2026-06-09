@@ -311,16 +311,19 @@ function DossierPanelCard({ panel }) {
         <p className="cd-panel-note">{panel.note}</p>
       )}
 
-      {/* items list — label/value pairs */}
+      {/* items list — label/value pairs, collapsed by default */}
       {items.length > 0 && (
-        <ul className="cd-list">
-          {items.map((item, i) => (
-            <li key={i} className="cd-list-item">
-              {item.label && <span className="cd-list-item-label">{item.label}</span>}
-              {item.value ? <span className="cd-list-item-value">{item.value}</span> : null}
-            </li>
-          ))}
-        </ul>
+        <details className="p18m-details">
+          <summary className="p18m-summary">Dossier panel details</summary>
+          <ul className="cd-list">
+            {items.map((item, i) => (
+              <li key={i} className="cd-list-item">
+                {item.label && <span className="cd-list-item-label">{item.label}</span>}
+                {item.value ? <span className="cd-list-item-value">{item.value}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {/* engineering brain summary counts */}
@@ -373,9 +376,10 @@ function CompactSummaryView({ summary }) {
         )}
       </div>
       {summary.report_path && (
-        <CdSection label="Report path">
+        <details className="p18m-details">
+          <summary className="p18m-summary">Source report paths</summary>
           <p className="cd-path omni-ds-path">{summary.report_path}</p>
-        </CdSection>
+        </details>
       )}
     </div>
   );
@@ -469,9 +473,10 @@ function RichManifestView({ manifest }) {
         </CdSection>
       )}
 
-      {/* ── Source reports ── */}
+      {/* ── Source reports — collapsed by default ── */}
       {sourceReports.length > 0 && (
-        <CdSection label="Source reports">
+        <details className="p18m-details">
+          <summary className="p18m-summary">Source report paths</summary>
           <ul className="cd-source-list">
             {sourceReports.map(([key, file]) => (
               <li key={key}>
@@ -482,7 +487,7 @@ function RichManifestView({ manifest }) {
               </li>
             ))}
           </ul>
-        </CdSection>
+        </details>
       )}
 
       {/* ── Safety notes ── */}

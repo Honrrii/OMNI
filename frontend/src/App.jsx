@@ -2022,16 +2022,30 @@ function deriveArtifactSummary(id, type, content) {
   return { chips: ["text"], rows: [r("Lines", String(lines.length))].filter(Boolean) };
 }
 
+const ARTIFACT_DESC_CLAMP = 280;
+
 function ArtifactCard({ title, description, content, id, type }) {
   const summary    = deriveArtifactSummary(id, type, content);
   const hasSummary = !!(summary && (summary.rows.length > 0 || summary.chips.length > 0));
+  const isLongDesc = description && description.length > ARTIFACT_DESC_CLAMP;
+  const descPreview = isLongDesc
+    ? description.slice(0, ARTIFACT_DESC_CLAMP).trimEnd() + "…"
+    : description;
   return (
     <div className="artifact-card">
       <div className="artifact-header">
         <h3>{title}</h3>
         <span>Generated</span>
       </div>
-      <p className="artifact-description">{description}</p>
+      <p className={`artifact-description${isLongDesc ? " artifact-desc-clamped" : ""}`}>
+        {descPreview}
+      </p>
+      {isLongDesc && (
+        <details className="p18m-details artifact-desc-longform">
+          <summary className="p18m-summary">Long-form context</summary>
+          <p className="artifact-description">{description}</p>
+        </details>
+      )}
       {hasSummary && (
         <div className="artifact-summary">
           {summary.chips.length > 0 && (

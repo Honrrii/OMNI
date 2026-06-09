@@ -71,8 +71,6 @@ export default function PlutoSafetyGatePanel({ exportResult }) {
   const warnings   = full?.warnings              || [];
   const nextChecks = full?.required_next_checks  || [];
   const rationale  = full?.rationale             || "";
-  const hasFullDetail = blockers.length > 0 || warnings.length > 0 || nextChecks.length > 0 || rationale;
-
   const reviewRequired = summary.required_human_review ?? full?.required_human_review ?? false;
 
   return (
@@ -132,7 +130,7 @@ export default function PlutoSafetyGatePanel({ exportResult }) {
           </div>
         )}
 
-        {hasFullDetail && (
+        {(blockers.length > 0 || warnings.length > 0 || nextChecks.length > 0) && (
           <>
             {blockers.length > 0 && (
               <Section label="Blockers">
@@ -149,12 +147,13 @@ export default function PlutoSafetyGatePanel({ exportResult }) {
                 <IssueList items={nextChecks} cls="sg-item-check" />
               </Section>
             )}
-            {rationale && (
-              <Section label="Rationale">
-                <p className="sg-rationale">{rationale}</p>
-              </Section>
-            )}
           </>
+        )}
+        {rationale && (
+          <details className="p18m-details">
+            <summary className="p18m-summary">Full safety rationale</summary>
+            <p className="sg-rationale">{rationale}</p>
+          </details>
         )}
       </div>
     </div>

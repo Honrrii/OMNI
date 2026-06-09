@@ -102,10 +102,10 @@ export default function CandidateEvaluationPanel({ exportResult }) {
       </div>
 
       {ce.council_summary && (
-        <div className="ce-section">
-          <span className="ce-section-label">Council Summary</span>
+        <details className="p18m-details">
+          <summary className="p18m-summary">Full candidate rationale</summary>
           <p className="ce-summary-text">{ce.council_summary}</p>
-        </div>
+        </details>
       )}
 
       {ranking.length > 0 && (
