@@ -1,5 +1,20 @@
 import ConceptDossierBlueprintBoard from "./ConceptDossierBlueprintBoard.jsx";
 
+function buildArtifactSummaries(exportResult) {
+  const exp = exportResult?.export || exportResult || {};
+  return {
+    fusion360:            exp.fusion360_generation             || null,
+    kicad:                exp.kicad_generation                 || null,
+    ros2:                 exp.ros2_generation                  || null,
+    visual_bay:           exp.visual_bay                       || null,
+    concept_dossier:      exp.concept_dossier                  || null,
+    morphology:           exp.morphology_validation            || null,
+    candidate_evaluation: exp.cortex?.candidate_evaluation     || null,
+    engineering_brain:    exp.engineering_brain                || null,
+    files:                Array.isArray(exp.files) ? exp.files : [],
+  };
+}
+
 function getConceptDossierData(exportResult, missionResult) {
   const summary =
     exportResult?.export?.concept_dossier ||
@@ -100,10 +115,11 @@ function ConceptDossierHero({ manifest, summary }) {
     ? (manifest?.panel_count ?? summary?.panel_count ?? null) : null;
   const reportPath  = !manifest ? (summary?.report_path || null) : null;
 
-  const nAvail   = panels.filter(p => p.status === "available").length;
-  const nPlanned = panels.filter(p => p.status === "planned").length;
-  const nMissing = panels.filter(p => p.status === "missing").length;
-  const nFailed  = panels.filter(p => p.status === "failed").length;
+  const isObj    = p => p && typeof p === "object" && !Array.isArray(p);
+  const nAvail   = panels.filter(p => isObj(p) && p.status === "available").length;
+  const nPlanned = panels.filter(p => isObj(p) && p.status === "planned").length;
+  const nMissing = panels.filter(p => isObj(p) && p.status === "missing").length;
+  const nFailed  = panels.filter(p => isObj(p) && p.status === "failed").length;
 
   const hasContent =
     title || platform || missionType || schema || status ||
@@ -147,7 +163,7 @@ function ConceptDossierHero({ manifest, summary }) {
         {hero && (
           <div className="cd-hero-visual">
             <span className="cd-hero-visual-eyebrow">Visual preview</span>
-            {hero.type && (
+            {typeof hero.type === "string" && hero.type && (
               <div className="cd-hero-visual-row">
                 <span className="cd-hero-visual-k">Type</span>
                 <span className="cd-hero-visual-v">{hero.type.replace(/_/g, " ")}</span>
@@ -246,14 +262,16 @@ function ConceptDossierHero({ manifest, summary }) {
 }
 
 function PanelStatusChip({ status }) {
+  const s = typeof status === "string" ? status.toLowerCase() : "";
   const variant =
-    status === "available" ? "available" :
-    status === "planned"   ? "planned"   :
-    status === "missing"   ? "missing"   :
+    s === "available" ? "available" :
+    s === "planned"   ? "planned"   :
+    s === "missing"   ? "missing"   :
+    s === "failed"    ? "failed"    :
     "unknown";
   return (
     <span className={`cd-panel-status cd-panel-status-${variant}`}>
-      {status ?? "unknown"}
+      {typeof status === "string" ? status : "unknown"}
     </span>
   );
 }
@@ -261,18 +279,23 @@ function PanelStatusChip({ status }) {
 // ── Dossier panel card ──────────────────────────────────────────────────────
 
 function DossierPanelCard({ panel }) {
-  if (!panel) return null;
+  if (!panel || typeof panel !== "object" || Array.isArray(panel)) return null;
 
   const items         = Array.isArray(panel.items)         ? panel.items         : [];
   const blockedClaims = Array.isArray(panel.blocked_claims) ? panel.blocked_claims : [];
   const brainSummary  = panel.summary && typeof panel.summary === "object" ? panel.summary : null;
 
+  const panelStatusSlug = (typeof panel.status === "string" ? panel.status : "unknown")
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+
   return (
-    <div className={`cd-panel-card cd-panel-card-${panel.status || "unknown"}`}>
+    <div className={`cd-panel-card cd-panel-card-${panelStatusSlug}`}>
       <div className="cd-panel-card-header">
         <div className="cd-panel-card-title-row">
           <span className="cd-panel-card-title">{panel.title}</span>
-          {panel.panel_type && (
+          {typeof panel.panel_type === "string" && panel.panel_type && (
             <span className="cd-panel-type">{panel.panel_type.replace(/_/g, " ")}</span>
           )}
         </div>
@@ -399,7 +422,7 @@ function RichManifestView({ manifest }) {
           <div className="cd-hero-row">
             <CdItemRow
               label="Type"
-              value={hero.type ? hero.type.replace(/_/g, " ") : "—"}
+              value={typeof hero.type === "string" && hero.type ? hero.type.replace(/_/g, " ") : "—"}
             />
             <CdItemRow label="Label" value={hero.label ?? "—"} />
             {hero.path && (
@@ -532,7 +555,12 @@ export default function ConceptDossierPanel({ exportResult, missionResult }) {
       </p>
 
       {/* ── Blueprint board ── */}
-      {hasManifest && <ConceptDossierBlueprintBoard manifest={manifest} />}
+      {hasManifest && (
+        <ConceptDossierBlueprintBoard
+          manifest={manifest}
+          artifactSummaries={buildArtifactSummaries(exportResult)}
+        />
+      )}
 
       {/* ── Content ── */}
       {hasManifest

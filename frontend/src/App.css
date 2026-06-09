@@ -5738,6 +5738,7 @@ input::placeholder,
 .cd-panel-card-missing   { border-color: #2a2020; opacity: 0.7; }
 .cd-panel-card-planned   { border-color: #1e2040; opacity: 0.7; }
 .cd-panel-card-unknown   { border-color: #221a3a; }
+.cd-panel-card-failed    { border-color: #3a1818; opacity: 0.8; }
 
 .cd-panel-card-header {
   display: flex;
@@ -5836,6 +5837,12 @@ input::placeholder,
   background: #1a1a2e;
   color: #6070a0;
   border: 1px solid #2a2a40;
+}
+
+.cd-panel-status-failed {
+  background: #1e0a0a;
+  color: #ff8080;
+  border: 1px solid #4a1818;
 }
 
 .cd-dossier-note,
@@ -6581,6 +6588,18 @@ input::placeholder,
   border-color: rgba(157, 122, 255, 0.20);
 }
 
+.cd-blueprint-status-failed {
+  color: #ff8080;
+  background: rgba(255, 128, 128, 0.06);
+  border-color: rgba(255, 128, 128, 0.20);
+}
+
+.cd-blueprint-status-unknown {
+  color: #6a5a80;
+  background: rgba(106, 90, 128, 0.05);
+  border-color: rgba(106, 90, 128, 0.16);
+}
+
 .cd-blueprint-description {
   margin: 0;
   font-size: 10px;
@@ -6664,15 +6683,135 @@ input::placeholder,
   overflow-wrap: anywhere;
 }
 
+/* ── Artifact intelligence section ── */
+
+.cd-blueprint-artifact-section {
+  margin-bottom: 10px;
+}
+
+.cd-blueprint-artifact-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #404a6a;
+  margin-bottom: 7px;
+}
+
+.cd-blueprint-artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.cd-blueprint-artifact {
+  padding: 7px 8px 6px;
+  border: 1px solid rgba(50, 65, 110, 0.22);
+  border-radius: 4px;
+  background: rgba(6, 4, 12, 0.46);
+}
+
+.cd-blueprint-artifact-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+
+.cd-blueprint-artifact-title-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cd-blueprint-artifact-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8898b8;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+.cd-blueprint-artifact-cat {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #384060;
+}
+
+.cd-blueprint-artifact-status {
+  flex-shrink: 0;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(50, 65, 110, 0.28);
+  background: rgba(7, 5, 16, 0.50);
+  color: #485070;
+  white-space: nowrap;
+}
+
+.cd-blueprint-artifact-status-available {
+  color: #7cffc8;
+  background: rgba(124, 255, 200, 0.06);
+  border-color: rgba(124, 255, 200, 0.20);
+}
+
+.cd-blueprint-artifact-status-missing {
+  color: #b85858;
+  background: rgba(184, 88, 88, 0.06);
+  border-color: rgba(184, 88, 88, 0.20);
+}
+
+.cd-blueprint-artifact-status-unknown {
+  color: #505878;
+  background: rgba(80, 88, 120, 0.05);
+  border-color: rgba(80, 88, 120, 0.16);
+}
+
+.cd-blueprint-artifact-purpose {
+  margin: 0;
+  font-size: 9px;
+  color: #38486a;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.cd-blueprint-artifact-detail {
+  display: block;
+  font-size: 9px;
+  color: #485878;
+  font-style: italic;
+  overflow-wrap: anywhere;
+  margin-top: 2px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .cd-blueprint-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cd-blueprint-artifact-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 700px) {
   .cd-blueprint-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 500px) {
+  .cd-blueprint-artifact-grid {
     grid-template-columns: 1fr;
   }
 }

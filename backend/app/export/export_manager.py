@@ -1219,6 +1219,7 @@ def _write_concept_dossier(
         "schema":      manifest.get("schema"),
         "panel_count": len(manifest.get("dossier_panels", [])),
         "report_path": str(dossier_path),
+        "manifest":    manifest if isinstance(manifest, dict) else None,
     }
 
 
@@ -1785,6 +1786,7 @@ def export_mission_files(
     # ---------------------------------------------------------
 
     concept_dossier: Optional[Dict[str, Any]] = None
+    concept_dossier_manifest_full: Optional[Dict[str, Any]] = None
 
     try:
         concept_dossier = _write_concept_dossier(
@@ -1793,6 +1795,7 @@ def export_mission_files(
             mission_text=mission,
         )
         record(Path(concept_dossier["report_path"]))
+        concept_dossier_manifest_full = concept_dossier.pop("manifest", None)
     except Exception as _cd_error:
         concept_dossier = {"status": "failed", "error": str(_cd_error)[:500]}
         try:
@@ -1977,5 +1980,6 @@ def export_mission_files(
         "aeroforge": aeroforge_summary,
         "visual_bay": visual_bay_summary,
         "engineering_brain": engineering_brain,
-        "concept_dossier":   concept_dossier,
+        "concept_dossier":          concept_dossier,
+        "concept_dossier_manifest": concept_dossier_manifest_full,
     }
