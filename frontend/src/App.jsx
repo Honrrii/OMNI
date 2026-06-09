@@ -1361,18 +1361,35 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
       {/* ── Operator Brief — primary cockpit view ── */}
       <OperatorBriefPanel missionResult={missionResult} exportResult={exportResult} />
 
-      {/* ── Mission artifacts — primary generated content ── */}
-      {missionResult.artifacts.length > 0 && (
-        <div className="artifact-grid-v2">
-          {missionResult.artifacts.map((artifact) => (
-            <ArtifactCard
-              key={artifact.id || artifact.title}
-              title={replaceLegacyNames(artifact.title)}
-              description={replaceLegacyNames(artifact.description)}
-              content={replaceLegacyNames(artifact.content)}
-              id={artifact.id}
-              type={artifact.type}
-            />
+      {/* ── Mission artifacts — command-center sectioned layout (Phase 18L) ── */}
+      {Array.isArray(missionResult.artifacts) && missionResult.artifacts.length > 0 && (
+        <div className="artifact-section-stack">
+          {groupArtifactsBySection(missionResult.artifacts).map((section) => (
+            <section key={section.id} className="artifact-section-v2">
+              <div className="artifact-section-header">
+                <div>
+                  <h2 className="artifact-section-heading">{section.title}</h2>
+                  <p className="artifact-section-description">{section.description}</p>
+                </div>
+                <span className="artifact-section-count">
+                  {section.artifacts.length === 1
+                    ? "1 artifact"
+                    : `${section.artifacts.length} artifacts`}
+                </span>
+              </div>
+              <div className="artifact-grid-v2">
+                {section.artifacts.map((artifact, index) => (
+                  <ArtifactCard
+                    key={`${section.id}-${artifact.id || artifact.title || "artifact"}-${index}`}
+                    title={replaceLegacyNames(artifact.title)}
+                    description={replaceLegacyNames(artifact.description)}
+                    content={replaceLegacyNames(artifact.content)}
+                    id={artifact.id}
+                    type={artifact.type}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
@@ -1654,6 +1671,88 @@ function TimelineItem({ step, title, description }) {
       </div>
     </div>
   );
+}
+
+// ── Phase 18L: Artifact section grouping ─────────────────────────────────
+
+const ARTIFACT_SECTIONS = [
+  {
+    id: "mission-overview",
+    title: "Mission Overview",
+    description: "Top-level mission artifacts: state, summary, intent, and operator brief.",
+    keywords: ["mission_state", "mission_summary", "mission_intent", "mission_report", "mission.json", "design_understanding", "operator_brief"],
+  },
+  {
+    id: "design-morphology",
+    title: "Design & Morphology",
+    description: "Morphology options, component trees, blueprint plans, and hardware architecture.",
+    keywords: ["morphology", "component_tree", "blueprint_plan", "hardware_architecture"],
+  },
+  {
+    id: "cad-fusion",
+    title: "CAD / Fusion 360",
+    description: "Fusion 360 concepts, CAD assembly specs, and 3D design artifacts.",
+    keywords: ["fusion", "fusion360", "cad", "assembly_spec"],
+  },
+  {
+    id: "ros2-software",
+    title: "ROS2 / Software",
+    description: "ROS2 node graphs, package plans, launch configs, and topic contracts.",
+    keywords: ["ros2", "node_graph", "package_plan", "launch", "topic_contracts"],
+  },
+  {
+    id: "kicad-electronics",
+    title: "KiCad / Electronics",
+    description: "KiCad schematics, electronics plans, power budgets, connector maps, and BOMs.",
+    keywords: ["kicad", "electronics", "power_budget", "connector_map", "bom"],
+  },
+  {
+    id: "validation-risk",
+    title: "Validation / Risk / Safety",
+    description: "Risk matrices, safety gates, test checklists, critiques, and readiness reviews.",
+    keywords: ["validation", "risk", "safety", "test_checklist", "critique", "revision", "gate", "review", "readiness", "candidate_evaluation"],
+  },
+  {
+    id: "visual-bay",
+    title: "Visual Bay",
+    description: "Visual previews, render artifacts, and GLTF outputs.",
+    keywords: ["visual", "visual_bay", "preview", "gltf", "render"],
+  },
+  {
+    id: "raw-debug",
+    title: "Raw / Debug Artifacts",
+    description: "Unclassified or debug-level artifacts that did not match a named section.",
+    keywords: [],
+  },
+];
+
+function getArtifactSectionId(artifact = {}) {
+  const haystack = String(
+    (artifact.id || "") + " " + (artifact.type || "") + " " + (artifact.title || "")
+  ).toLowerCase();
+
+  for (const section of ARTIFACT_SECTIONS) {
+    if (section.keywords.length === 0) continue;
+    if (section.keywords.some((kw) => haystack.includes(kw))) {
+      return section.id;
+    }
+  }
+
+  return "raw-debug";
+}
+
+function groupArtifactsBySection(artifacts) {
+  const map = new Map(ARTIFACT_SECTIONS.map((s) => [s.id, []]));
+
+  for (const artifact of artifacts) {
+    const sid = getArtifactSectionId(artifact);
+    map.get(sid).push(artifact);
+  }
+
+  return ARTIFACT_SECTIONS.map((section) => ({
+    ...section,
+    artifacts: map.get(section.id),
+  })).filter((section) => section.artifacts.length > 0);
 }
 
 // ── Phase 18K: Artifact summarization helpers ─────────────────────────────

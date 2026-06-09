@@ -1710,6 +1710,74 @@ input::placeholder,
   border-radius: 4px;
 }
 
+/* ── Phase 18L: Artifact command-center section layout ── */
+
+.artifact-section-stack {
+  display: grid;
+  gap: 36px;
+  margin-top: 22px;
+}
+
+.artifact-section-v2 {
+  display: grid;
+  gap: 16px;
+}
+
+.artifact-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 18px 24px;
+  border: 1px solid rgba(60, 140, 255, 0.10);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(100deg, rgba(6, 10, 22, 0.14), rgba(8, 18, 36, 0.08)),
+    radial-gradient(circle at 90% 20%, rgba(60, 140, 255, 0.05), transparent 40%);
+  backdrop-filter: var(--blur-panel);
+}
+
+.artifact-section-heading {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.artifact-section-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.artifact-section-count {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  color: #9fd8ff;
+  border: 1px solid rgba(60, 160, 255, 0.20);
+  border-radius: 999px;
+  background: rgba(60, 160, 255, 0.07);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  align-self: center;
+}
+
+@media (max-width: 640px) {
+  .artifact-section-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .artifact-section-count {
+    align-self: flex-start;
+  }
+}
+
 .export-action-row {
   justify-content: flex-start;
 }
