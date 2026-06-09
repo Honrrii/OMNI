@@ -1370,6 +1370,8 @@ function ArtifactsPage({ missionResult, exportMission, exporting, exportResult }
               title={replaceLegacyNames(artifact.title)}
               description={replaceLegacyNames(artifact.description)}
               content={replaceLegacyNames(artifact.content)}
+              id={artifact.id}
+              type={artifact.type}
             />
           ))}
         </div>
@@ -1654,7 +1656,276 @@ function TimelineItem({ step, title, description }) {
   );
 }
 
-function ArtifactCard({ title, description, content }) {
+// ── Phase 18K: Artifact summarization helpers ─────────────────────────────
+function safeJsonParse(str) {
+  if (typeof str !== "string") return null;
+  try { return JSON.parse(str); } catch { return null; }
+}
+
+function safeText(val, fallback) {
+  const s = typeof val === "string" ? val.trim() : typeof val === "number" ? String(val) : null;
+  return (s && s.length > 0) ? s : (fallback || null);
+}
+
+function previewArray(arr, max) {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const items = arr
+    .slice(0, max || 3)
+    .map(v => {
+      if (typeof v === "string") return v.trim() || null;
+      if (v && typeof v === "object") {
+        return safeText(v.name || v.id || v.key || v.title || v.test || v.category, null);
+      }
+      return null;
+    })
+    .filter(Boolean);
+  return items.length > 0 ? items.join(", ") : null;
+}
+
+function countKeys(obj) {
+  if (Array.isArray(obj)) return obj.length;
+  if (obj && typeof obj === "object") return Object.keys(obj).length;
+  return 0;
+}
+
+function deriveArtifactSummary(id, type, content) {
+  const typeKey = ((type || id || "")).toLowerCase().replace(/-/g, "_");
+  const data    = safeJsonParse(content);
+
+  function r(label, value) {
+    const s = value == null ? null : String(value).trim();
+    return (s && s.length > 0) ? { label, value: s } : null;
+  }
+  function trunc(s, max) {
+    if (typeof s !== "string" || !s.trim()) return null;
+    const t = s.trim();
+    return t.length > (max || 80) ? t.slice(0, (max || 80)) + "…" : t;
+  }
+
+  // Mission State — checked before broad "mission" match
+  if (typeKey.includes("mission_state") || (typeKey.includes("mission") && typeKey.includes("state"))) {
+    if (!data) return { chips: ["mission state"], rows: [] };
+    const extra = Object.keys(data).filter(k => !["id","name","status","mission_id","mission_name"].includes(k));
+    return {
+      chips: ["mission state"],
+      rows: [
+        r("ID",     safeText(data.mission_id || data.id, null)),
+        r("Name",   safeText(data.mission_name || data.name, null)),
+        r("Status", safeText(data.status, null)),
+        extra.length > 0 ? r("Keys", extra.slice(0, 5).join(", ")) : null,
+      ].filter(Boolean),
+    };
+  }
+
+  // Export Manifest
+  if (typeKey.includes("export") || (typeKey.includes("manifest") && !typeKey.includes("concept_dossier"))) {
+    if (!data) return { chips: ["export summary"], rows: [] };
+    const fileCount = data.file_count ?? (Array.isArray(data.files) ? data.files.length : null);
+    const nextCount = Array.isArray(data.files_to_generate_next) ? data.files_to_generate_next.length : null;
+    return {
+      chips: ["export summary"],
+      rows: [
+        r("Status",       safeText(data.status, null)),
+        fileCount != null ? r("Files", String(fileCount)) : null,
+        r("Folder",       safeText(data.folder_name || data.export_dir || data.output_dir, null)),
+        nextCount != null ? r("Files pending", String(nextCount)) : null,
+      ].filter(Boolean),
+    };
+  }
+
+  // Mission / Overview (broad)
+  if (typeKey === "mission" || typeKey === "overview" || (typeKey.includes("mission") && !typeKey.includes("ros2"))) {
+    if (!data) {
+      const lines = (content || "").split("\n").filter(Boolean);
+      return { chips: ["mission"], rows: [r("Content", trunc(lines[0] || "", 80))].filter(Boolean) };
+    }
+    return {
+      chips: [safeText(data.status, null) || "generated"],
+      rows: [
+        r("Name",   safeText(data.title || data.name || data.mission_name, null)),
+        r("Prompt", trunc(safeText(data.prompt || data.description || data.summary, null), 90)),
+      ].filter(Boolean),
+    };
+  }
+
+  // ROS2 Package Plan
+  if (typeKey.includes("ros2_package") || typeKey.includes("ros2_pkg") ||
+      (typeKey.includes("ros2") && typeKey.includes("package"))) {
+    const nodeCount  = data ? (Array.isArray(data.nodes)  ? data.nodes.length  : countKeys(data.nodes))  : null;
+    const topicCount = data ? (Array.isArray(data.topics) ? data.topics.length : countKeys(data.topics)) : null;
+    const hasLaunch  = !!(data?.launch_file || data?.launch || data?.launch_config);
+    const hasCfg     = !!(data?.config || data?.params || data?.parameters || data?.config_file);
+    return {
+      chips: ["starter scaffold"],
+      rows: [
+        r("Package", safeText(data?.package_name || data?.name, null)),
+        nodeCount  != null ? r("Nodes",  String(nodeCount))  : null,
+        topicCount != null ? r("Topics", String(topicCount)) : null,
+        (hasLaunch || hasCfg) ? r("Includes", [hasLaunch ? "launch file" : null, hasCfg ? "config" : null].filter(Boolean).join(", ")) : null,
+      ].filter(Boolean),
+    };
+  }
+
+  // ROS2 Node Graph
+  if (typeKey.includes("ros2") && (typeKey.includes("graph") || typeKey.includes("node"))) {
+    if (!data) return { chips: ["ros2"], rows: [] };
+    // Artifact may be an array of nodes directly, or an object with a nodes field.
+    const nodes        = Array.isArray(data) ? data : (Array.isArray(data.nodes) ? data.nodes : []);
+    const topics       = Array.isArray(data) ? [] : (Array.isArray(data.topics) ? data.topics : []);
+    const nodePreview  = previewArray(nodes, 3);
+    const topicPreview = previewArray(topics, 3);
+    return {
+      chips: [],
+      rows: [
+        r("Nodes",  `${nodes.length}${nodePreview  ? " — " + nodePreview  : ""}`),
+        topics.length > 0 ? r("Topics", `${topics.length}${topicPreview ? " — " + topicPreview : ""}`) : null,
+      ].filter(Boolean),
+    };
+  }
+
+  // Component Tree
+  if (typeKey.includes("component") && typeKey.includes("tree")) {
+    if (!data) return { chips: ["component tree"], rows: [] };
+    const comps       = Array.isArray(data.components) ? data.components : Array.isArray(data.subsystems) ? data.subsystems : [];
+    const compPreview = previewArray(comps, 4);
+    return {
+      chips: ["component tree"],
+      rows: [
+        r("Components", comps.length > 0 ? String(comps.length) : null),
+        compPreview ? r("Names", compPreview) : null,
+      ].filter(Boolean),
+    };
+  }
+
+  // Hardware Architecture
+  if (typeKey.includes("hardware") || typeKey.includes("wiring")) {
+    if (!data) return { chips: ["hardware summary"], rows: [] };
+    const hints = ["sensors","controllers","actuators","power","interfaces","buses","microcontrollers","sbc"]
+      .filter(k => data[k] != null)
+      .map(k => Array.isArray(data[k]) ? `${k}(${data[k].length})` : k);
+    return {
+      chips: ["hardware summary"],
+      rows: hints.length > 0 ? [r("Sections", hints.slice(0, 5).join(", "))] : [],
+    };
+  }
+
+  // Fusion360 / CAD Concept
+  if (typeKey.includes("fusion") || (typeKey.includes("cad") && typeKey.includes("concept"))) {
+    if (!data) return { chips: ["concept CAD only"], rows: [] };
+    const comps = Array.isArray(data.components) ? data.components.length : null;
+    return {
+      chips: ["concept CAD only"],
+      rows: [
+        r("Concept",    safeText(data.model_name || data.concept_name || data.name || data.title, null)),
+        r("Type",       safeText(data.project_type || data.type, null)),
+        comps != null ? r("Components", String(comps)) : null,
+        data.morphology ? r("Morphology", trunc(safeText(data.morphology, null), 40)) : null,
+      ].filter(Boolean),
+    };
+  }
+
+  // Risk Matrix
+  if (typeKey.includes("risk")) {
+    if (!data) {
+      const lines = (content || "").split("\n").filter(l => l.trim().startsWith("-") || /^\d+\./.test(l));
+      return { chips: ["risk summary"], rows: lines.length > 0 ? [r("Items", String(lines.length))] : [] };
+    }
+    const risks = Array.isArray(data.risks) ? data.risks
+                : Array.isArray(data.items) ? data.items
+                : Array.isArray(data)       ? data
+                : null;
+    let riskCount, riskCountLabel = "Risks";
+    if (risks) {
+      riskCount = risks.length;
+    } else {
+      // Grouped object like { sky: [...], isy: [...] } — sum nested arrays.
+      const objVals = Object.values(data);
+      if (objVals.length > 0 && objVals.every(v => Array.isArray(v))) {
+        riskCount = objVals.reduce((s, a) => s + a.length, 0);
+      } else {
+        riskCount = countKeys(data);
+        riskCountLabel = "Groups";
+      }
+    }
+    // Only include severity when explicitly present at top level.
+    const topSev   = safeText(data.highest_severity || data.max_severity, null);
+    const riskPrev = previewArray(risks, 3);
+    return {
+      chips: ["risk summary"],
+      rows: [
+        riskCount > 0 ? r(riskCountLabel, String(riskCount)) : null,
+        r("Severity", topSev),
+        riskPrev ? r("First items", riskPrev) : null,
+      ].filter(Boolean),
+    };
+  }
+
+  // Test Checklist
+  if (typeKey.includes("test") || typeKey.includes("checklist") ||
+      (typeKey.includes("validation") && typeKey.includes("check"))) {
+    if (!data) {
+      const lines = (content || "").split("\n").filter(l => /^[-\d[]/.test(l.trim()));
+      return { chips: ["checklist"], rows: lines.length > 0 ? [r("Items", String(lines.length))] : [] };
+    }
+    const checks = Array.isArray(data.tests)     ? data.tests
+                 : Array.isArray(data.checklist) ? data.checklist
+                 : Array.isArray(data.items)     ? data.items
+                 : Array.isArray(data)           ? data
+                 : null;
+    let checkCount, checkCountLabel = "Checks";
+    if (checks) {
+      checkCount = checks.length;
+    } else {
+      // Grouped object — sum nested arrays.
+      const objVals = Object.values(data);
+      if (objVals.length > 0 && objVals.every(v => Array.isArray(v))) {
+        checkCount = objVals.reduce((s, a) => s + a.length, 0);
+      } else {
+        checkCount = countKeys(data);
+        checkCountLabel = "Groups";
+      }
+    }
+    const checkPrev = previewArray(checks, 3);
+    return {
+      chips: ["checklist"],
+      rows: [
+        checkCount > 0 ? r(checkCountLabel, String(checkCount)) : null,
+        checkPrev ? r("First items", checkPrev) : null,
+      ].filter(Boolean),
+    };
+  }
+
+  // Agent Outputs
+  if (typeKey.includes("agent")) {
+    if (!data) return { chips: ["agent outputs"], rows: [] };
+    const agentList  = Array.isArray(data) ? data : Array.isArray(data.agents) ? data.agents : null;
+    if (agentList) {
+      const agentPrev = previewArray(agentList, 4);
+      return {
+        chips: ["agent outputs"],
+        rows: [
+          r("Agents", String(agentList.length)),
+          agentPrev ? r("Names", agentPrev) : null,
+        ].filter(Boolean),
+      };
+    }
+    return { chips: ["agent outputs"], rows: [r("Keys", String(countKeys(data)))].filter(Boolean) };
+  }
+
+  // Generic fallback
+  if (data != null) {
+    return {
+      chips: [Array.isArray(data) ? "array" : "object"],
+      rows: [r("Keys", String(countKeys(data)))].filter(Boolean),
+    };
+  }
+  const lines = (content || "").split("\n").filter(Boolean);
+  return { chips: ["text"], rows: [r("Lines", String(lines.length))].filter(Boolean) };
+}
+
+function ArtifactCard({ title, description, content, id, type }) {
+  const summary    = deriveArtifactSummary(id, type, content);
+  const hasSummary = !!(summary && (summary.rows.length > 0 || summary.chips.length > 0));
   return (
     <div className="artifact-card">
       <div className="artifact-header">
@@ -1662,9 +1933,33 @@ function ArtifactCard({ title, description, content }) {
         <span>Generated</span>
       </div>
       <p className="artifact-description">{description}</p>
-      <div className="artifact-readable">
-        <ReportRenderer text={content} />
-      </div>
+      {hasSummary && (
+        <div className="artifact-summary">
+          {summary.chips.length > 0 && (
+            <div className="artifact-summary-chips">
+              {summary.chips.map((chip, i) => (
+                <span key={i} className="artifact-summary-chip">{chip}</span>
+              ))}
+            </div>
+          )}
+          {summary.rows.length > 0 && (
+            <dl className="artifact-summary-rows">
+              {summary.rows.map((row, i) => (
+                <div key={i} className="artifact-summary-row">
+                  <dt className="artifact-summary-k">{row.label}</dt>
+                  <dd className="artifact-summary-v">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      )}
+      <details className="artifact-raw-details">
+        <summary className="artifact-raw-summary">Raw artifact content</summary>
+        <div className="artifact-readable">
+          <ReportRenderer text={content} />
+        </div>
+      </details>
     </div>
   );
 }
