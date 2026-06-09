@@ -6794,6 +6794,95 @@ input::placeholder,
   margin-top: 2px;
 }
 
+/* ── Artifact drilldown (<details>) ── */
+
+.cd-blueprint-artifact-drilldown {
+  margin-top: 5px;
+}
+
+.cd-blueprint-artifact-drilldown-summary {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #404a6a;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding: 1px 0;
+}
+
+.cd-blueprint-artifact-drilldown-summary::-webkit-details-marker {
+  display: none;
+}
+
+.cd-blueprint-artifact-drilldown-summary::before {
+  content: "▸ ";
+  font-size: 7px;
+  color: #334060;
+}
+
+.cd-blueprint-artifact-drilldown[open] .cd-blueprint-artifact-drilldown-summary::before {
+  content: "▾ ";
+}
+
+.cd-blueprint-artifact-drilldown-body {
+  padding: 4px 0 0 6px;
+  border-left: 1px solid rgba(50, 65, 110, 0.18);
+  margin-top: 3px;
+}
+
+.cd-blueprint-artifact-drilldown-reason {
+  margin: 0 0 4px;
+  font-size: 9px;
+  color: #384060;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.cd-blueprint-artifact-evidence {
+  margin: 0 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cd-blueprint-artifact-evidence-row {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+}
+
+.cd-blueprint-artifact-evidence-k {
+  flex-shrink: 0;
+  font-size: 8px;
+  font-weight: 600;
+  color: #364058;
+  letter-spacing: 0.03em;
+  min-width: 68px;
+}
+
+.cd-blueprint-artifact-evidence-k::after {
+  content: ":";
+}
+
+.cd-blueprint-artifact-evidence-v {
+  font-size: 8px;
+  color: #4a5878;
+  overflow-wrap: anywhere;
+}
+
+.cd-blueprint-artifact-next-action {
+  margin: 3px 0 0;
+  font-size: 9px;
+  color: #3a5070;
+  font-style: italic;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  border-top: 1px solid rgba(50, 70, 120, 0.14);
+  padding-top: 3px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .cd-blueprint-grid {

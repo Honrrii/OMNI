@@ -6,6 +6,7 @@ function buildArtifactSummaries(exportResult) {
     fusion360:            exp.fusion360_generation             || null,
     kicad:                exp.kicad_generation                 || null,
     ros2:                 exp.ros2_generation                  || null,
+    ros2_validation:      exp.ros2_validation                  || null,
     visual_bay:           exp.visual_bay                       || null,
     concept_dossier:      exp.concept_dossier                  || null,
     morphology:           exp.morphology_validation            || null,
