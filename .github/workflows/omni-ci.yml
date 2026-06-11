@@ -24,12 +24,28 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            python -m pip install -r requirements.txt
-          fi
-          if [ -f backend/requirements.txt ]; then
-            python -m pip install -r backend/requirements.txt
-          fi
+          # Do not install root requirements.txt here. That file can contain
+          # local ROS2/system packages from a developer machine, such as
+          # ackermann-msgs and rclpy, which are not installable from PyPI on
+          # GitHub-hosted runners. OMNI CI installs only the Python packages
+          # needed by the curated tests/ suite.
+          python -m pip install \
+            pytest \
+            fastapi \
+            uvicorn \
+            pydantic \
+            python-dotenv \
+            openai \
+            google-generativeai \
+            numpy \
+            PyYAML \
+            requests \
+            httpx \
+            Pillow \
+            matplotlib \
+            Jinja2 \
+            python-dateutil \
+            ezdxf
 
       # Collection scope (the curated tests/ suite only; never knowledge/ or
       # outputs/) comes from pytest.ini (testpaths + norecursedirs). The
