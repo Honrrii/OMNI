@@ -1,0 +1,791 @@
+{
+  "schema_version": "0.1",
+  "history": [
+    {
+      "captured_at": "2026-06-10T11:14:26.186470-07:00",
+      "repo_commit": "186839252312ebf482c038212460f084d88325d8",
+      "mission_count_sampled": 36,
+      "pytest_seconds": 23.59,
+      "pytest_collected": 2057,
+      "metrics": [
+        {
+          "metric": "mission_count_sampled",
+          "unit": "missions",
+          "status": "MEASURED",
+          "value": 36,
+          "source": "outputs/omni_missions",
+          "method": "count of subdirectories under outputs/omni_missions",
+          "captured_at": "2026-06-10T11:14:26.185812-07:00",
+          "notes": "36 non-dry-run missions of 36 sampled."
+        },
+        {
+          "metric": "mission_type_distribution",
+          "unit": "missions",
+          "status": "MEASURED",
+          "value": {
+            "rover": 2,
+            "mixed": 30,
+            "cad": 1,
+            "other": 3
+          },
+          "source": "outputs/omni_missions",
+          "method": "deterministic keyword rules over folder name + mission text (drone/rover/robot_arm/pcb/electronics/cad; >1 match=mixed, 0=other)",
+          "captured_at": "2026-06-10T11:14:26.185887-07:00",
+          "notes": "Type inference is filename/content keyword based; no model calls."
+        },
+        {
+          "metric": "mission_runtime_seconds",
+          "unit": "seconds",
+          "status": "MEASURED",
+          "value": {
+            "min": 76.755,
+            "median": 125.118,
+            "max": 213.995,
+            "n_samples": 29
+          },
+          "source": "outputs/omni_missions",
+          "method": "mission_state.updated_at - mission_state.created_at per persisted payload",
+          "captured_at": "2026-06-10T11:14:26.185951-07:00",
+          "notes": "Covers the supervisor pipeline span only; excludes knowledge-context build and export time. Fresh full-request wall clock is DEFERRED."
+        },
+        {
+          "metric": "telemetry_mission_runtime_seconds",
+          "unit": "seconds",
+          "status": "MEASURED",
+          "value": {
+            "min": 76.755,
+            "median": 133.69400000000002,
+            "max": 220.159,
+            "n_samples": 44
+          },
+          "source": "logs/telemetry/mission_runs.jsonl",
+          "method": "mission_finished.timestamp - mission_started.timestamp per mission_id",
+          "captured_at": "2026-06-10T11:14:26.185990-07:00",
+          "notes": ""
+        },
+        {
+          "metric": "model_call_count_per_mission",
+          "unit": "calls",
+          "status": "ESTIMATED",
+          "value": {
+            "min": 5,
+            "median": 9,
+            "max": 9,
+            "n_samples": 73
+          },
+          "source": "outputs/omni_missions + logs/telemetry/mission_runs.jsonl",
+          "method": "count of LLM-backed lifecycle steps in agent_records/telemetry (omni, vega, sky, isy, oli, korva, pluto, omni_revision) + 1 uninstrumented critique-structuring call",
+          "captured_at": "2026-06-10T11:14:26.186045-07:00",
+          "notes": "ESTIMATED: derived from instrumented steps, not provider metering. True token/call accounting is DEFERRED."
+        },
+        {
+          "metric": "specialist_agent_activation_count_per_mission",
+          "unit": "activations",
+          "status": "MEASURED",
+          "value": {
+            "min": 6,
+            "median": 6,
+            "max": 6,
+            "n_samples": 29
+          },
+          "source": "outputs/omni_missions",
+          "method": "agent_records keys intersected with {vega, sky, isy, oli, korva, pluto}",
+          "captured_at": "2026-06-10T11:14:26.186082-07:00",
+          "notes": "QaZ excluded (deterministic validator, not an LLM specialist)."
+        },
+        {
+          "metric": "serialized_payload_bytes_per_mission",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "min": 951,
+            "median": 472250.5,
+            "max": 555859,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "len(json.dumps(parsed mission payload)) with default separators, per mission.json / mission_result.json",
+          "captured_at": "2026-06-10T11:14:26.186122-07:00",
+          "notes": "Same method as the Phase 10 audit number for comparability."
+        },
+        {
+          "metric": "mission_payload_file_bytes_on_disk",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "min": 1109,
+            "median": 520790.5,
+            "max": 620964,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "os.stat size of mission.json / mission_result.json",
+          "captured_at": "2026-06-10T11:14:26.186162-07:00",
+          "notes": "Larger than serialized bytes because export writes indent=2 JSON."
+        },
+        {
+          "metric": "frontend_payload_bytes_per_mission",
+          "unit": "bytes",
+          "status": "ESTIMATED",
+          "value": {
+            "min": 951,
+            "median": 472250.5,
+            "max": 555859,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "proxy: serialized mission payload bytes (the object returned to and held by the frontend, and re-POSTed on export)",
+          "captured_at": "2026-06-10T11:14:26.186171-07:00",
+          "notes": "Excludes HTTP overhead/compression. Export round trip is ~2x this value. True browser transfer measurement is DEFERRED."
+        },
+        {
+          "metric": "operator_brief_bytes",
+          "unit": "bytes",
+          "status": "ESTIMATED",
+          "value": {
+            "min": 951,
+            "median": 472250.5,
+            "max": 555859,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "proxy: serialized mission payload bytes",
+          "captured_at": "2026-06-10T11:14:26.186180-07:00",
+          "notes": "No OperatorBrief exists yet (Phase 10 Stage 4); today's operator-facing payload IS the full mission payload."
+        },
+        {
+          "metric": "artifact_count_per_mission",
+          "unit": "artifacts",
+          "status": "MEASURED",
+          "value": {
+            "min": 7,
+            "median": 21.0,
+            "max": 25,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "len(payload['artifacts']) keys/items per mission payload",
+          "captured_at": "2026-06-10T11:14:26.186215-07:00",
+          "notes": "Counts structured artifact entries, not exported files."
+        },
+        {
+          "metric": "exported_mission_file_count",
+          "unit": "files",
+          "status": "MEASURED",
+          "value": {
+            "min": 3,
+            "median": 183.0,
+            "max": 224,
+            "n_samples": 36
+          },
+          "source": "outputs/omni_missions",
+          "method": "recursive count of regular files per mission directory",
+          "captured_at": "2026-06-10T11:14:26.186254-07:00",
+          "notes": "Includes harness-flavor folders (5-file layout) and export-manager folders; both lifecycles are part of the current baseline."
+        },
+        {
+          "metric": "exported_mission_bytes",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "min": 7800,
+            "median": 1249548.0,
+            "max": 1479719,
+            "n_samples": 36
+          },
+          "source": "outputs/omni_missions",
+          "method": "sum of file sizes recursively per mission directory",
+          "captured_at": "2026-06-10T11:14:26.186293-07:00",
+          "notes": ""
+        },
+        {
+          "metric": "warning_finding_count_per_mission",
+          "unit": "findings",
+          "status": "MEASURED",
+          "value": {
+            "min": 0,
+            "median": 26.0,
+            "max": 51,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "sum across divergent shapes: mission_state.warnings + per-agent parsed_output.warnings + critique.issues_found + validation.missing_evidence + validation.required_next_tests + graph review issues + consistency_warnings (graph 'warnings' list excluded as a documented duplicate of issues)",
+          "captured_at": "2026-06-10T11:14:26.186329-07:00",
+          "notes": "Raw pre-unification count; shapes overlap semantically (P10-VAL-001)."
+        },
+        {
+          "metric": "provenance_report_bytes_per_mission",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "min": 1076,
+            "median": 9950.0,
+            "max": 14039,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "os.stat size of provenance_record.json where present",
+          "captured_at": "2026-06-10T11:14:26.186366-07:00",
+          "notes": "n_samples reflects missions that have a provenance_record.json."
+        },
+        {
+          "metric": "largest_mission_dir_by_bytes",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "path": "design_a_non_weaponized_concept_field_robot_named_terra_axolotl_mission_create_a",
+            "bytes": 1479719
+          },
+          "source": "outputs/omni_missions",
+          "method": "argmax of recursive byte totals per mission directory",
+          "captured_at": "2026-06-10T11:14:26.186391-07:00",
+          "notes": ""
+        },
+        {
+          "metric": "largest_mission_dir_by_file_count",
+          "unit": "files",
+          "status": "MEASURED",
+          "value": {
+            "path": "classify_this_as_a_concept_stage_aerospace_mission_only_design_a_high_level_fixe",
+            "files": 224
+          },
+          "source": "outputs/omni_missions",
+          "method": "argmax of recursive file counts per mission directory",
+          "captured_at": "2026-06-10T11:14:26.186400-07:00",
+          "notes": ""
+        },
+        {
+          "metric": "pytest_collected_count",
+          "unit": "tests",
+          "status": "MEASURED",
+          "value": 2057,
+          "source": "pytest",
+          "method": "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest --collect-only -q",
+          "captured_at": "2026-06-10T11:14:26.186410-07:00",
+          "notes": "2057 passed, 2 warnings in 22.73s"
+        },
+        {
+          "metric": "test_suite_wall_seconds",
+          "unit": "seconds",
+          "status": "MEASURED",
+          "value": 23.59,
+          "source": "pytest",
+          "method": "time.monotonic around PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 `pytest -q`",
+          "captured_at": "2026-06-10T11:14:26.186419-07:00",
+          "notes": "2057 passed, 2 warnings in 22.73s"
+        },
+        {
+          "metric": "fresh_mission_wall_clock_seconds",
+          "unit": "seconds",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "n/a (not capturable from artifacts)",
+          "method": "see deferred.required_mechanism",
+          "captured_at": "2026-06-10T11:14:26.186429-07:00",
+          "notes": "True end-to-end wall clock (request to export) for a fresh mission requires running a live mission against hosted LLM providers."
+        },
+        {
+          "metric": "prompt_bytes_per_model_call",
+          "unit": "bytes",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "n/a (not capturable from artifacts)",
+          "method": "see deferred.required_mechanism",
+          "captured_at": "2026-06-10T11:14:26.186440-07:00",
+          "notes": "Prompts are not persisted anywhere; only responses are stored in agent_records.raw_output."
+        },
+        {
+          "metric": "hosted_token_usage_per_mission",
+          "unit": "tokens",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "n/a (not capturable from artifacts)",
+          "method": "see deferred.required_mechanism",
+          "captured_at": "2026-06-10T11:14:26.186450-07:00",
+          "notes": "Token counts are not recorded; provider usage objects are discarded in agents/llm_clients.py."
+        },
+        {
+          "metric": "frontend_render_time_ms",
+          "unit": "milliseconds",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "n/a (not capturable from artifacts)",
+          "method": "see deferred.required_mechanism",
+          "captured_at": "2026-06-10T11:14:26.186461-07:00",
+          "notes": "No browser performance telemetry exists."
+        }
+      ],
+      "audit_number_reproduction": [
+        {
+          "claim": "497157_payload_bytes",
+          "expected": 497157,
+          "status": "REPRODUCED",
+          "observed": 497157,
+          "source": "outputs/omni_missions",
+          "notes": "Exact match found in a sampled mission payload."
+        },
+        {
+          "claim": "189_export_files",
+          "expected": 189,
+          "status": "REPRODUCED",
+          "observed": 189,
+          "source": "outputs/omni_missions",
+          "notes": "A sampled mission folder contains exactly 189 files."
+        },
+        {
+          "claim": "9_llm_calls",
+          "expected": 9,
+          "status": "REPRODUCED",
+          "observed": 9,
+          "source": "outputs/omni_missions mission_state.agent_records + logs/telemetry/mission_runs.jsonl",
+          "notes": "Median of per-mission estimates equals 9. Derivation: instrumented LLM-backed lifecycle steps (omni, vega, sky, isy, oli, korva, pluto, omni_revision) + 1 uninstrumented critique-structuring call. ESTIMATED, not direct provider metering."
+        }
+      ],
+      "deferred": [
+        {
+          "metric": "fresh_mission_wall_clock_seconds",
+          "reason": "True end-to-end wall clock (request to export) for a fresh mission requires running a live mission against hosted LLM providers.",
+          "required_mechanism": "Run one mission via the existing pipeline with timing captured at the API boundary; or wait for Stage 5+ telemetry which records the full request span. Historical pipeline spans are reported above.",
+          "estimated_cost": {
+            "paid_calls": true,
+            "suite_minutes": null,
+            "requires_runtime_instrumentation": false
+          }
+        },
+        {
+          "metric": "prompt_bytes_per_model_call",
+          "reason": "Prompts are not persisted anywhere; only responses are stored in agent_records.raw_output.",
+          "required_mechanism": "Add len(prompt) logging in SupervisorAgent.run_state_step (agents/supervisor.py) — runtime instrumentation, Stage 5 scope.",
+          "estimated_cost": {
+            "paid_calls": false,
+            "suite_minutes": null,
+            "requires_runtime_instrumentation": true
+          }
+        },
+        {
+          "metric": "hosted_token_usage_per_mission",
+          "reason": "Token counts are not recorded; provider usage objects are discarded in agents/llm_clients.py.",
+          "required_mechanism": "Capture response.usage in the LLM client wrappers or read provider billing exports — runtime instrumentation or a live mission.",
+          "estimated_cost": {
+            "paid_calls": true,
+            "suite_minutes": null,
+            "requires_runtime_instrumentation": true
+          }
+        },
+        {
+          "metric": "frontend_render_time_ms",
+          "reason": "No browser performance telemetry exists.",
+          "required_mechanism": "Measure with browser devtools/Performance API against a running frontend; out of scope for artifact-based capture.",
+          "estimated_cost": {
+            "paid_calls": false,
+            "suite_minutes": null,
+            "requires_runtime_instrumentation": true
+          }
+        }
+      ]
+    },
+    {
+      "captured_at": "2026-06-11T13:50:34.091769-07:00",
+      "repo_commit": "186839252312ebf482c038212460f084d88325d8",
+      "mission_count_sampled": 36,
+      "pytest_seconds": null,
+      "pytest_collected": null,
+      "metrics": [
+        {
+          "metric": "mission_count_sampled",
+          "unit": "missions",
+          "status": "MEASURED",
+          "value": 36,
+          "source": "outputs/omni_missions",
+          "method": "count of subdirectories under outputs/omni_missions",
+          "captured_at": "2026-06-11T13:50:34.091290-07:00",
+          "notes": "36 non-dry-run missions of 36 sampled."
+        },
+        {
+          "metric": "mission_type_distribution",
+          "unit": "missions",
+          "status": "MEASURED",
+          "value": {
+            "rover": 2,
+            "mixed": 30,
+            "cad": 1,
+            "other": 3
+          },
+          "source": "outputs/omni_missions",
+          "method": "deterministic keyword rules over folder name + mission text (drone/rover/robot_arm/pcb/electronics/cad; >1 match=mixed, 0=other)",
+          "captured_at": "2026-06-11T13:50:34.091395-07:00",
+          "notes": "Type inference is filename/content keyword based; no model calls."
+        },
+        {
+          "metric": "mission_runtime_seconds",
+          "unit": "seconds",
+          "status": "MEASURED",
+          "value": {
+            "min": 76.755,
+            "median": 125.118,
+            "max": 213.995,
+            "n_samples": 29
+          },
+          "source": "outputs/omni_missions",
+          "method": "mission_state.updated_at - mission_state.created_at per persisted payload",
+          "captured_at": "2026-06-11T13:50:34.091441-07:00",
+          "notes": "Covers the supervisor pipeline span only; excludes knowledge-context build and export time. Fresh full-request wall clock is DEFERRED."
+        },
+        {
+          "metric": "telemetry_mission_runtime_seconds",
+          "unit": "seconds",
+          "status": "MEASURED",
+          "value": {
+            "min": 76.755,
+            "median": 133.69400000000002,
+            "max": 220.159,
+            "n_samples": 44
+          },
+          "source": "logs/telemetry/mission_runs.jsonl",
+          "method": "mission_finished.timestamp - mission_started.timestamp per mission_id",
+          "captured_at": "2026-06-11T13:50:34.091462-07:00",
+          "notes": ""
+        },
+        {
+          "metric": "model_call_count_per_mission",
+          "unit": "calls",
+          "status": "ESTIMATED",
+          "value": {
+            "min": 5,
+            "median": 9,
+            "max": 9,
+            "n_samples": 73
+          },
+          "source": "outputs/omni_missions + logs/telemetry/mission_runs.jsonl",
+          "method": "count of LLM-backed lifecycle steps in agent_records/telemetry (omni, vega, sky, isy, oli, korva, pluto, omni_revision) + 1 uninstrumented critique-structuring call",
+          "captured_at": "2026-06-11T13:50:34.091512-07:00",
+          "notes": "ESTIMATED: derived from instrumented steps, not provider metering. True token/call accounting is DEFERRED."
+        },
+        {
+          "metric": "specialist_agent_activation_count_per_mission",
+          "unit": "activations",
+          "status": "MEASURED",
+          "value": {
+            "min": 6,
+            "median": 6,
+            "max": 6,
+            "n_samples": 29
+          },
+          "source": "outputs/omni_missions",
+          "method": "agent_records keys intersected with {vega, sky, isy, oli, korva, pluto}",
+          "captured_at": "2026-06-11T13:50:34.091536-07:00",
+          "notes": "QaZ excluded (deterministic validator, not an LLM specialist)."
+        },
+        {
+          "metric": "serialized_payload_bytes_per_mission",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "min": 951,
+            "median": 472250.5,
+            "max": 555859,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "len(json.dumps(parsed mission payload)) with default separators, per mission.json / mission_result.json",
+          "captured_at": "2026-06-11T13:50:34.091561-07:00",
+          "notes": "Same method as the Phase 10 audit number for comparability."
+        },
+        {
+          "metric": "mission_payload_file_bytes_on_disk",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "min": 1109,
+            "median": 520790.5,
+            "max": 620964,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "os.stat size of mission.json / mission_result.json",
+          "captured_at": "2026-06-11T13:50:34.091587-07:00",
+          "notes": "Larger than serialized bytes because export writes indent=2 JSON."
+        },
+        {
+          "metric": "frontend_payload_bytes_per_mission",
+          "unit": "bytes",
+          "status": "ESTIMATED",
+          "value": {
+            "min": 951,
+            "median": 472250.5,
+            "max": 555859,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "proxy: serialized mission payload bytes (the object returned to and held by the frontend, and re-POSTed on export)",
+          "captured_at": "2026-06-11T13:50:34.091593-07:00",
+          "notes": "Excludes HTTP overhead/compression. Export round trip is ~2x this value. True browser transfer measurement is DEFERRED."
+        },
+        {
+          "metric": "operator_brief_bytes",
+          "unit": "bytes",
+          "status": "ESTIMATED",
+          "value": {
+            "min": 951,
+            "median": 472250.5,
+            "max": 555859,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "proxy: serialized mission payload bytes",
+          "captured_at": "2026-06-11T13:50:34.091599-07:00",
+          "notes": "No OperatorBrief exists yet (Phase 10 Stage 4); today's operator-facing payload IS the full mission payload."
+        },
+        {
+          "metric": "artifact_count_per_mission",
+          "unit": "artifacts",
+          "status": "MEASURED",
+          "value": {
+            "min": 7,
+            "median": 21.0,
+            "max": 25,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "len(payload['artifacts']) keys/items per mission payload",
+          "captured_at": "2026-06-11T13:50:34.091618-07:00",
+          "notes": "Counts structured artifact entries, not exported files."
+        },
+        {
+          "metric": "exported_mission_file_count",
+          "unit": "files",
+          "status": "MEASURED",
+          "value": {
+            "min": 3,
+            "median": 183.0,
+            "max": 224,
+            "n_samples": 36
+          },
+          "source": "outputs/omni_missions",
+          "method": "recursive count of regular files per mission directory",
+          "captured_at": "2026-06-11T13:50:34.091639-07:00",
+          "notes": "Includes harness-flavor folders (5-file layout) and export-manager folders; both lifecycles are part of the current baseline."
+        },
+        {
+          "metric": "exported_mission_bytes",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "min": 7800,
+            "median": 1249548.0,
+            "max": 1479719,
+            "n_samples": 36
+          },
+          "source": "outputs/omni_missions",
+          "method": "sum of file sizes recursively per mission directory",
+          "captured_at": "2026-06-11T13:50:34.091665-07:00",
+          "notes": ""
+        },
+        {
+          "metric": "warning_finding_count_per_mission",
+          "unit": "findings",
+          "status": "MEASURED",
+          "value": {
+            "min": 0,
+            "median": 26.0,
+            "max": 51,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "sum across divergent shapes: mission_state.warnings + per-agent parsed_output.warnings + critique.issues_found + validation.missing_evidence + validation.required_next_tests + graph review issues + consistency_warnings (graph 'warnings' list excluded as a documented duplicate of issues)",
+          "captured_at": "2026-06-11T13:50:34.091685-07:00",
+          "notes": "Raw pre-unification count; shapes overlap semantically (P10-VAL-001)."
+        },
+        {
+          "metric": "provenance_report_bytes_per_mission",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "min": 1076,
+            "median": 9950.0,
+            "max": 14039,
+            "n_samples": 32
+          },
+          "source": "outputs/omni_missions",
+          "method": "os.stat size of provenance_record.json where present",
+          "captured_at": "2026-06-11T13:50:34.091707-07:00",
+          "notes": "n_samples reflects missions that have a provenance_record.json."
+        },
+        {
+          "metric": "largest_mission_dir_by_bytes",
+          "unit": "bytes",
+          "status": "MEASURED",
+          "value": {
+            "path": "design_a_non_weaponized_concept_field_robot_named_terra_axolotl_mission_create_a",
+            "bytes": 1479719
+          },
+          "source": "outputs/omni_missions",
+          "method": "argmax of recursive byte totals per mission directory",
+          "captured_at": "2026-06-11T13:50:34.091721-07:00",
+          "notes": ""
+        },
+        {
+          "metric": "largest_mission_dir_by_file_count",
+          "unit": "files",
+          "status": "MEASURED",
+          "value": {
+            "path": "classify_this_as_a_concept_stage_aerospace_mission_only_design_a_high_level_fixe",
+            "files": 224
+          },
+          "source": "outputs/omni_missions",
+          "method": "argmax of recursive file counts per mission directory",
+          "captured_at": "2026-06-11T13:50:34.091726-07:00",
+          "notes": ""
+        },
+        {
+          "metric": "test_suite_wall_seconds",
+          "unit": "seconds",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "pytest",
+          "method": "timed subprocess run of `pytest -q` (skipped this run)",
+          "captured_at": "2026-06-11T13:50:34.091733-07:00",
+          "notes": "Full pytest execution skipped via --skip-pytest."
+        },
+        {
+          "metric": "pytest_collected_count",
+          "unit": "tests",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "pytest",
+          "method": "timed subprocess run of `pytest -q` (skipped this run)",
+          "captured_at": "2026-06-11T13:50:34.091740-07:00",
+          "notes": "Full pytest execution skipped via --skip-pytest."
+        },
+        {
+          "metric": "fresh_mission_wall_clock_seconds",
+          "unit": "seconds",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "n/a (not capturable from artifacts)",
+          "method": "see deferred.required_mechanism",
+          "captured_at": "2026-06-11T13:50:34.091748-07:00",
+          "notes": "True end-to-end wall clock (request to export) for a fresh mission requires running a live mission against hosted LLM providers."
+        },
+        {
+          "metric": "prompt_bytes_per_model_call",
+          "unit": "bytes",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "n/a (not capturable from artifacts)",
+          "method": "see deferred.required_mechanism",
+          "captured_at": "2026-06-11T13:50:34.091753-07:00",
+          "notes": "Prompts are not persisted anywhere; only responses are stored in agent_records.raw_output."
+        },
+        {
+          "metric": "hosted_token_usage_per_mission",
+          "unit": "tokens",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "n/a (not capturable from artifacts)",
+          "method": "see deferred.required_mechanism",
+          "captured_at": "2026-06-11T13:50:34.091759-07:00",
+          "notes": "Token counts are not recorded; provider usage objects are discarded in agents/llm_clients.py."
+        },
+        {
+          "metric": "frontend_render_time_ms",
+          "unit": "milliseconds",
+          "status": "DEFERRED",
+          "value": null,
+          "source": "n/a (not capturable from artifacts)",
+          "method": "see deferred.required_mechanism",
+          "captured_at": "2026-06-11T13:50:34.091764-07:00",
+          "notes": "No browser performance telemetry exists."
+        }
+      ],
+      "audit_number_reproduction": [
+        {
+          "claim": "497157_payload_bytes",
+          "expected": 497157,
+          "status": "REPRODUCED",
+          "observed": 497157,
+          "source": "outputs/omni_missions",
+          "notes": "Exact match found in a sampled mission payload."
+        },
+        {
+          "claim": "189_export_files",
+          "expected": 189,
+          "status": "REPRODUCED",
+          "observed": 189,
+          "source": "outputs/omni_missions",
+          "notes": "A sampled mission folder contains exactly 189 files."
+        },
+        {
+          "claim": "9_llm_calls",
+          "expected": 9,
+          "status": "REPRODUCED",
+          "observed": 9,
+          "source": "outputs/omni_missions mission_state.agent_records + logs/telemetry/mission_runs.jsonl",
+          "notes": "Median of per-mission estimates equals 9. Derivation: instrumented LLM-backed lifecycle steps (omni, vega, sky, isy, oli, korva, pluto, omni_revision) + 1 uninstrumented critique-structuring call. ESTIMATED, not direct provider metering."
+        }
+      ],
+      "deferred": [
+        {
+          "metric": "test_suite_wall_seconds",
+          "reason": "Full pytest execution skipped via --skip-pytest.",
+          "required_mechanism": "Re-run scripts/omni_metrics_baseline.py without --skip-pytest. One timed `pytest -q` run of the existing suite; no instrumentation, no paid calls (suite mocks all LLM clients).",
+          "estimated_cost": {
+            "paid_calls": false,
+            "suite_minutes": 10.0,
+            "requires_runtime_instrumentation": false
+          }
+        },
+        {
+          "metric": "pytest_collected_count",
+          "reason": "Full pytest execution skipped via --skip-pytest.",
+          "required_mechanism": "Re-run scripts/omni_metrics_baseline.py without --skip-pytest. One timed `pytest -q` run of the existing suite; no instrumentation, no paid calls (suite mocks all LLM clients).",
+          "estimated_cost": {
+            "paid_calls": false,
+            "suite_minutes": 10.0,
+            "requires_runtime_instrumentation": false
+          }
+        },
+        {
+          "metric": "fresh_mission_wall_clock_seconds",
+          "reason": "True end-to-end wall clock (request to export) for a fresh mission requires running a live mission against hosted LLM providers.",
+          "required_mechanism": "Run one mission via the existing pipeline with timing captured at the API boundary; or wait for Stage 5+ telemetry which records the full request span. Historical pipeline spans are reported above.",
+          "estimated_cost": {
+            "paid_calls": true,
+            "suite_minutes": null,
+            "requires_runtime_instrumentation": false
+          }
+        },
+        {
+          "metric": "prompt_bytes_per_model_call",
+          "reason": "Prompts are not persisted anywhere; only responses are stored in agent_records.raw_output.",
+          "required_mechanism": "Add len(prompt) logging in SupervisorAgent.run_state_step (agents/supervisor.py) — runtime instrumentation, Stage 5 scope.",
+          "estimated_cost": {
+            "paid_calls": false,
+            "suite_minutes": null,
+            "requires_runtime_instrumentation": true
+          }
+        },
+        {
+          "metric": "hosted_token_usage_per_mission",
+          "reason": "Token counts are not recorded; provider usage objects are discarded in agents/llm_clients.py.",
+          "required_mechanism": "Capture response.usage in the LLM client wrappers or read provider billing exports — runtime instrumentation or a live mission.",
+          "estimated_cost": {
+            "paid_calls": true,
+            "suite_minutes": null,
+            "requires_runtime_instrumentation": true
+          }
+        },
+        {
+          "metric": "frontend_render_time_ms",
+          "reason": "No browser performance telemetry exists.",
+          "required_mechanism": "Measure with browser devtools/Performance API against a running frontend; out of scope for artifact-based capture.",
+          "estimated_cost": {
+            "paid_calls": false,
+            "suite_minutes": null,
+            "requires_runtime_instrumentation": true
+          }
+        }
+      ]
+    }
+  ]
+}
