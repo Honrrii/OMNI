@@ -1,0 +1,65 @@
+name: OMNI CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-python-tests:
+    name: Backend Python Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          fi
+          if [ -f backend/requirements.txt ]; then
+            python -m pip install -r backend/requirements.txt
+          fi
+
+      # Collection scope (the curated tests/ suite only; never knowledge/ or
+      # outputs/) comes from pytest.ini (testpaths + norecursedirs). The
+      # autoload flag only shields the run from globally installed pytest
+      # plugins (e.g. ROS2). pytest exiting 5 (zero tests collected) fails
+      # this step: a run that tests nothing must not score as a pass.
+      - name: Run Python tests
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: python -m pytest tests
+
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
