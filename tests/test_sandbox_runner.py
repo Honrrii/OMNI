@@ -215,16 +215,27 @@ FORBIDDEN_IMPORTS = (
     "backend.app.export.export_manager",
 )
 
-FORBIDDEN_CALL_ATTRS = {
+# The sandbox subprocess wall (Phase 11 Stage 5) lives in exactly one file.
+# That file is the ONLY place allowed to import subprocess and call
+# subprocess.run. Every other sandbox file remains subprocess-free.
+EXECUTION_FILE = "execution.py"
+
+# Calls banned in EVERY sandbox file, including execution.py. Note that
+# subprocess.run is deliberately absent here — it is allowed only in
+# execution.py and handled separately below.
+GLOBALLY_FORBIDDEN_CALL_ATTRS = {
     ("os", "system"),
     ("os", "popen"),
-    ("subprocess", "run"),
     ("subprocess", "Popen"),
     ("subprocess", "call"),
     ("subprocess", "check_call"),
     ("subprocess", "check_output"),
 }
 
+# subprocess.run is permitted only in EXECUTION_FILE.
+_SUBPROCESS_RUN = ("subprocess", "run")
+
+# subprocess may be imported only in EXECUTION_FILE.
 FORBIDDEN_IMPORT_MODULES = {"subprocess"}
 
 
@@ -254,21 +265,60 @@ def test_sandbox_does_not_import_forbidden_modules():
 
 
 def test_sandbox_has_no_subprocess_or_shell_execution():
+    """subprocess is confined to execution.py; everything else stays clean.
+
+    - ``import subprocess`` is allowed ONLY in execution.py.
+    - ``subprocess.run`` is allowed ONLY in execution.py.
+    - os.system / os.popen / subprocess.Popen / .call / .check_call /
+      .check_output are banned in EVERY sandbox file, including execution.py.
+    """
     offenders = []
     for path in _sandbox_py_files():
+        is_execution_file = path.name == EXECUTION_FILE
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
         for name in _imported_names(tree):
             top = name.split(".")[0]
-            if top in FORBIDDEN_IMPORT_MODULES:
+            if top in FORBIDDEN_IMPORT_MODULES and not is_execution_file:
                 offenders.append(f"{path.name}: imports {name}")
+
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 value = node.func.value
                 if isinstance(value, ast.Name):
-                    if (value.id, node.func.attr) in FORBIDDEN_CALL_ATTRS:
+                    call = (value.id, node.func.attr)
+                    if call in GLOBALLY_FORBIDDEN_CALL_ATTRS:
                         offenders.append(
                             f"{path.name}: calls {value.id}.{node.func.attr}()"
+                        )
+                    elif call == _SUBPROCESS_RUN and not is_execution_file:
+                        offenders.append(
+                            f"{path.name}: calls subprocess.run() outside {EXECUTION_FILE}"
                         )
     assert not offenders, (
         "sandbox uses subprocess/shell execution:\n" + "\n".join(offenders)
     )
+
+
+def _uses_shell_true(tree) -> bool:
+    """True if any call passes shell=True (constant) as a keyword argument."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if (
+                    keyword.arg == "shell"
+                    and isinstance(keyword.value, ast.Constant)
+                    and keyword.value.value is True
+                ):
+                    return True
+    return False
+
+
+def test_no_sandbox_file_uses_shell_true():
+    """Positive assertion: shell=True appears in no sandbox file, ever."""
+    offenders = []
+    for path in _sandbox_py_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if _uses_shell_true(tree):
+            offenders.append(path.name)
+    assert not offenders, "sandbox files use shell=True:\n" + "\n".join(offenders)
