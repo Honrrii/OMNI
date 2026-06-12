@@ -245,3 +245,74 @@ def test_command_result_is_dataclass_with_expected_fields():
     assert dataclasses.is_dataclass(CommandResult)
     field_names = {f.name for f in dataclasses.fields(CommandResult)}
     assert field_names == RESULT_KEYS
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B: stdin closed (DEVNULL)
+# ---------------------------------------------------------------------------
+def test_stdin_is_closed_child_receives_eof(tmp_path):
+    # The child reads stdin; with stdin closed it must get EOF -> empty string.
+    result = run_command(
+        [sys.executable, "-c", "import sys; print(repr(sys.stdin.read()))"],
+        cwd=tmp_path,
+        timeout=10,
+    )
+    assert result.returncode == 0
+    assert result.timed_out is False
+    assert result.stdout.strip() == "''"
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B: optional executable allowlist
+# ---------------------------------------------------------------------------
+def test_allowlist_permits_full_executable_path(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=10,
+        allowed_executables=[sys.executable],
+    )
+    assert result.returncode == 0
+    assert "ok" in result.stdout
+
+
+def test_allowlist_permits_basename(tmp_path):
+    basename = os.path.basename(sys.executable)
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=10,
+        allowed_executables=[basename],
+    )
+    assert result.returncode == 0
+    assert "ok" in result.stdout
+
+
+def test_allowlist_rejects_unlisted_executable_before_spawn(tmp_path):
+    # A command that WOULD write a sentinel if it ever ran; the rejection must
+    # happen before spawn, so the sentinel must never appear.
+    sentinel = tmp_path / "should_not_exist.txt"
+    with pytest.raises(ValueError):
+        run_command(
+            [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
+            cwd=tmp_path,
+            timeout=10,
+            allowed_executables=["definitely-not-this-binary"],
+        )
+    assert not sentinel.exists()
+
+
+def test_allowlist_default_none_runs_anything(tmp_path):
+    # Default behavior is unchanged: no allowlist means no gating.
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=10,
+    )
+    assert result.returncode == 0
+
+
+def test_run_command_signature_has_allowed_executables_and_no_shell():
+    params = inspect.signature(run_command).parameters
+    assert "allowed_executables" in params
+    assert "shell" not in params
