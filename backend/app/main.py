@@ -333,7 +333,10 @@ def normalize_mission_result(mission: str, raw_result: Any) -> Dict[str, Any]:
 
     # Case 2: supervisor returns structured dict.
     if isinstance(raw_result, dict):
-        result = sanitize_legacy_names(raw_result.copy())
+        # Sanitize once at the output boundary below (return sanitize_legacy_names(
+        # normalized)). The sanitizer is idempotent over nested payloads, so the
+        # earlier per-field pass here was redundant.
+        result = raw_result.copy()
 
         revision = result.get("revision", {})
         if not isinstance(revision, dict):
