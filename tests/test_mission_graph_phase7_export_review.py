@@ -540,3 +540,111 @@ def test_design_understanding_report_open_questions_non_empty(tmp_path, monkeypa
 
     assert isinstance(report["open_questions"], list)
     assert len(report["open_questions"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 Stage 3C — additive findings_projection in mission_graph_review.json
+#
+# The export adds a normalized, read-only findings_projection envelope derived
+# from the review's issues + consistency_warnings. It must be purely additive:
+# all legacy review fields stay intact and no "findings" field is introduced.
+# ---------------------------------------------------------------------------
+
+def test_write_graph_review_has_findings_projection(tmp_path):
+    folder = tmp_path / "mission"
+    _write_mission_json(folder, "Build a ground rover for terrain scouting.")
+
+    from backend.app.export.export_manager import _write_graph_review
+    _write_graph_review(folder)
+
+    review = json.loads((folder / "mission_graph_review.json").read_text())
+    assert "findings_projection" in review
+    # Additive only — no unified findings field introduced.
+    assert "findings" not in review
+
+
+def test_findings_projection_envelope_keys(tmp_path):
+    folder = tmp_path / "mission"
+    _write_mission_json(folder, "Build a ground rover for terrain scouting.")
+
+    from backend.app.export.export_manager import _write_graph_review
+    _write_graph_review(folder)
+
+    review = json.loads((folder / "mission_graph_review.json").read_text())
+    fp = review["findings_projection"]
+    assert set(fp) == {"schema", "source", "origin_fields", "count", "items"}
+    assert fp["schema"] == "omni.mission_graph.findings_projection.v1"
+    assert fp["source"] == "mission_graph_review"
+    assert fp["origin_fields"] == ["issues", "consistency_warnings"]
+
+
+def test_findings_projection_count_matches_items_and_origins(tmp_path):
+    folder = tmp_path / "mission"
+    _write_mission_json(folder, "Build a ground rover for terrain scouting.")
+
+    from backend.app.export.export_manager import _write_graph_review
+    _write_graph_review(folder)
+
+    review = json.loads((folder / "mission_graph_review.json").read_text())
+    fp = review["findings_projection"]
+    assert isinstance(fp["items"], list)
+    assert fp["count"] == len(fp["items"])
+    assert fp["count"] == len(review["issues"]) + len(review["consistency_warnings"])
+
+
+def test_findings_projection_preserves_legacy_review_fields(tmp_path):
+    folder = tmp_path / "mission"
+    _write_mission_json(folder, "Build a ground rover for terrain scouting.")
+
+    from backend.app.export.export_manager import _write_graph_review
+    _write_graph_review(folder)
+
+    review = json.loads((folder / "mission_graph_review.json").read_text())
+    for key in (
+        "graph_id", "platform", "platform_normalized",
+        "component_coverage", "ros2_coverage", "morphology_cad_coverage",
+        "issues", "warnings", "recommendations", "consistency_warnings",
+    ):
+        assert key in review, f"legacy field missing after Stage 3C: {key}"
+    # warnings stays the legacy list[str] surface.
+    assert isinstance(review["warnings"], list)
+    assert all(isinstance(w, str) for w in review["warnings"])
+
+
+def test_export_return_graph_review_has_findings_projection(tmp_path, monkeypatch):
+    """export_mission_files return payload exposes graph_review['findings_projection']."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design an autonomous navigation system for land surveying.",
+        "result_id": "phase10-3c-return",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+    gr = result["graph_review"]
+    assert "findings_projection" in gr
+    assert gr["findings_projection"]["schema"] == "omni.mission_graph.findings_projection.v1"
+
+
+def test_export_return_findings_projection_matches_file(tmp_path, monkeypatch):
+    """The graph_review in the return payload matches the on-disk file's projection."""
+    import backend.app.export.export_manager as em
+    monkeypatch.setattr(em, "OUTPUT_ROOT", tmp_path / "omni_missions")
+
+    mission_result = {
+        "mission": "Design an autonomous navigation system for land surveying.",
+        "result_id": "phase10-3c-match",
+        "agents": {},
+        "artifacts": {},
+        "status": "complete",
+    }
+
+    result = em.export_mission_files(mission_result, validate_ros2=False)
+    export_dir = Path(result["export_dir"])
+    on_disk = json.loads((export_dir / "mission_graph_review.json").read_text())
+
+    assert result["graph_review"]["findings_projection"] == on_disk["findings_projection"]
