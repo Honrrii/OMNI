@@ -29,9 +29,32 @@ from backend.app.engineering.morphology_gate_validator import (
     build_report as morph_build_report,
     validate_morphology_export,
 )
+from backend.app.engineering.finding_projection import (
+    project_kicad_gate_findings,
+    project_kicad_gate_issue,
+    project_morphology_gate_findings,
+    project_morphology_gate_issue,
+)
 
 EXPECTED_ISSUE_FIELDS = ("rule_id", "severity", "message", "file")
 EXPECTED_SUMMARY_KEYS = {"blockers", "warnings", "info", "total_issues"}
+
+# The normalized finding key set shared with the mission graph projection.
+PROJECTED_FINDING_KEYS = {
+    "id",
+    "code",
+    "source",
+    "category",
+    "severity",
+    "status",
+    "message",
+    "recommendation",
+    "related_ids",
+    "file",
+    "evidence_ids",
+    "requires_human_review",
+    "metadata",
+}
 
 
 # ===========================================================================
@@ -214,3 +237,166 @@ def test_morphology_status_mapping_info_only_is_passed():
 def test_morphology_report_has_no_findings_projection_yet(tmp_path):
     report = validate_morphology_export(tmp_path / "nonexistent_export_root")
     assert "findings_projection" not in report
+
+
+# ===========================================================================
+# Stage 3E — internal engineering gate finding projection helper.
+#
+# Exercises backend.app.engineering.finding_projection, an internal,
+# test-facing view that normalizes KiCad/morphology gate issues onto the same
+# finding key set as the mission graph projection. Asserts faithful mapping,
+# dict/dataclass equivalence, order preservation, side-effect freedom, and
+# that the validators still export no findings_projection key.
+# ===========================================================================
+
+
+def test_project_kicad_gate_issue_exact_key_set():
+    issue = KiCadGateIssue("KICAD.FS.README_MD", "blocker", "Missing README.md", "README.md")
+    finding = project_kicad_gate_issue(issue)
+    assert set(finding) == PROJECTED_FINDING_KEYS
+
+
+def test_project_morphology_gate_issue_exact_key_set():
+    issue = MorphologyGateIssue("MORPH.FS.001", "blocker", "Missing plan.", "artifacts/morphology_plan.json")
+    finding = project_morphology_gate_issue(issue)
+    assert set(finding) == PROJECTED_FINDING_KEYS
+
+
+def test_project_kicad_gate_issue_preserves_core_fields():
+    issue = KiCadGateIssue("KICAD.PATH.001", "blocker", "dir missing", "generated_kicad")
+    finding = project_kicad_gate_issue(issue)
+    assert finding["id"] is None
+    assert finding["code"] == "KICAD.PATH.001"
+    assert finding["source"] == "kicad_knowledge_gate"
+    assert finding["category"] == "engineering"
+    assert finding["severity"] == "blocker"
+    assert finding["status"] == "open"
+    assert finding["message"] == "dir missing"
+    assert finding["recommendation"] is None
+    assert finding["related_ids"] == []
+    assert finding["file"] == "generated_kicad"
+    assert finding["evidence_ids"] == []
+    assert finding["requires_human_review"] is False
+    assert finding["metadata"] == {
+        "origin": "KiCadGateIssue",
+        "validator": "kicad_knowledge_gate_validator",
+    }
+
+
+def test_project_morphology_gate_issue_preserves_core_fields():
+    issue = MorphologyGateIssue("MORPH.PLAN.001", "warning", "missing id", "artifacts/morphology_plan.json")
+    finding = project_morphology_gate_issue(issue)
+    assert finding["id"] is None
+    assert finding["code"] == "MORPH.PLAN.001"
+    assert finding["source"] == "morphology_gate"
+    assert finding["category"] == "engineering"
+    assert finding["severity"] == "warning"
+    assert finding["status"] == "open"
+    assert finding["message"] == "missing id"
+    assert finding["recommendation"] is None
+    assert finding["related_ids"] == []
+    assert finding["file"] == "artifacts/morphology_plan.json"
+    assert finding["evidence_ids"] == []
+    assert finding["requires_human_review"] is False
+    assert finding["metadata"] == {
+        "origin": "MorphologyGateIssue",
+        "validator": "morphology_gate_validator",
+    }
+
+
+def test_dataclass_and_dict_inputs_produce_identical_projection():
+    from dataclasses import asdict
+
+    kissue = KiCadGateIssue("KICAD.BOM.002", "warning", "BOM empty", "bom.csv")
+    assert project_kicad_gate_issue(kissue) == project_kicad_gate_issue(asdict(kissue))
+
+    missue = MorphologyGateIssue("MORPH.PLAN.002", "warning", "no family", "artifacts/morphology_plan.json")
+    assert project_morphology_gate_issue(missue) == project_morphology_gate_issue(asdict(missue))
+
+
+def test_report_projection_preserves_issue_order():
+    from pathlib import Path
+    kreport = kicad_build_report(Path("/tmp/kicad"), [
+        KiCadGateIssue("R.1", "blocker", "a"),
+        KiCadGateIssue("R.2", "warning", "b"),
+        KiCadGateIssue("R.3", "info", "c"),
+    ])
+    codes = [f["code"] for f in project_kicad_gate_findings(kreport)]
+    assert codes == ["R.1", "R.2", "R.3"]
+
+    mreport = morph_build_report(Path("/tmp/export"), {}, [
+        MorphologyGateIssue("M.1", "blocker", "a"),
+        MorphologyGateIssue("M.2", "info", "b"),
+    ])
+    mcodes = [f["code"] for f in project_morphology_gate_findings(mreport)]
+    assert mcodes == ["M.1", "M.2"]
+
+
+def test_passed_report_with_no_issues_projects_to_empty(tmp_path):
+    from pathlib import Path
+    # build_report with an empty issue list -> status "passed", no issues.
+    kreport = kicad_build_report(Path("/tmp/kicad"), [])
+    assert kreport["status"] == "passed"
+    assert project_kicad_gate_findings(kreport) == []
+
+    mreport = morph_build_report(Path("/tmp/export"), {}, [])
+    assert mreport["status"] == "passed"
+    assert project_morphology_gate_findings(mreport) == []
+
+    # A report dict that omits "issues" entirely also projects to [].
+    assert project_kicad_gate_findings({"validator": "x"}) == []
+    assert project_morphology_gate_findings({"validator": "x"}) == []
+
+
+def test_projection_does_not_mutate_source_issue_dict():
+    source = {"rule_id": "R.1", "severity": "Blocker", "message": "m", "file": "f"}
+    snapshot = dict(source)
+    project_kicad_gate_issue(source)
+    project_morphology_gate_issue(source)
+    assert source == snapshot
+
+
+def test_projection_does_not_share_mutable_list_references():
+    issue = KiCadGateIssue("R.1", "warning", "m", "f")
+    f1 = project_kicad_gate_issue(issue)
+    f2 = project_kicad_gate_issue(issue)
+    # Distinct list objects per projection — mutating one is isolated.
+    assert f1["related_ids"] is not f2["related_ids"]
+    assert f1["evidence_ids"] is not f2["evidence_ids"]
+    f1["related_ids"].append("x")
+    f1["evidence_ids"].append("y")
+    assert f2["related_ids"] == []
+    assert f2["evidence_ids"] == []
+
+
+def test_severity_normalization_known_lowercase():
+    for sev in ("info", "warning", "error", "blocker"):
+        finding = project_kicad_gate_issue({"rule_id": "R", "severity": sev, "message": "m", "file": None})
+        assert finding["severity"] == sev
+
+
+def test_severity_normalization_uppercase_is_lowercased():
+    finding = project_kicad_gate_issue({"rule_id": "R", "severity": "BLOCKER", "message": "m", "file": None})
+    assert finding["severity"] == "blocker"
+
+
+def test_severity_normalization_empty_becomes_warning():
+    finding = project_morphology_gate_issue({"rule_id": "R", "severity": "", "message": "m", "file": None})
+    assert finding["severity"] == "warning"
+
+
+def test_severity_normalization_non_string_becomes_warning():
+    finding = project_morphology_gate_issue({"rule_id": "R", "severity": None, "message": "m", "file": None})
+    assert finding["severity"] == "warning"
+
+
+def test_severity_normalization_unknown_string_preserved_lowercased():
+    finding = project_kicad_gate_issue({"rule_id": "R", "severity": "Critical", "message": "m", "file": None})
+    assert finding["severity"] == "critical"
+
+
+def test_validators_still_export_no_findings_projection(tmp_path):
+    kreport = validate_kicad_package(tmp_path / "nope_kicad")
+    mreport = validate_morphology_export(tmp_path / "nope_export")
+    assert "findings_projection" not in kreport
+    assert "findings_projection" not in mreport
