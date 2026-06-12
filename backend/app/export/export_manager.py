@@ -810,6 +810,7 @@ def _write_graph_review(export_dir: Path) -> Dict[str, Any]:
     responsible for catching errors.
     """
     from backend.app.mission_graph.builder import build_graph
+    from backend.app.mission_graph.finding_projection import project_review_findings
     from backend.app.mission_graph.reviewer import review_graph
 
     graph = build_graph(export_dir)
@@ -818,10 +819,22 @@ def _write_graph_review(export_dir: Path) -> Dict[str, Any]:
     graph_path = export_dir / "mission_graph.json"
     write_json(graph_path, graph.model_dump(mode="json"))
 
-    review_path = export_dir / "mission_graph_review.json"
-    write_json(review_path, review.model_dump(mode="json"))
-
+    # Additive findings projection: a normalized, read-only view of the
+    # review's issues + consistency_warnings. Does not change the
+    # MissionGraphReview model or any existing exported field.
     review_data = review.model_dump(mode="json")
+    projection_items = project_review_findings(review)
+    review_data["findings_projection"] = {
+        "schema": "omni.mission_graph.findings_projection.v1",
+        "source": "mission_graph_review",
+        "origin_fields": ["issues", "consistency_warnings"],
+        "count": len(projection_items),
+        "items": projection_items,
+    }
+
+    review_path = export_dir / "mission_graph_review.json"
+    write_json(review_path, review_data)
+
     return {
         "status": "reviewed",
         "graph_path": str(graph_path),
