@@ -220,7 +220,9 @@ def test_mission_result_idempotent_and_clean():
 # the function's output carries no legacy tokens and is sanitizer-stable.
 # ---------------------------------------------------------------------------
 
-from backend.app.main import normalize_mission_result  # noqa: E402
+from backend.app.omni_core.mission_result_normalizer import (  # noqa: E402
+    normalize_mission_result,
+)
 
 
 def test_normalize_mission_result_structured_payload_is_clean():
