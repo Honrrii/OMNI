@@ -1641,6 +1641,22 @@ def export_mission_files(
 
             kicad_validation = run_kicad_knowledge_gate(export_dir)
 
+            # Additive findings projection: normalized, read-only view of the
+            # gate report's issues. Does not change validator behavior or any
+            # existing report field.
+            from backend.app.engineering.finding_projection import (
+                project_kicad_gate_findings,
+            )
+
+            kicad_items = project_kicad_gate_findings(kicad_validation)
+            kicad_validation["findings_projection"] = {
+                "schema": "omni.engineering.kicad_knowledge_gate.findings_projection.v1",
+                "source": "kicad_knowledge_gate_report",
+                "origin_fields": ["issues"],
+                "count": len(kicad_items),
+                "items": kicad_items,
+            }
+
             kicad_validation_path = (
                 export_dir / "generated_kicad" / "kicad_knowledge_gate_report.json"
             )
@@ -1682,6 +1698,21 @@ def export_mission_files(
     # ---------------------------------------------------------
 
     morphology_validation = run_morphology_gate(export_dir)
+
+    # Additive findings projection: normalized, read-only view of the gate
+    # report's issues. Does not change validator behavior or any existing field.
+    from backend.app.engineering.finding_projection import (
+        project_morphology_gate_findings,
+    )
+
+    morphology_items = project_morphology_gate_findings(morphology_validation)
+    morphology_validation["findings_projection"] = {
+        "schema": "omni.engineering.morphology_gate.findings_projection.v1",
+        "source": "morphology_gate_report",
+        "origin_fields": ["issues"],
+        "count": len(morphology_items),
+        "items": morphology_items,
+    }
 
     path = artifact_dir / "morphology_gate_report.json"
     write_json(path, morphology_validation)
