@@ -202,6 +202,127 @@ def test_artifact_shape_multi_problem_fans_out_in_sorted_order():
 
 
 # ---------------------------------------------------------------------------
+# 6a. failure-shape variety through the FULL-report projector.
+# Each asserts the canonical 13-key shape, source/category/status/severity,
+# expected+actual under metadata, source-specific check_metadata preserved,
+# and that the raw report is never mutated or given findings keys.
+# ---------------------------------------------------------------------------
+def test_full_report_projection_dimensional_consistency():
+    report = run_sandbox(
+        "dimensional_consistency",
+        {
+            "quantity": {
+                "name": "battery_mass",
+                "value": 2.0,
+                "unit": "kg",
+                "dimension": "mass",
+            },
+            "expected_dimension": "length",
+        },
+    )
+    before = report.to_dict()
+    findings = project_sandbox_findings(report)
+
+    assert len(findings) == 1
+    item = findings[0]
+    assert set(item.keys()) == CANONICAL_ITEM_KEYS
+    assert item["code"] == "dimensional.consistency"
+    assert item["source"] == "sandbox_dimensional_consistency"
+    assert item["category"] == "sandbox"
+    assert item["status"] == "open"
+    assert item["severity"] == "warning"
+    assert item["metadata"]["expected"] == "length"
+    assert item["metadata"]["actual"] == "mass"
+    # source-specific metadata preserved verbatim under check_metadata
+    cm = item["metadata"]["check_metadata"]
+    assert cm["expected_dimension"] == "length"
+    assert cm["actual_dimension"] == "mass"
+    assert cm["quantity_name"] == "battery_mass"
+
+    after = report.to_dict()
+    assert after == before
+    assert "findings" not in after and "findings_projection" not in after
+
+
+def test_full_report_projection_equation_sanity():
+    report = run_sandbox(
+        "equation_sanity",
+        {
+            "equation_id": "ohms_law",
+            "left": "V",
+            "right": "I * R",
+            "values": {"V": 10, "I": 3, "R": 4},
+        },
+    )
+    before = report.to_dict()
+    findings = project_sandbox_findings(report)
+
+    assert len(findings) == 1
+    item = findings[0]
+    assert set(item.keys()) == CANONICAL_ITEM_KEYS
+    assert item["code"] == "equation.sanity"
+    assert item["source"] == "sandbox_equation_sanity"
+    assert item["category"] == "sandbox"
+    assert item["status"] == "open"
+    assert item["severity"] == "warning"
+    # left = V = 10, right = I*R = 12
+    assert item["metadata"]["expected"] == "10"
+    assert item["metadata"]["actual"] == "12"
+    cm = item["metadata"]["check_metadata"]
+    assert cm["equation_id"] == "ohms_law"
+    assert cm["left_value"] == 10
+    assert cm["right_value"] == 12
+    assert cm["delta"] == 2
+
+    after = report.to_dict()
+    assert after == before
+    assert "findings" not in after and "findings_projection" not in after
+
+
+def test_full_report_projection_artifact_shape_multiple_findings():
+    # name -> wrong type (int), mass_kg -> missing. Two distinct failure shapes.
+    report = run_sandbox(
+        "artifact_shape",
+        {
+            "artifact": {"name": 5, "type": "robot"},
+            "required_fields": {"name": "str", "type": "str", "mass_kg": "number"},
+        },
+    )
+    before = report.to_dict()
+    findings = project_sandbox_findings(report)
+
+    assert len(findings) == 2
+    # Deterministic projected order by sorted field name: mass_kg, then name.
+    assert [item["code"] for item in findings] == [
+        "artifact_shape.field.mass_kg",
+        "artifact_shape.field.name",
+    ]
+
+    for item in findings:
+        assert set(item.keys()) == CANONICAL_ITEM_KEYS
+        assert item["source"] == "sandbox_artifact_shape"
+        assert item["category"] == "sandbox"
+        assert item["status"] == "open"
+        assert item["severity"] == "warning"
+
+    missing, wrong_type = findings
+    # mass_kg is missing
+    assert missing["metadata"]["expected"] == "number"
+    assert missing["metadata"]["actual"] == "missing"
+    assert missing["metadata"]["check_metadata"]["problem"] == "missing_field"
+    assert missing["metadata"]["check_metadata"]["field"] == "mass_kg"
+    # name has the wrong type
+    assert wrong_type["metadata"]["expected"] == "str"
+    assert wrong_type["metadata"]["actual"] == "int"
+    assert wrong_type["metadata"]["check_metadata"]["problem"] == "wrong_type"
+    assert wrong_type["metadata"]["check_metadata"]["field"] == "name"
+
+    after = report.to_dict()
+    assert after == before
+    assert "findings" not in after and "findings_projection" not in after
+
+
+# ---------------------------------------------------------------------------
 # 6b. mixed report: only the failing check projects (no phantom findings)
 # ---------------------------------------------------------------------------
 def test_mixed_report_only_projects_the_failing_check():
