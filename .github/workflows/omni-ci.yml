@@ -37,6 +37,7 @@ jobs:
             python-dotenv \
             openai \
             google-generativeai \
+            torch \
             numpy \
             PyYAML \
             requests \
