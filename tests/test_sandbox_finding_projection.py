@@ -202,6 +202,58 @@ def test_artifact_shape_multi_problem_fans_out_in_sorted_order():
 
 
 # ---------------------------------------------------------------------------
+# 6b. mixed report: only the failing check projects (no phantom findings)
+# ---------------------------------------------------------------------------
+def test_mixed_report_only_projects_the_failing_check():
+    report = SandboxReport(
+        sandbox="units_math",
+        status="completed",
+        checks=[
+            SandboxCheckResult(
+                check_id="check.passing",
+                ok=True,
+                severity="info",
+                message="all good",
+            ),
+            SandboxCheckResult(
+                check_id="check.failing",
+                ok=False,
+                severity="warning",
+                message="something is off",
+                expected="2.4 kg",
+                actual="2.0 kg",
+            ),
+            SandboxCheckResult(
+                check_id="check.skipped",
+                ok=True,
+                severity="info",
+                message="skipped/info",
+                metadata={"reason": "missing_or_invalid_input"},
+            ),
+        ],
+    )
+    before = report.to_dict()
+
+    projected = project_sandbox_findings(report)
+
+    # Exactly one finding: the failing check only.
+    assert len(projected) == 1
+    assert projected[0]["code"] == "check.failing"
+    assert projected[0]["source"] == "sandbox_units_math"
+
+    # No passing/skipped/info check leaked through.
+    codes = [item["code"] for item in projected]
+    assert "check.passing" not in codes
+    assert "check.skipped" not in codes
+
+    # Raw report stays untouched: no mutation, no findings keys injected.
+    after = report.to_dict()
+    assert after == before
+    assert "findings" not in after
+    assert "findings_projection" not in after
+
+
+# ---------------------------------------------------------------------------
 # 7. dict/dataclass parity
 # ---------------------------------------------------------------------------
 def test_check_result_dict_dataclass_parity():
