@@ -3,8 +3,8 @@ OMNI Sandbox — low-level controlled command execution (Phase 11 Stage 5).
 
 This module is the sandbox "subprocess wall": a single, explicit boundary for
 running an external command with ``shell=False``, an enforced timeout, captured
-output, a caller-provided working directory, and a minimal deterministic
-environment.
+output, a caller-provided working directory, a minimal deterministic
+environment, a closed stdin, and an optional executable allowlist.
 
 HONEST SECURITY NOTE — this is NOT a full security sandbox.
 Python ``subprocess`` controls do not provide:
@@ -16,9 +16,14 @@ Python ``subprocess`` controls do not provide:
   limits; output is buffered in memory),
 - protection from untrusted code.
 
+Stage 9B added two minimal hardenings without changing the result shape:
+``stdin`` is always closed (``subprocess.DEVNULL``), and ``run_command`` accepts
+an optional ``allowed_executables`` gate (off by default). A capture-time output
+cap and OS resource limits are deliberately deferred to later stages.
+
 For untrusted code or dangerous external tools, future stages must use real
 isolation (OS rlimits/cgroups, nsjail/firejail, containers, seccomp, network
-namespaces). Stage 5 is a controlled execution boundary, not a jail. It runs
+namespaces). This remains a controlled execution boundary, not a jail. It runs
 only explicit argv commands passed by the caller; it does not run ROS2, KiCad,
 or colcon.
 """
@@ -29,7 +34,7 @@ import signal
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Iterable, Optional, Union
 
 
 # Minimal, deterministic default environment. The full parent ``os.environ`` is
@@ -91,6 +96,25 @@ def _validate_command(command: Union[list, tuple]) -> list[str]:
     return argv
 
 
+def _check_allowed(argv: list[str], allowed: Optional[Iterable[str]]) -> None:
+    """Gate the executable against an optional allowlist, before spawning.
+
+    No allowlist (``None``) means no gating — current default behavior. When an
+    allowlist is provided, ``argv[0]`` is permitted if it matches an entry
+    exactly OR its basename matches an entry; otherwise a ``ValueError`` is
+    raised before any process is started.
+    """
+    if allowed is None:
+        return
+    allowed_set = set(allowed)
+    executable = argv[0]
+    if executable in allowed_set or os.path.basename(executable) in allowed_set:
+        return
+    raise ValueError(
+        f"executable {executable!r} is not in the allowed_executables allowlist."
+    )
+
+
 def _effective_env(env: Optional[dict[str, str]]) -> dict[str, str]:
     """Build the child environment: minimal defaults, caller keys override."""
     effective = dict(_DEFAULT_ENV)
@@ -114,16 +138,24 @@ def run_command(
     cwd: Union[str, Path],
     timeout: float,
     env: Optional[dict[str, str]] = None,
+    allowed_executables: Optional[Iterable[str]] = None,
 ) -> CommandResult:
     """Run an explicit argv command with ``shell=False`` and an enforced timeout.
 
     There is intentionally no ``shell`` parameter — shell execution is
     unsupported. The command runs in ``cwd`` with a minimal deterministic
-    environment (``env`` overrides/extends the defaults). On timeout the child
-    is killed (best effort, including its process group), ``timed_out`` is True,
-    and ``returncode`` is None.
+    environment (``env`` overrides/extends the defaults) and with ``stdin``
+    closed (``subprocess.DEVNULL``). On timeout the child is killed (best effort,
+    including its process group), ``timed_out`` is True, and ``returncode`` is
+    None.
+
+    ``allowed_executables`` is an opt-in gate (default ``None`` = no gating,
+    preserving prior behavior). When provided, the command's executable
+    (``argv[0]``) must match an allowlist entry exactly or by basename, else a
+    ``ValueError`` is raised before any process is spawned.
     """
     argv = _validate_command(command)
+    _check_allowed(argv, allowed_executables)
     effective_env = _effective_env(env)
 
     try:
@@ -131,6 +163,7 @@ def run_command(
             argv,
             cwd=str(cwd),
             env=effective_env,
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=timeout,
