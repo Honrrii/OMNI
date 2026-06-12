@@ -30,6 +30,30 @@ from backend.app.mission_graph.schemas import (
     MissionKnowledgeGraph,
     Ros2Node,
 )
+from backend.app.mission_graph.finding_projection import (
+    project_consistency_warning,
+    project_review_findings,
+    project_review_issue,
+)
+
+
+# The exact normalized finding schema Stage 3B projects onto. Locked here so a
+# future change to the projection surfaces as a deliberate test update.
+PROJECTED_FINDING_KEYS = {
+    "id",
+    "code",
+    "source",
+    "category",
+    "severity",
+    "status",
+    "message",
+    "recommendation",
+    "related_ids",
+    "file",
+    "evidence_ids",
+    "requires_human_review",
+    "metadata",
+}
 
 
 def _graph(**kwargs) -> MissionKnowledgeGraph:
@@ -195,3 +219,185 @@ def test_empty_graph_keeps_empty_warning_list_not_none():
     review = review_graph(_graph())
     assert review.warnings == []
     assert isinstance(review.warnings, list)
+
+
+# ===========================================================================
+# Stage 3B — internal mission graph finding projection helper.
+#
+# These exercise backend.app.mission_graph.finding_projection, an internal,
+# test-facing view. They assert the projection is faithful and side-effect
+# free, and that producing it does NOT change the exported MissionGraphReview
+# shape (no "findings" key, legacy warnings untouched).
+# ===========================================================================
+
+
+def test_project_review_issue_returns_exact_field_set():
+    issue = MissionGraphReviewIssue(
+        code="COMP_MISSING_POWER_RAIL",
+        severity="warning",
+        category="component",
+        message="component 'Sensor' (c1) missing power_rail_id",
+        related_ids=["c1"],
+    )
+    finding = project_review_issue(issue)
+    assert set(finding) == PROJECTED_FINDING_KEYS
+
+
+def test_project_review_issue_preserves_core_fields():
+    issue = MissionGraphReviewIssue(
+        code="NODE_MISSING_COMPONENT_LINK",
+        severity="warning",
+        category="ros2",
+        message="ros2_node 'lonely_node' (n1) missing component_ids",
+        related_ids=["n1"],
+    )
+    finding = project_review_issue(issue)
+    assert finding["id"] is None
+    assert finding["code"] == "NODE_MISSING_COMPONENT_LINK"
+    assert finding["source"] == "mission_graph_review"
+    assert finding["category"] == "ros2"
+    assert finding["severity"] == "warning"
+    assert finding["status"] == "open"
+    assert finding["message"] == issue.message
+    assert finding["recommendation"] is None
+    assert finding["related_ids"] == ["n1"]
+    assert finding["file"] is None
+    assert finding["evidence_ids"] == []
+    assert finding["requires_human_review"] is False
+    assert finding["metadata"] == {"origin": "MissionGraphReviewIssue"}
+
+
+def test_project_consistency_warning_returns_exact_field_set():
+    cw = ConsistencyWarning(
+        id="w1", code="ORPHAN_TOPIC", message="topic has no subscribers",
+        related_ids=["t1"],
+    )
+    finding = project_consistency_warning(cw)
+    assert set(finding) == PROJECTED_FINDING_KEYS
+
+
+def test_project_consistency_warning_preserves_core_fields():
+    cw = ConsistencyWarning(
+        id="w42", code="ORPHAN_TOPIC", severity="error",
+        message="topic has no subscribers", related_ids=["t1", "t2"],
+    )
+    finding = project_consistency_warning(cw)
+    assert finding["id"] == "w42"
+    assert finding["code"] == "ORPHAN_TOPIC"
+    assert finding["source"] == "mission_graph_consistency"
+    assert finding["category"] == "consistency"
+    assert finding["severity"] == "error"
+    assert finding["status"] == "open"
+    assert finding["message"] == "topic has no subscribers"
+    assert finding["recommendation"] is None
+    assert finding["related_ids"] == ["t1", "t2"]
+    assert finding["file"] is None
+    assert finding["evidence_ids"] == []
+    assert finding["requires_human_review"] is False
+    assert finding["metadata"] == {"origin": "ConsistencyWarning"}
+
+
+def test_project_review_findings_orders_issues_then_consistency():
+    cw = ConsistencyWarning(id="w1", code="ORPHAN_TOPIC", message="topic orphaned")
+    review = review_graph(_graph_with_findings().model_copy(
+        update={"consistency_warnings": [cw]}
+    ))
+    findings = project_review_findings(review)
+
+    expected = (
+        [project_review_issue(i) for i in review.issues]
+        + [project_consistency_warning(c) for c in review.consistency_warnings]
+    )
+    assert findings == expected
+
+    # All issue-sourced findings precede all consistency-sourced ones.
+    sources = [f["source"] for f in findings]
+    n_issues = len(review.issues)
+    assert sources[:n_issues] == ["mission_graph_review"] * n_issues
+    assert set(sources[n_issues:]) == {"mission_graph_consistency"}
+
+
+def test_projection_does_not_mutate_source_or_share_list_refs():
+    issue = MissionGraphReviewIssue(
+        code="COMP_MISSING_DATA_BUS", severity="warning",
+        category="component", message="missing data bus", related_ids=["c1"],
+    )
+    cw = ConsistencyWarning(
+        id="w1", code="ORPHAN_TOPIC", message="orphaned", related_ids=["t1"],
+    )
+
+    issue_finding = project_review_issue(issue)
+    warning_finding = project_consistency_warning(cw)
+
+    # related_ids in the projection is a distinct list object (a copy).
+    assert issue_finding["related_ids"] is not issue.related_ids
+    assert warning_finding["related_ids"] is not cw.related_ids
+
+    # Mutating the projection must not affect the source object.
+    issue_finding["related_ids"].append("MUTATED")
+    warning_finding["related_ids"].append("MUTATED")
+    assert issue.related_ids == ["c1"]
+    assert cw.related_ids == ["t1"]
+
+
+def test_review_model_dump_unchanged_and_has_no_findings_key():
+    review = review_graph(_graph_with_findings())
+    dumped = review.model_dump()
+
+    # Projecting findings is non-mutating and adds nothing to the model.
+    project_review_findings(review)
+    assert review.model_dump() == dumped
+
+    # The exported review shape gains no "findings" key.
+    assert "findings" not in dumped
+    # The compatibility surface is intact.
+    assert set(dumped) == {
+        "graph_id", "platform", "platform_normalized",
+        "component_coverage", "ros2_coverage", "morphology_cad_coverage",
+        "issues", "warnings", "recommendations", "consistency_warnings",
+    }
+
+
+def test_projection_keeps_legacy_warnings_derived_list_of_str():
+    review = review_graph(_graph_with_findings())
+    project_review_findings(review)
+    assert isinstance(review.warnings, list)
+    assert all(isinstance(w, str) for w in review.warnings)
+    assert review.warnings == [i.message for i in review.issues]
+
+
+def test_project_empty_review_returns_empty_list():
+    review = review_graph(_graph())
+    assert review.issues == []
+    assert review.consistency_warnings == []
+    assert project_review_findings(review) == []
+
+
+def test_project_severity_normalization_known_values():
+    for sev in ("info", "warning", "error", "blocker"):
+        issue = MissionGraphReviewIssue(
+            code="X", severity=sev, category="component", message="m",
+        )
+        assert project_review_issue(issue)["severity"] == sev
+
+
+def test_project_severity_uppercase_known_value_is_lowercased():
+    issue = MissionGraphReviewIssue(
+        code="X", severity="ERROR", category="component", message="m",
+    )
+    assert project_review_issue(issue)["severity"] == "error"
+
+
+def test_project_severity_empty_string_becomes_warning():
+    issue = MissionGraphReviewIssue(
+        code="X", severity="", category="component", message="m",
+    )
+    assert project_review_issue(issue)["severity"] == "warning"
+
+
+def test_project_severity_unknown_string_preserved_lowercased():
+    issue = MissionGraphReviewIssue(
+        code="X", severity="Critical", category="component", message="m",
+    )
+    # Unknown, non-empty -> preserved (lowercased), NOT remapped to "warning".
+    assert project_review_issue(issue)["severity"] == "critical"
