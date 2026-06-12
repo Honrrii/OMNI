@@ -9,6 +9,10 @@ file.
   Phase 10 **additive** `findings_projection` findings contract: a normalized,
   read-only view layered on top of the existing mission graph and engineering
   gate reports.
+- [Sandbox architecture & contract](contracts/sandbox.md) — the Phase 11 OMNI
+  Sandbox: deterministic check/report chain, projection + export schemas, the
+  controlled command-execution boundary, and its honest "not a security
+  sandbox" limitations.
 
 ## Metrics
 
