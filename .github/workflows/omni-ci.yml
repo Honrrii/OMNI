@@ -38,6 +38,7 @@ jobs:
             openai \
             google-generativeai \
             torch \
+            torchvision \
             numpy \
             PyYAML \
             requests \
