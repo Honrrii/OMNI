@@ -35,6 +35,7 @@ jobs:
             uvicorn \
             pydantic \
             python-dotenv \
+            python-multipart \
             openai \
             google-generativeai \
             torch \
