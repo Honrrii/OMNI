@@ -159,11 +159,47 @@ def test_no_report_contains_findings_keys():
     for name, inputs in (
         ("units_math", {"declared_total_mass_kg": 2.0, "component_masses_kg": [1.0, 1.4]}),
         ("units_math", {}),
+        ("dimensional_consistency", {"quantity": {"dimension": "mass"}, "expected_dimension": "length"}),
+        ("equation_sanity", {"left": "V", "right": "I * R", "values": {"V": 1, "I": 1, "R": 1}}),
+        ("artifact_shape", {"artifact": {"name": "x"}, "required_fields": {"name": "str"}}),
         ("unknown_box", None),
     ):
         out = run_sandbox(name, inputs).to_dict()
         assert "findings" not in out
         assert "findings_projection" not in out
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: runner dispatches each registered check by name
+# ---------------------------------------------------------------------------
+def test_runner_dispatches_dimensional_consistency():
+    out = run_sandbox(
+        "dimensional_consistency",
+        {"quantity": {"name": "x", "dimension": "length"}, "expected_dimension": "length"},
+    ).to_dict()
+    assert out["sandbox"] == "dimensional_consistency"
+    assert out["status"] == "passed"
+
+
+def test_runner_dispatches_equation_sanity():
+    out = run_sandbox(
+        "equation_sanity",
+        {"left": "V", "right": "I * R", "values": {"V": 12, "I": 3, "R": 4}},
+    ).to_dict()
+    assert out["sandbox"] == "equation_sanity"
+    assert out["status"] == "passed"
+
+
+def test_runner_dispatches_artifact_shape():
+    out = run_sandbox(
+        "artifact_shape",
+        {
+            "artifact": {"name": "r", "type": "robot", "mass_kg": 2.4},
+            "required_fields": {"name": "str", "type": "str", "mass_kg": "number"},
+        },
+    ).to_dict()
+    assert out["sandbox"] == "artifact_shape"
+    assert out["status"] == "passed"
 
 
 # ---------------------------------------------------------------------------
