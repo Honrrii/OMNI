@@ -48,6 +48,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Union
 
+from backend.app.sandbox.limited_launcher import (
+    EXIT_APPLY_FAILED,
+    EXIT_BAD_ARGS,
+    EXIT_BAD_POLICY,
+    EXIT_EXEC_FAILED,
+    EXIT_UNSUPPORTED,
+)
 from backend.app.sandbox.resource_policy import (
     ResourceLimits,
     resource_limits_supported,
@@ -61,9 +68,56 @@ _READ_CHUNK = 65536
 # arbitrary caller-provided cwd under the minimal child environment.
 _LAUNCHER_PATH = Path(__file__).resolve().parent / "limited_launcher.py"
 
+# Heuristic mapping from the launcher's reserved positive exit codes to a
+# launcher-error kind. This is HEURISTIC ONLY: a successfully exec'd target can
+# itself exit with one of these values (115-119), so a positive match cannot be
+# proven to come from the launcher rather than the target. It is therefore only
+# consulted when launcher wrapping was actually used, and even then it may
+# misattribute a target's own exit code. A robust out-of-band launcher-status
+# handshake is deferred to Stage 9B-3C-2.
+_LAUNCHER_ERROR_BY_CODE = {
+    EXIT_BAD_ARGS: "bad_launcher_args",
+    EXIT_BAD_POLICY: "invalid_resource_policy",
+    EXIT_UNSUPPORTED: "unsupported_resource_policy",
+    EXIT_APPLY_FAILED: "resource_limit_apply_failed",
+    EXIT_EXEC_FAILED: "target_exec_failed",
+}
+
 
 class ResourceLimitsUnsupportedError(RuntimeError):
     """Raised when a requested resource policy cannot be enforced."""
+
+
+def _classify_resource_outcome(
+    returncode: Optional[int],
+    resource_limits_applied: bool,
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """Classify a child's exit into ``(exceeded, kind, launcher_error)``.
+
+    Only RELIABLE evidence is classified:
+
+    - ``-SIGXCPU`` -> a CPU resource limit was hit -> ``(True, "cpu", None)``.
+    - ``-SIGXFSZ`` -> a file-size limit was hit -> ``(True, "file_size", None)``.
+
+    When (and only when) launcher wrapping was used, a positive return code in
+    the launcher's reserved set is HEURISTICALLY mapped to a launcher-error kind
+    (see ``_LAUNCHER_ERROR_BY_CODE``) — acknowledging it might instead be the
+    target's own exit code.
+
+    Everything else stays unclassified ``(False, None, None)``. In particular
+    ``SIGKILL`` (could be our own timeout/output-cap kill, an OOM kill, or a
+    hard CPU limit after an ignored ``SIGXCPU``), ``SIGSEGV``, exit code ``1``,
+    ``EFBIG`` surfacing as a write error instead of ``SIGXFSZ``, NOFILE-driven
+    failures, and generic nonzero exits are NOT attributed to a resource limit,
+    because the OS evidence does not distinguish them.
+    """
+    if returncode == -signal.SIGXCPU:
+        return True, "cpu", None
+    if returncode == -signal.SIGXFSZ:
+        return True, "file_size", None
+    if resource_limits_applied and returncode in _LAUNCHER_ERROR_BY_CODE:
+        return False, None, _LAUNCHER_ERROR_BY_CODE[returncode]
+    return False, None, None
 
 
 # Minimal, deterministic default environment. The full parent ``os.environ`` is
@@ -101,6 +155,20 @@ class CommandResult:
     output_limit_exceeded: bool = False
     stdout_capture_truncated: bool = False
     stderr_capture_truncated: bool = False
+    # Stage 9B-3C-1 resource-limit / launcher-outcome classification.
+    # ``resource_limits_requested`` echoes ``ResourceLimits.to_dict()`` when a
+    # non-empty policy caused launcher wrapping (else None).
+    # ``resource_limits_applied`` records the parent's known action (wrapping
+    # happened), NOT proof every requested limit succeeded.
+    # ``resource_limit_exceeded``/``resource_limit_kind`` are set only from
+    # reliable signals (SIGXCPU/SIGXFSZ). ``launcher_error`` is a HEURISTIC
+    # mapping from reserved launcher exit codes, consulted only when wrapping was
+    # used (a target can itself exit 115-119); see ``_classify_resource_outcome``.
+    resource_limits_requested: Optional[dict[str, Optional[int]]] = None
+    resource_limits_applied: bool = False
+    resource_limit_exceeded: bool = False
+    resource_limit_kind: Optional[str] = None
+    launcher_error: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Deterministic dict with a fixed key order and a fresh command list."""
@@ -115,6 +183,15 @@ class CommandResult:
             "output_limit_exceeded": self.output_limit_exceeded,
             "stdout_capture_truncated": self.stdout_capture_truncated,
             "stderr_capture_truncated": self.stderr_capture_truncated,
+            "resource_limits_requested": (
+                dict(self.resource_limits_requested)
+                if self.resource_limits_requested is not None
+                else None
+            ),
+            "resource_limits_applied": self.resource_limits_applied,
+            "resource_limit_exceeded": self.resource_limit_exceeded,
+            "resource_limit_kind": self.resource_limit_kind,
+            "launcher_error": self.launcher_error,
         }
 
 
@@ -196,6 +273,11 @@ def _make_result(
     output_limit_exceeded: bool,
     stdout_capture_truncated: bool,
     stderr_capture_truncated: bool,
+    resource_limits_requested: Optional[dict[str, Optional[int]]],
+    resource_limits_applied: bool,
+    resource_limit_exceeded: bool,
+    resource_limit_kind: Optional[str],
+    launcher_error: Optional[str],
 ) -> "CommandResult":
     """Single CommandResult factory so capped/uncapped paths cannot drift."""
     return CommandResult(
@@ -209,6 +291,11 @@ def _make_result(
         output_limit_exceeded=output_limit_exceeded,
         stdout_capture_truncated=stdout_capture_truncated,
         stderr_capture_truncated=stderr_capture_truncated,
+        resource_limits_requested=resource_limits_requested,
+        resource_limits_applied=resource_limits_applied,
+        resource_limit_exceeded=resource_limit_exceeded,
+        resource_limit_kind=resource_limit_kind,
+        launcher_error=launcher_error,
     )
 
 
@@ -262,19 +349,28 @@ def run_command(
     termination) still governs it. A non-empty policy on an unsupported platform
     raises ``ResourceLimitsUnsupportedError`` before spawning; requested limits
     are never silently skipped. The original caller command — not the launcher
-    wrapper — is always echoed in ``CommandResult.command``. Launcher setup
-    failures surface as ordinary nonzero ``returncode`` values for now;
-    classifying them is deferred to a later stage.
+    wrapper — is always echoed in ``CommandResult.command``. Reliable
+    resource-limit terminations (``SIGXCPU``/``SIGXFSZ``) and a HEURISTIC reading
+    of the launcher's reserved exit codes are recorded in the ``resource_*`` /
+    ``launcher_error`` fields (see ``_classify_resource_outcome``); a robust
+    out-of-band launcher-status handshake is deferred to a later stage.
     """
     argv = _validate_command(command)
     _check_allowed(argv, allowed_executables)
     max_output_bytes = _validate_max_output_bytes(max_output_bytes)
-    spawn_argv = _wrap_with_resource_launcher(argv, resource_limits)
+    spawn_argv, wrapped = _wrap_with_resource_launcher(argv, resource_limits)
+    requested = resource_limits.to_dict() if wrapped else None
     effective_env = _effective_env(env)
 
     if max_output_bytes is None:
         return _run_uncapped(
-            spawn_argv, result_argv=argv, cwd=cwd, timeout=timeout, env=effective_env
+            spawn_argv,
+            result_argv=argv,
+            cwd=cwd,
+            timeout=timeout,
+            env=effective_env,
+            resource_limits_requested=requested,
+            resource_limits_applied=wrapped,
         )
     return _run_capped(
         spawn_argv,
@@ -283,38 +379,40 @@ def run_command(
         timeout=timeout,
         env=effective_env,
         max_output_bytes=max_output_bytes,
+        resource_limits_requested=requested,
+        resource_limits_applied=wrapped,
     )
 
 
 def _wrap_with_resource_launcher(
     argv: list[str], resource_limits: Optional[ResourceLimits]
-) -> list[str]:
-    """Return the argv to actually spawn, wrapping with the launcher if needed.
+) -> tuple[list[str], bool]:
+    """Return ``(spawn_argv, wrapped)``: the argv to spawn and whether wrapped.
 
-    ``None`` or an empty policy returns a fresh copy of the original argv (no
+    ``None`` or an empty policy returns ``(fresh copy of argv, False)`` (no
     wrapping, no platform requirement). A non-empty policy on an unsupported
     platform raises ``ResourceLimitsUnsupportedError`` before any spawn — the
     policy is never silently skipped. Otherwise the original argv is wrapped with
-    ``sys.executable <abs launcher> --policy-json <json> -- <argv...>``; the
-    launcher enforces (and fails closed on) the policy, including deferred
-    fields, so the parent does not duplicate that field list.
+    ``sys.executable <abs launcher> --policy-json <json> -- <argv...>`` and
+    ``wrapped`` is True; the launcher enforces (and fails closed on) the policy,
+    including deferred fields, so the parent does not duplicate that field list.
     """
     if resource_limits is None:
-        return list(argv)
+        return list(argv), False
     if not isinstance(resource_limits, ResourceLimits):
         raise TypeError(
             f"resource_limits must be None or a ResourceLimits, "
             f"got {type(resource_limits)!r}."
         )
     if resource_limits.is_empty():
-        return list(argv)
+        return list(argv), False
     if not resource_limits_supported():
         raise ResourceLimitsUnsupportedError(
             "resource limits are not supported on this platform; "
             "refusing to silently skip the requested policy."
         )
     encoded_policy = json.dumps(resource_limits.to_dict(), separators=(",", ":"))
-    return [
+    spawn_argv = [
         sys.executable,
         str(_LAUNCHER_PATH),
         "--policy-json",
@@ -322,6 +420,7 @@ def _wrap_with_resource_launcher(
         "--",
         *argv,
     ]
+    return spawn_argv, True
 
 
 def _run_uncapped(
@@ -331,6 +430,8 @@ def _run_uncapped(
     cwd: Union[str, Path],
     timeout: float,
     env: dict[str, str],
+    resource_limits_requested: Optional[dict[str, Optional[int]]],
+    resource_limits_applied: bool,
 ) -> CommandResult:
     """Original uncapped path: ``subprocess.run`` with full in-memory capture.
 
@@ -349,6 +450,9 @@ def _run_uncapped(
             check=False,
             start_new_session=True,
         )
+        exceeded, kind, launcher_error = _classify_resource_outcome(
+            completed.returncode, resource_limits_applied
+        )
         return _make_result(
             argv=result_argv,
             returncode=completed.returncode,
@@ -360,6 +464,11 @@ def _run_uncapped(
             output_limit_exceeded=False,
             stdout_capture_truncated=False,
             stderr_capture_truncated=False,
+            resource_limits_requested=resource_limits_requested,
+            resource_limits_applied=resource_limits_applied,
+            resource_limit_exceeded=exceeded,
+            resource_limit_kind=kind,
+            launcher_error=launcher_error,
         )
     except subprocess.TimeoutExpired as error:
         # ``subprocess.run`` already kills the direct child on timeout. With
@@ -368,6 +477,8 @@ def _run_uncapped(
         # (A guaranteed group reap would need a lower-level Popen handle, which
         # the uncapped path intentionally does not use.)
         _best_effort_kill_group(getattr(error, "pid", None))
+        # Timeout is the primary outcome; leave resource classification at clear
+        # defaults (the child was killed by us, not by a resource limit).
         return _make_result(
             argv=result_argv,
             returncode=None,
@@ -379,6 +490,11 @@ def _run_uncapped(
             output_limit_exceeded=False,
             stdout_capture_truncated=False,
             stderr_capture_truncated=False,
+            resource_limits_requested=resource_limits_requested,
+            resource_limits_applied=resource_limits_applied,
+            resource_limit_exceeded=False,
+            resource_limit_kind=None,
+            launcher_error=None,
         )
 
 
@@ -390,6 +506,8 @@ def _run_capped(
     timeout: float,
     env: dict[str, str],
     max_output_bytes: int,
+    resource_limits_requested: Optional[dict[str, Optional[int]]],
+    resource_limits_applied: bool,
 ) -> CommandResult:
     """Streaming ``Popen`` path with a per-stream capture-time output cap.
 
@@ -489,6 +607,14 @@ def _run_capped(
 
     returncode = None if timed_out else proc.returncode
 
+    # Classify from the final return code. Our own kills (timeout -> None,
+    # output-cap -> SIGKILL) are not SIGXCPU/SIGXFSZ, so the classifier returns
+    # clear defaults and never mislabels a parent kill as a resource limit;
+    # report precedence keeps timeout/output-limit primary regardless.
+    exceeded, kind, launcher_error = _classify_resource_outcome(
+        returncode, resource_limits_applied
+    )
+
     return _make_result(
         argv=result_argv,
         returncode=returncode,
@@ -500,6 +626,11 @@ def _run_capped(
         output_limit_exceeded=output_limit_exceeded,
         stdout_capture_truncated=truncated["stdout"],
         stderr_capture_truncated=truncated["stderr"],
+        resource_limits_requested=resource_limits_requested,
+        resource_limits_applied=resource_limits_applied,
+        resource_limit_exceeded=exceeded,
+        resource_limit_kind=kind,
+        launcher_error=launcher_error,
     )
 
 
