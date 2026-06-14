@@ -265,6 +265,95 @@ def test_negative_max_output_chars_rejected():
 # ---------------------------------------------------------------------------
 # 17. one harmless real run_command smoke
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Stage 9B-2: capture-time output cap mapping
+# ---------------------------------------------------------------------------
+def _output_limit_result():
+    return CommandResult(
+        command=[sys.executable, "-c", "flood"],
+        returncode=-9,
+        stdout="x" * 100,
+        stderr="",
+        timed_out=False,
+        timeout_seconds=10.0,
+        output_limit_bytes=100,
+        output_limit_exceeded=True,
+        stdout_capture_truncated=True,
+        stderr_capture_truncated=False,
+    )
+
+
+def test_output_limit_exceeded_mapping():
+    report = command_result_to_sandbox_report(_output_limit_result())
+    assert report.status == "completed"
+    check = report.checks[0]
+    assert check.ok is False
+    assert check.severity == "error"
+    assert check.message == "command output limit exceeded"
+    assert check.expected == "0"
+    assert check.actual == "output_limit_exceeded"
+
+
+def test_output_limit_metadata_includes_new_fields():
+    meta = command_result_to_sandbox_report(_output_limit_result()).checks[0].metadata
+    assert meta["output_limit_bytes"] == 100
+    assert meta["output_limit_exceeded"] is True
+    assert meta["stdout_capture_truncated"] is True
+    assert meta["stderr_capture_truncated"] is False
+
+
+def test_timeout_takes_precedence_over_output_limit():
+    # Both flags set -> the report must map to timeout, not output limit.
+    result = CommandResult(
+        command=["x"],
+        returncode=None,
+        stdout="",
+        stderr="",
+        timed_out=True,
+        timeout_seconds=0.5,
+        output_limit_bytes=100,
+        output_limit_exceeded=True,
+        stdout_capture_truncated=True,
+        stderr_capture_truncated=False,
+    )
+    check = command_result_to_sandbox_report(result).checks[0]
+    assert check.severity == "error"
+    assert check.message == "command timed out"
+    assert check.actual == "timeout"
+
+
+def test_capture_truncation_distinct_from_char_truncation():
+    # A run that did NOT exceed the byte cap but is char-truncated in the report.
+    result = CommandResult(
+        command=["x"],
+        returncode=0,
+        stdout="abcdefghij",  # 10 chars
+        stderr="",
+        timed_out=False,
+        timeout_seconds=5.0,
+        output_limit_bytes=1000,
+        output_limit_exceeded=False,
+        stdout_capture_truncated=False,
+        stderr_capture_truncated=False,
+    )
+    meta = command_result_to_sandbox_report(result, max_output_chars=4).checks[0].metadata
+    # Report-level character truncation fired...
+    assert meta["stdout_truncated"] is True
+    # ...but execution-time byte truncation did not. The two are independent.
+    assert meta["stdout_capture_truncated"] is False
+    assert meta["output_limit_exceeded"] is False
+
+
+def test_existing_mappings_carry_uncapped_defaults():
+    # Success/failure/timeout results (no cap) expose uncapped metadata.
+    for factory in (_success_result, _failure_result, _timeout_result):
+        meta = command_result_to_sandbox_report(factory()).checks[0].metadata
+        assert meta["output_limit_bytes"] is None
+        assert meta["output_limit_exceeded"] is False
+        assert meta["stdout_capture_truncated"] is False
+        assert meta["stderr_capture_truncated"] is False
+
+
 def test_real_run_command_smoke(tmp_path):
     result = run_command(
         [sys.executable, "-c", "print('ok')"], cwd=tmp_path, timeout=10

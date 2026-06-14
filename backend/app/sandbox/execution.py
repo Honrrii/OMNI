@@ -18,8 +18,16 @@ Python ``subprocess`` controls do not provide:
 
 Stage 9B added two minimal hardenings without changing the result shape:
 ``stdin`` is always closed (``subprocess.DEVNULL``), and ``run_command`` accepts
-an optional ``allowed_executables`` gate (off by default). A capture-time output
-cap and OS resource limits are deliberately deferred to later stages.
+an optional ``allowed_executables`` gate (off by default).
+
+Stage 9B-2 adds an opt-in capture-time output cap: when ``max_output_bytes`` is
+configured, ``run_command`` switches to a streaming ``subprocess.Popen`` path
+that retains at most ``max_output_bytes`` per stream and kills the process group
+once a stream overflows, instead of buffering all output in memory via
+``subprocess.run(capture_output=True)``. The cap is independent per stream
+(worst-case retained output is ~``2 * max_output_bytes``) and is reported
+separately from timeout. OS resource limits (CPU/memory/rlimits) remain
+deliberately deferred to later stages.
 
 For untrusted code or dangerous external tools, future stages must use real
 isolation (OS rlimits/cgroups, nsjail/firejail, containers, seccomp, network
@@ -30,11 +38,16 @@ or colcon.
 from __future__ import annotations
 
 import os
+import selectors
 import signal
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Union
+
+# Bytes read per pipe wake-up in the capped streaming path.
+_READ_CHUNK = 65536
 
 
 # Minimal, deterministic default environment. The full parent ``os.environ`` is
@@ -62,6 +75,16 @@ class CommandResult:
     stderr: str
     timed_out: bool
     timeout_seconds: float
+    # Stage 9B-2 capture-time output cap (defaults preserve uncapped behavior).
+    # ``output_limit_bytes`` echoes the configured per-stream cap (None when
+    # uncapped). ``output_limit_exceeded`` is True iff a stream overflowed the
+    # cap and the process group was killed. The ``*_capture_truncated`` flags
+    # describe execution-time byte truncation and are distinct from the
+    # report-level character truncation in ``command_report.py``.
+    output_limit_bytes: Optional[int] = None
+    output_limit_exceeded: bool = False
+    stdout_capture_truncated: bool = False
+    stderr_capture_truncated: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Deterministic dict with a fixed key order and a fresh command list."""
@@ -72,6 +95,10 @@ class CommandResult:
             "stderr": self.stderr,
             "timed_out": self.timed_out,
             "timeout_seconds": self.timeout_seconds,
+            "output_limit_bytes": self.output_limit_bytes,
+            "output_limit_exceeded": self.output_limit_exceeded,
+            "stdout_capture_truncated": self.stdout_capture_truncated,
+            "stderr_capture_truncated": self.stderr_capture_truncated,
         }
 
 
@@ -115,12 +142,58 @@ def _check_allowed(argv: list[str], allowed: Optional[Iterable[str]]) -> None:
     )
 
 
+def _validate_max_output_bytes(value: Any) -> Optional[int]:
+    """Validate the optional per-stream output cap before any process spawns.
+
+    ``None`` means uncapped (current behavior). Otherwise the value must be a
+    non-negative integer; ``0`` is valid (the first produced byte overflows).
+    ``bool`` is rejected even though it is an ``int`` subclass.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"max_output_bytes must be None or a non-negative integer, got {type(value)!r}."
+        )
+    if value < 0:
+        raise ValueError("max_output_bytes must be None or a non-negative integer.")
+    return value
+
+
 def _effective_env(env: Optional[dict[str, str]]) -> dict[str, str]:
     """Build the child environment: minimal defaults, caller keys override."""
     effective = dict(_DEFAULT_ENV)
     if env:
         effective.update(env)
     return effective
+
+
+def _make_result(
+    *,
+    argv: list[str],
+    returncode: Optional[int],
+    stdout: str,
+    stderr: str,
+    timed_out: bool,
+    timeout: float,
+    output_limit_bytes: Optional[int],
+    output_limit_exceeded: bool,
+    stdout_capture_truncated: bool,
+    stderr_capture_truncated: bool,
+) -> "CommandResult":
+    """Single CommandResult factory so capped/uncapped paths cannot drift."""
+    return CommandResult(
+        command=argv,
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        timed_out=timed_out,
+        timeout_seconds=float(timeout),
+        output_limit_bytes=output_limit_bytes,
+        output_limit_exceeded=output_limit_exceeded,
+        stdout_capture_truncated=stdout_capture_truncated,
+        stderr_capture_truncated=stderr_capture_truncated,
+    )
 
 
 def _as_text(value: Any) -> str:
@@ -139,6 +212,7 @@ def run_command(
     timeout: float,
     env: Optional[dict[str, str]] = None,
     allowed_executables: Optional[Iterable[str]] = None,
+    max_output_bytes: Optional[int] = None,
 ) -> CommandResult:
     """Run an explicit argv command with ``shell=False`` and an enforced timeout.
 
@@ -153,16 +227,43 @@ def run_command(
     preserving prior behavior). When provided, the command's executable
     (``argv[0]``) must match an allowlist entry exactly or by basename, else a
     ``ValueError`` is raised before any process is spawned.
+
+    ``max_output_bytes`` is an opt-in capture-time output cap (default ``None`` =
+    uncapped, preserving the ``subprocess.run`` path). When configured, a
+    streaming ``subprocess.Popen`` path retains at most ``max_output_bytes`` per
+    stream and kills the process group once a stream overflows. Output-limit
+    exceedance is reported separately from timeout (see the ``output_limit_*``
+    and ``*_capture_truncated`` fields on ``CommandResult``).
     """
     argv = _validate_command(command)
     _check_allowed(argv, allowed_executables)
+    max_output_bytes = _validate_max_output_bytes(max_output_bytes)
     effective_env = _effective_env(env)
 
+    if max_output_bytes is None:
+        return _run_uncapped(argv, cwd=cwd, timeout=timeout, env=effective_env)
+    return _run_capped(
+        argv,
+        cwd=cwd,
+        timeout=timeout,
+        env=effective_env,
+        max_output_bytes=max_output_bytes,
+    )
+
+
+def _run_uncapped(
+    argv: list[str],
+    *,
+    cwd: Union[str, Path],
+    timeout: float,
+    env: dict[str, str],
+) -> CommandResult:
+    """Original uncapped path: ``subprocess.run`` with full in-memory capture."""
     try:
         completed = subprocess.run(
             argv,
             cwd=str(cwd),
-            env=effective_env,
+            env=env,
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
@@ -170,29 +271,154 @@ def run_command(
             check=False,
             start_new_session=True,
         )
-        return CommandResult(
-            command=argv,
+        return _make_result(
+            argv=argv,
             returncode=completed.returncode,
             stdout=_as_text(completed.stdout),
             stderr=_as_text(completed.stderr),
             timed_out=False,
-            timeout_seconds=float(timeout),
+            timeout=timeout,
+            output_limit_bytes=None,
+            output_limit_exceeded=False,
+            stdout_capture_truncated=False,
+            stderr_capture_truncated=False,
         )
     except subprocess.TimeoutExpired as error:
         # ``subprocess.run`` already kills the direct child on timeout. With
         # ``start_new_session=True`` the child leads its own process group, so
         # best-effort terminate the whole group to reduce grandchild leakage.
         # (A guaranteed group reap would need a lower-level Popen handle, which
-        # Stage 5 intentionally does not use.)
+        # the uncapped path intentionally does not use.)
         _best_effort_kill_group(getattr(error, "pid", None))
-        return CommandResult(
-            command=argv,
+        return _make_result(
+            argv=argv,
             returncode=None,
             stdout=_as_text(error.stdout),
             stderr=_as_text(error.stderr),
             timed_out=True,
-            timeout_seconds=float(timeout),
+            timeout=timeout,
+            output_limit_bytes=None,
+            output_limit_exceeded=False,
+            stdout_capture_truncated=False,
+            stderr_capture_truncated=False,
         )
+
+
+def _run_capped(
+    argv: list[str],
+    *,
+    cwd: Union[str, Path],
+    timeout: float,
+    env: dict[str, str],
+    max_output_bytes: int,
+) -> CommandResult:
+    """Streaming ``Popen`` path with a per-stream capture-time output cap.
+
+    stdout and stderr are drained concurrently with a selector over the raw
+    pipe fds, so neither stream can deadlock the other. Each stream retains at
+    most ``max_output_bytes``; reaching exactly the limit is NOT exceedance —
+    the stream's ``*_capture_truncated`` flag is set only once at least one
+    additional byte beyond the retained limit is observed and discarded. On the
+    first overflow the process group is SIGKILLed and remaining output is
+    drained-and-discarded until both pipes close. Timeout is enforced with a
+    monotonic deadline and reported separately via ``timed_out``.
+    """
+    deadline = time.monotonic() + float(timeout)
+    proc = subprocess.Popen(  # noqa: S603 - argv-only, shell=False, confined here
+        argv,
+        cwd=str(cwd),
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    buffers = {"stdout": bytearray(), "stderr": bytearray()}
+    truncated = {"stdout": False, "stderr": False}
+    output_limit_exceeded = False
+    timed_out = False
+    killed = False
+
+    selector = selectors.DefaultSelector()
+    try:
+        selector.register(proc.stdout, selectors.EVENT_READ, "stdout")
+        selector.register(proc.stderr, selectors.EVENT_READ, "stderr")
+        open_streams = 2
+
+        while open_streams > 0:
+            if not killed:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    _best_effort_kill_group(proc.pid)
+                    killed = True
+
+            # Once killed, poll briefly so EOF is observed promptly without
+            # spinning; otherwise block until the deadline.
+            select_timeout = 0.1 if killed else max(0.0, deadline - time.monotonic())
+            events = selector.select(select_timeout)
+            if not events:
+                continue
+
+            for key, _mask in events:
+                stream = key.data
+                data = os.read(key.fd, _READ_CHUNK)
+                if not data:
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                    open_streams -= 1
+                    continue
+
+                buf = buffers[stream]
+                space = max_output_bytes - len(buf)
+                if space > 0:
+                    buf.extend(data[:space])
+                    overflow = len(data) > space
+                else:
+                    overflow = True  # buffer already at cap; any byte overflows
+
+                if overflow and not truncated[stream]:
+                    truncated[stream] = True
+                if overflow and not output_limit_exceeded:
+                    output_limit_exceeded = True
+                    if not killed:
+                        _best_effort_kill_group(proc.pid)
+                        killed = True
+    finally:
+        selector.close()
+        for pipe in (proc.stdout, proc.stderr):
+            try:
+                if pipe is not None and not pipe.closed:
+                    pipe.close()
+            except OSError:
+                pass
+
+    # Reap. If the process is still alive (e.g. it closed its pipes but kept
+    # running), bound the wait by the remaining deadline and treat overrun as a
+    # timeout — keeping timeout enforcement honest without storing elapsed time.
+    if not killed:
+        try:
+            proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _best_effort_kill_group(proc.pid)
+    proc.wait()
+
+    returncode = None if timed_out else proc.returncode
+
+    return _make_result(
+        argv=argv,
+        returncode=returncode,
+        stdout=_as_text(bytes(buffers["stdout"])),
+        stderr=_as_text(bytes(buffers["stderr"])),
+        timed_out=timed_out,
+        timeout=timeout,
+        output_limit_bytes=max_output_bytes,
+        output_limit_exceeded=output_limit_exceeded,
+        stdout_capture_truncated=truncated["stdout"],
+        stderr_capture_truncated=truncated["stderr"],
+    )
 
 
 def _best_effort_kill_group(pid: Optional[int]) -> None:

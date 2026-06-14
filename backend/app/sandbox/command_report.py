@@ -56,12 +56,12 @@ def command_result_to_sandbox_report(
 ) -> SandboxReport:
     """Interpret a ``CommandResult`` as a one-check ``SandboxReport``.
 
-    Outcome mapping:
-    - success (returncode == 0, not timed out) -> ok=True, severity "info",
-      report status "passed".
-    - nonzero exit (not timed out) -> ok=False, severity "warning", status
-      "completed".
+    Outcome mapping (precedence: timeout > output-limit > nonzero > success):
     - timeout -> ok=False, severity "error", status "completed".
+    - output limit exceeded -> ok=False, severity "error", status "completed",
+      actual "output_limit_exceeded" (Stage 9B-2 capture-time cap).
+    - success (returncode == 0) -> ok=True, severity "info", status "passed".
+    - nonzero exit -> ok=False, severity "warning", status "completed".
 
     Deterministic and side-effect free. ``max_output_chars`` (default None)
     optionally truncates stdout/stderr in the metadata with a fixed marker;
@@ -79,13 +79,25 @@ def command_result_to_sandbox_report(
     timeout_seconds = data.get("timeout_seconds")
     stdout = data.get("stdout") or ""
     stderr = data.get("stderr") or ""
+    output_limit_bytes = data.get("output_limit_bytes")
+    output_limit_exceeded = bool(data.get("output_limit_exceeded"))
+    stdout_capture_truncated = bool(data.get("stdout_capture_truncated"))
+    stderr_capture_truncated = bool(data.get("stderr_capture_truncated"))
 
+    # Outcome precedence: timeout > output-limit exceedance > nonzero exit >
+    # success. Timeout wins when both timeout and output-limit flags are set.
     if timed_out:
         ok = False
         severity = "error"
         status = "completed"
         message = "command timed out"
         expected, actual = "0", "timeout"
+    elif output_limit_exceeded:
+        ok = False
+        severity = "error"
+        status = "completed"
+        message = "command output limit exceeded"
+        expected, actual = "0", "output_limit_exceeded"
     elif returncode == 0:
         ok = True
         severity = "info"
@@ -119,8 +131,15 @@ def command_result_to_sandbox_report(
             "stderr": err_text,
             "stdout_len": len(stdout),
             "stderr_len": len(stderr),
+            # Report-level character truncation (post-capture, Stage 6).
             "stdout_truncated": out_truncated,
             "stderr_truncated": err_truncated,
+            # Execution-time byte truncation (Stage 9B-2). Distinct from the
+            # character-level *_truncated flags above.
+            "output_limit_bytes": output_limit_bytes,
+            "output_limit_exceeded": output_limit_exceeded,
+            "stdout_capture_truncated": stdout_capture_truncated,
+            "stderr_capture_truncated": stderr_capture_truncated,
         },
     )
 

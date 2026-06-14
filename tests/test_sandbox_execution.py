@@ -24,6 +24,10 @@ RESULT_KEYS = {
     "stderr",
     "timed_out",
     "timeout_seconds",
+    "output_limit_bytes",
+    "output_limit_exceeded",
+    "stdout_capture_truncated",
+    "stderr_capture_truncated",
 }
 
 EXECUTION_FILE = (
@@ -316,3 +320,163 @@ def test_run_command_signature_has_allowed_executables_and_no_shell():
     params = inspect.signature(run_command).parameters
     assert "allowed_executables" in params
     assert "shell" not in params
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B-2: capture-time per-stream output cap
+# ---------------------------------------------------------------------------
+def _write_bytes_cmd(stream: str, count: int) -> list[str]:
+    # Emit exactly ``count`` raw bytes to the named stream (no trailing newline).
+    return [
+        sys.executable,
+        "-c",
+        f"import sys; sys.{stream}.buffer.write(b'x' * {count})",
+    ]
+
+
+def test_uncapped_default_has_new_fields_defaults(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=10,
+    )
+    assert result.returncode == 0
+    assert "ok" in result.stdout
+    assert result.output_limit_bytes is None
+    assert result.output_limit_exceeded is False
+    assert result.stdout_capture_truncated is False
+    assert result.stderr_capture_truncated is False
+
+
+def test_cap_not_exceeded_retains_full_output(tmp_path):
+    result = run_command(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.buffer.write(b'hello'); "
+            "sys.stderr.buffer.write(b'err')",
+        ],
+        cwd=tmp_path,
+        timeout=10,
+        max_output_bytes=1000,
+    )
+    assert result.returncode == 0
+    assert result.stdout == "hello"
+    assert result.stderr == "err"
+    assert result.output_limit_bytes == 1000
+    assert result.output_limit_exceeded is False
+    assert result.stdout_capture_truncated is False
+    assert result.stderr_capture_truncated is False
+
+
+def test_exact_limit_output_is_not_truncated(tmp_path):
+    # Output byte length exactly equals the limit -> NOT exceedance.
+    result = run_command(
+        _write_bytes_cmd("stdout", 10),
+        cwd=tmp_path,
+        timeout=10,
+        max_output_bytes=10,
+    )
+    assert result.returncode == 0
+    assert len(result.stdout.encode("utf-8")) == 10
+    assert result.output_limit_exceeded is False
+    assert result.stdout_capture_truncated is False
+
+
+def test_stdout_exceeds_limit(tmp_path):
+    result = run_command(
+        _write_bytes_cmd("stdout", 100_000),
+        cwd=tmp_path,
+        timeout=10,
+        max_output_bytes=100,
+    )
+    assert len(result.stdout.encode("utf-8")) <= 100
+    assert result.stdout_capture_truncated is True
+    assert result.output_limit_exceeded is True
+    assert result.timed_out is False
+
+
+def test_stderr_exceeds_limit(tmp_path):
+    result = run_command(
+        _write_bytes_cmd("stderr", 100_000),
+        cwd=tmp_path,
+        timeout=10,
+        max_output_bytes=100,
+    )
+    assert len(result.stderr.encode("utf-8")) <= 100
+    assert result.stderr_capture_truncated is True
+    assert result.output_limit_exceeded is True
+    assert result.timed_out is False
+
+
+def test_zero_byte_limit_retains_nothing(tmp_path):
+    result = run_command(
+        _write_bytes_cmd("stdout", 50),
+        cwd=tmp_path,
+        timeout=10,
+        max_output_bytes=0,
+    )
+    assert result.stdout == ""
+    assert result.output_limit_bytes == 0
+    assert result.output_limit_exceeded is True
+    assert result.stdout_capture_truncated is True
+    assert result.timed_out is False
+
+
+def test_output_limit_distinct_from_timeout(tmp_path):
+    # Fast flood with a generous timeout: the cap fires, not the clock.
+    result = run_command(
+        _write_bytes_cmd("stdout", 1_000_000),
+        cwd=tmp_path,
+        timeout=30,
+        max_output_bytes=100,
+    )
+    assert result.output_limit_exceeded is True
+    assert result.timed_out is False
+
+
+def test_capped_result_is_deterministic(tmp_path):
+    cmd = _write_bytes_cmd("stdout", 1000)
+    first = run_command(cmd, cwd=tmp_path, timeout=10, max_output_bytes=100).to_dict()
+    second = run_command(cmd, cwd=tmp_path, timeout=10, max_output_bytes=100).to_dict()
+    assert first == second
+    assert set(first.keys()) == RESULT_KEYS
+
+
+def test_negative_max_output_bytes_rejected(tmp_path):
+    with pytest.raises(ValueError):
+        run_command(
+            [sys.executable, "-c", "print('x')"],
+            cwd=tmp_path,
+            timeout=10,
+            max_output_bytes=-1,
+        )
+
+
+def test_non_integer_max_output_bytes_rejected(tmp_path):
+    with pytest.raises(TypeError):
+        run_command(
+            [sys.executable, "-c", "print('x')"],
+            cwd=tmp_path,
+            timeout=10,
+            max_output_bytes=1.5,
+        )
+
+
+def test_run_command_signature_has_max_output_bytes():
+    params = inspect.signature(run_command).parameters
+    assert "max_output_bytes" in params
+
+
+def test_allowlist_and_cap_work_together(tmp_path):
+    basename = os.path.basename(sys.executable)
+    result = run_command(
+        [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'ok')"],
+        cwd=tmp_path,
+        timeout=10,
+        allowed_executables=[basename],
+        max_output_bytes=1000,
+    )
+    assert result.returncode == 0
+    assert result.stdout == "ok"
+    assert result.output_limit_exceeded is False

@@ -221,19 +221,20 @@ FORBIDDEN_IMPORTS = (
 EXECUTION_FILE = "execution.py"
 
 # Calls banned in EVERY sandbox file, including execution.py. Note that
-# subprocess.run is deliberately absent here — it is allowed only in
-# execution.py and handled separately below.
+# subprocess.run and subprocess.Popen are deliberately absent here — both are
+# allowed only in execution.py and handled separately below.
 GLOBALLY_FORBIDDEN_CALL_ATTRS = {
     ("os", "system"),
     ("os", "popen"),
-    ("subprocess", "Popen"),
     ("subprocess", "call"),
     ("subprocess", "check_call"),
     ("subprocess", "check_output"),
 }
 
-# subprocess.run is permitted only in EXECUTION_FILE.
+# subprocess.run and subprocess.Popen are permitted only in EXECUTION_FILE.
+# (Popen backs the Stage 9B-2 capture-time output cap; it stays confined here.)
 _SUBPROCESS_RUN = ("subprocess", "run")
+_SUBPROCESS_POPEN = ("subprocess", "Popen")
 
 # subprocess may be imported only in EXECUTION_FILE.
 FORBIDDEN_IMPORT_MODULES = {"subprocess"}
@@ -269,8 +270,10 @@ def test_sandbox_has_no_subprocess_or_shell_execution():
 
     - ``import subprocess`` is allowed ONLY in execution.py.
     - ``subprocess.run`` is allowed ONLY in execution.py.
-    - os.system / os.popen / subprocess.Popen / .call / .check_call /
-      .check_output are banned in EVERY sandbox file, including execution.py.
+    - ``subprocess.Popen`` is allowed ONLY in execution.py (Stage 9B-2
+      capture-time output cap).
+    - os.system / os.popen / subprocess.call / .check_call / .check_output are
+      banned in EVERY sandbox file, including execution.py.
     """
     offenders = []
     for path in _sandbox_py_files():
@@ -294,6 +297,10 @@ def test_sandbox_has_no_subprocess_or_shell_execution():
                     elif call == _SUBPROCESS_RUN and not is_execution_file:
                         offenders.append(
                             f"{path.name}: calls subprocess.run() outside {EXECUTION_FILE}"
+                        )
+                    elif call == _SUBPROCESS_POPEN and not is_execution_file:
+                        offenders.append(
+                            f"{path.name}: calls subprocess.Popen() outside {EXECUTION_FILE}"
                         )
     assert not offenders, (
         "sandbox uses subprocess/shell execution:\n" + "\n".join(offenders)
