@@ -15,13 +15,22 @@ from pathlib import Path
 
 import pytest
 
+import signal
+
 from backend.app.sandbox.execution import (
     CommandResult,
     ResourceLimitsUnsupportedError,
     _LAUNCHER_PATH,
+    _classify_resource_outcome,
     run_command,
 )
-from backend.app.sandbox.limited_launcher import EXIT_UNSUPPORTED
+from backend.app.sandbox.limited_launcher import (
+    EXIT_APPLY_FAILED,
+    EXIT_BAD_ARGS,
+    EXIT_BAD_POLICY,
+    EXIT_EXEC_FAILED,
+    EXIT_UNSUPPORTED,
+)
 from backend.app.sandbox.resource_policy import ResourceLimits
 
 IS_LINUX = sys.platform.startswith("linux")
@@ -40,6 +49,11 @@ RESULT_KEYS = {
     "output_limit_exceeded",
     "stdout_capture_truncated",
     "stderr_capture_truncated",
+    "resource_limits_requested",
+    "resource_limits_applied",
+    "resource_limit_exceeded",
+    "resource_limit_kind",
+    "launcher_error",
 }
 
 EXECUTION_FILE = (
@@ -742,3 +756,169 @@ def test_policy_enabled_run_is_deterministic(tmp_path):
     ).to_dict()
     assert first == second
     assert set(first.keys()) == RESULT_KEYS
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B-3C-1: resource-limit / launcher-outcome classification
+# ---------------------------------------------------------------------------
+# Pure classifier: deterministic, no spawning.
+def test_classify_sigxcpu_is_cpu():
+    assert _classify_resource_outcome(-signal.SIGXCPU, True) == (True, "cpu", None)
+    # Reliable signals are classified regardless of the applied flag.
+    assert _classify_resource_outcome(-signal.SIGXCPU, False) == (True, "cpu", None)
+
+
+def test_classify_sigxfsz_is_file_size():
+    assert _classify_resource_outcome(-signal.SIGXFSZ, True) == (
+        True,
+        "file_size",
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "code, kind",
+    [
+        (EXIT_BAD_ARGS, "bad_launcher_args"),
+        (EXIT_BAD_POLICY, "invalid_resource_policy"),
+        (EXIT_UNSUPPORTED, "unsupported_resource_policy"),
+        (EXIT_APPLY_FAILED, "resource_limit_apply_failed"),
+        (EXIT_EXEC_FAILED, "target_exec_failed"),
+    ],
+)
+def test_classify_launcher_codes_when_applied(code, kind):
+    assert _classify_resource_outcome(code, True) == (False, None, kind)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [EXIT_BAD_ARGS, EXIT_BAD_POLICY, EXIT_UNSUPPORTED, EXIT_APPLY_FAILED, EXIT_EXEC_FAILED],
+)
+def test_classify_launcher_codes_ignored_when_not_applied(code):
+    # Without wrapping, a positive reserved code is the target's own exit code.
+    assert _classify_resource_outcome(code, False) == (False, None, None)
+
+
+def test_classify_success_is_unclassified():
+    assert _classify_resource_outcome(0, True) == (False, None, None)
+
+
+def test_classify_ordinary_nonzero_is_unclassified():
+    assert _classify_resource_outcome(3, True) == (False, None, None)
+
+
+def test_classify_sigkill_is_unclassified():
+    assert _classify_resource_outcome(-signal.SIGKILL, True) == (False, None, None)
+
+
+def test_classify_sigsegv_is_unclassified():
+    assert _classify_resource_outcome(-signal.SIGSEGV, True) == (False, None, None)
+
+
+def test_classify_none_returncode_is_unclassified():
+    assert _classify_resource_outcome(None, True) == (False, None, None)
+
+
+# Execution facts: requested / applied recorded by run_command.
+def test_no_policy_records_no_resource_facts(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"], cwd=tmp_path, timeout=10
+    )
+    assert result.resource_limits_requested is None
+    assert result.resource_limits_applied is False
+    assert result.resource_limit_exceeded is False
+    assert result.resource_limit_kind is None
+    assert result.launcher_error is None
+
+
+def test_all_none_policy_records_no_resource_facts(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=10,
+        resource_limits=_ALL_NONE_POLICY,
+    )
+    assert result.resource_limits_requested is None
+    assert result.resource_limits_applied is False
+
+
+@linux_only
+def test_default_policy_success_records_applied(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == 0
+    assert result.resource_limits_requested == ResourceLimits().to_dict()
+    assert result.resource_limits_applied is True
+    assert result.resource_limit_exceeded is False
+    assert result.resource_limit_kind is None
+    assert result.launcher_error is None
+
+
+@linux_only
+def test_cpu_limit_integration_classifies_cpu(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "while True:\n    pass"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(cpu_seconds=1),
+    )
+    assert result.returncode == -signal.SIGXCPU
+    assert result.resource_limit_exceeded is True
+    assert result.resource_limit_kind == "cpu"
+    assert result.launcher_error is None
+    assert result.resource_limits_applied is True
+
+
+@linux_only
+def test_deferred_policy_classifies_launcher_error(tmp_path):
+    sentinel = tmp_path / "sentinel.txt"
+    result = run_command(
+        [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(address_space_bytes=1_000_000),
+    )
+    assert result.returncode == EXIT_UNSUPPORTED
+    assert result.launcher_error == "unsupported_resource_policy"
+    assert result.resource_limit_exceeded is False
+    assert not sentinel.exists()
+
+
+@linux_only
+def test_timeout_with_policy_preserves_facts_without_resource_classification(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "import time; time.sleep(5)"],
+        cwd=tmp_path,
+        timeout=0.5,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.timed_out is True
+    assert result.returncode is None
+    assert result.resource_limits_applied is True
+    assert result.resource_limits_requested == ResourceLimits().to_dict()
+    # Timeout is the cause; resource classification stays at clear defaults.
+    assert result.resource_limit_exceeded is False
+    assert result.resource_limit_kind is None
+    assert result.launcher_error is None
+
+
+@linux_only
+def test_output_cap_with_policy_preserves_output_facts(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x' * 100000)"],
+        cwd=tmp_path,
+        timeout=30,
+        max_output_bytes=100,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.output_limit_exceeded is True
+    assert result.stdout_capture_truncated is True
+    # Our SIGKILL is not a resource-limit signal; classification stays clean.
+    assert result.resource_limit_exceeded is False
+    assert result.resource_limit_kind is None
+    assert result.launcher_error is None
+    assert result.resource_limits_applied is True

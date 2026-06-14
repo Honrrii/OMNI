@@ -6,6 +6,7 @@ envelope. Deterministic; only one harmless command is ever run.
 """
 
 import ast
+import signal
 import sys
 from pathlib import Path
 
@@ -362,6 +363,238 @@ def test_real_run_command_smoke(tmp_path):
     assert report.status == "passed"
     assert report.checks[0].ok is True
     assert project_sandbox_findings(report) == []
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B-3C-1: resource-limit / launcher-outcome mapping
+# ---------------------------------------------------------------------------
+_REQUESTED = {
+    "cpu_seconds": None,
+    "address_space_bytes": None,
+    "file_size_bytes": None,
+    "open_files": None,
+    "process_count": None,
+    "core_size_bytes": 0,
+}
+
+
+def _launcher_error_result():
+    return CommandResult(
+        command=["x"],
+        returncode=117,
+        stdout="",
+        stderr="",
+        timed_out=False,
+        timeout_seconds=10.0,
+        resource_limits_requested=_REQUESTED,
+        resource_limits_applied=True,
+        resource_limit_exceeded=False,
+        resource_limit_kind=None,
+        launcher_error="unsupported_resource_policy",
+    )
+
+
+def _cpu_limit_result():
+    return CommandResult(
+        command=["x"],
+        returncode=-signal.SIGXCPU,
+        stdout="",
+        stderr="",
+        timed_out=False,
+        timeout_seconds=10.0,
+        resource_limits_requested=_REQUESTED,
+        resource_limits_applied=True,
+        resource_limit_exceeded=True,
+        resource_limit_kind="cpu",
+        launcher_error=None,
+    )
+
+
+def _file_size_result():
+    return CommandResult(
+        command=["x"],
+        returncode=-signal.SIGXFSZ,
+        stdout="",
+        stderr="",
+        timed_out=False,
+        timeout_seconds=10.0,
+        resource_limits_requested=_REQUESTED,
+        resource_limits_applied=True,
+        resource_limit_exceeded=True,
+        resource_limit_kind="file_size",
+        launcher_error=None,
+    )
+
+
+def _applied_success_result():
+    return CommandResult(
+        command=["x"],
+        returncode=0,
+        stdout="ok\n",
+        stderr="",
+        timed_out=False,
+        timeout_seconds=10.0,
+        resource_limits_requested=_REQUESTED,
+        resource_limits_applied=True,
+    )
+
+
+def _ambiguous_nonzero_under_policy():
+    return CommandResult(
+        command=["x"],
+        returncode=3,
+        stdout="",
+        stderr="boom\n",
+        timed_out=False,
+        timeout_seconds=10.0,
+        resource_limits_requested=_REQUESTED,
+        resource_limits_applied=True,
+    )
+
+
+def test_timeout_precedence_over_resource_flags():
+    # Even with launcher_error AND resource_limit_exceeded set, timeout wins.
+    result = CommandResult(
+        command=["x"],
+        returncode=None,
+        stdout="",
+        stderr="",
+        timed_out=True,
+        timeout_seconds=0.5,
+        resource_limits_applied=True,
+        resource_limit_exceeded=True,
+        resource_limit_kind="cpu",
+        launcher_error="unsupported_resource_policy",
+    )
+    check = command_result_to_sandbox_report(result).checks[0]
+    assert check.message == "command timed out"
+    assert check.actual == "timeout"
+
+
+def test_output_cap_precedence_over_resource_flags():
+    result = CommandResult(
+        command=["x"],
+        returncode=-9,
+        stdout="",
+        stderr="",
+        timed_out=False,
+        timeout_seconds=10.0,
+        output_limit_bytes=100,
+        output_limit_exceeded=True,
+        resource_limits_applied=True,
+        resource_limit_exceeded=True,
+        resource_limit_kind="cpu",
+        launcher_error="unsupported_resource_policy",
+    )
+    check = command_result_to_sandbox_report(result).checks[0]
+    assert check.message == "command output limit exceeded"
+    assert check.actual == "output_limit_exceeded"
+
+
+def test_launcher_error_mapping():
+    check = command_result_to_sandbox_report(_launcher_error_result()).checks[0]
+    assert check.ok is False
+    assert check.severity == "error"
+    assert check.message == "resource launcher error: unsupported_resource_policy"
+    assert check.expected == "0"
+    assert check.actual == "launcher_error:unsupported_resource_policy"
+
+
+def test_cpu_limit_mapping():
+    check = command_result_to_sandbox_report(_cpu_limit_result()).checks[0]
+    assert check.ok is False
+    assert check.severity == "error"
+    assert check.message == "command exceeded cpu resource limit"
+    assert check.actual == "resource_limit:cpu"
+
+
+def test_file_size_limit_mapping():
+    check = command_result_to_sandbox_report(_file_size_result()).checks[0]
+    assert check.ok is False
+    assert check.severity == "error"
+    assert check.message == "command exceeded file_size resource limit"
+    assert check.actual == "resource_limit:file_size"
+
+
+def test_applied_success_remains_passed():
+    report = command_result_to_sandbox_report(_applied_success_result())
+    assert report.status == "passed"
+    check = report.checks[0]
+    assert check.ok is True
+    assert check.severity == "info"
+    assert check.metadata["resource_limits_applied"] is True
+
+
+def test_ambiguous_nonzero_under_policy_remains_warning():
+    check = command_result_to_sandbox_report(
+        _ambiguous_nonzero_under_policy()
+    ).checks[0]
+    # Not claimed to be a resource limit — ordinary nonzero warning.
+    assert check.ok is False
+    assert check.severity == "warning"
+    assert check.message == "command exited with nonzero status"
+    assert check.actual == "3"
+    assert check.metadata["resource_limits_applied"] is True
+    assert check.metadata["resource_limit_exceeded"] is False
+    assert check.metadata["launcher_error"] is None
+
+
+def test_metadata_contains_resource_fields():
+    meta = command_result_to_sandbox_report(_cpu_limit_result()).checks[0].metadata
+    assert meta["resource_limits_requested"] == _REQUESTED
+    assert meta["resource_limits_applied"] is True
+    assert meta["resource_limit_exceeded"] is True
+    assert meta["resource_limit_kind"] == "cpu"
+    assert meta["launcher_error"] is None
+
+
+def test_applied_success_projects_to_no_findings():
+    report = command_result_to_sandbox_report(_applied_success_result())
+    assert project_sandbox_findings(report) == []
+    assert build_sandbox_findings_projection(report)["count"] == 0
+
+
+def test_cpu_failure_projects_to_one_error_finding():
+    report = command_result_to_sandbox_report(_cpu_limit_result())
+    findings = project_sandbox_findings(report)
+    assert len(findings) == 1
+    assert findings[0]["severity"] == "error"
+    env = build_sandbox_findings_projection(report)
+    assert env["count"] == len(env["items"]) == 1
+
+
+def test_launcher_error_projects_to_one_error_finding():
+    report = command_result_to_sandbox_report(_launcher_error_result())
+    findings = project_sandbox_findings(report)
+    assert len(findings) == 1
+    assert findings[0]["severity"] == "error"
+    assert build_sandbox_findings_projection(report)["count"] == 1
+
+
+def test_resource_mapping_does_not_mutate_report():
+    report = command_result_to_sandbox_report(_cpu_limit_result())
+    before = report.to_dict()
+    project_sandbox_findings(report)
+    build_sandbox_findings_projection(report)
+    assert report.to_dict() == before
+
+
+def test_existing_mappings_keep_resource_defaults():
+    # Pre-9B-3C results (no resource fields) expose defaulted resource metadata
+    # and unchanged outcomes.
+    for factory, status in (
+        (_success_result, "passed"),
+        (_failure_result, "completed"),
+        (_timeout_result, "completed"),
+    ):
+        report = command_result_to_sandbox_report(factory())
+        assert report.status == status
+        meta = report.checks[0].metadata
+        assert meta["resource_limits_requested"] is None
+        assert meta["resource_limits_applied"] is False
+        assert meta["resource_limit_exceeded"] is False
+        assert meta["resource_limit_kind"] is None
+        assert meta["launcher_error"] is None
 
 
 # ---------------------------------------------------------------------------
