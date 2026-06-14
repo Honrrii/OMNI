@@ -37,17 +37,33 @@ or colcon.
 """
 from __future__ import annotations
 
+import json
 import os
 import selectors
 import signal
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Union
 
+from backend.app.sandbox.resource_policy import (
+    ResourceLimits,
+    resource_limits_supported,
+)
+
 # Bytes read per pipe wake-up in the capped streaming path.
 _READ_CHUNK = 65536
+
+# Absolute path to the standalone resource-limit launcher (Phase 11 Stage
+# 9B-3B-1). Resolved once, beside this module, so it is reachable from an
+# arbitrary caller-provided cwd under the minimal child environment.
+_LAUNCHER_PATH = Path(__file__).resolve().parent / "limited_launcher.py"
+
+
+class ResourceLimitsUnsupportedError(RuntimeError):
+    """Raised when a requested resource policy cannot be enforced."""
 
 
 # Minimal, deterministic default environment. The full parent ``os.environ`` is
@@ -213,6 +229,7 @@ def run_command(
     env: Optional[dict[str, str]] = None,
     allowed_executables: Optional[Iterable[str]] = None,
     max_output_bytes: Optional[int] = None,
+    resource_limits: Optional[ResourceLimits] = None,
 ) -> CommandResult:
     """Run an explicit argv command with ``shell=False`` and an enforced timeout.
 
@@ -234,16 +251,34 @@ def run_command(
     stream and kills the process group once a stream overflows. Output-limit
     exceedance is reported separately from timeout (see the ``output_limit_*``
     and ``*_capture_truncated`` fields on ``CommandResult``).
+
+    ``resource_limits`` is an opt-in OS resource policy (default ``None`` = no
+    limits, preserving prior behavior). ``None`` and an empty policy never wrap.
+    A non-empty policy on a Linux platform wraps the original command with the
+    standalone launcher (``limited_launcher.py``), which applies the limits to
+    itself and then ``execvp``-replaces itself with the real command — so the
+    tool inherits the limits in the same PID/session group and every existing
+    control (allowlist, stdin, env, cwd, timeout, output cap, process-group
+    termination) still governs it. A non-empty policy on an unsupported platform
+    raises ``ResourceLimitsUnsupportedError`` before spawning; requested limits
+    are never silently skipped. The original caller command — not the launcher
+    wrapper — is always echoed in ``CommandResult.command``. Launcher setup
+    failures surface as ordinary nonzero ``returncode`` values for now;
+    classifying them is deferred to a later stage.
     """
     argv = _validate_command(command)
     _check_allowed(argv, allowed_executables)
     max_output_bytes = _validate_max_output_bytes(max_output_bytes)
+    spawn_argv = _wrap_with_resource_launcher(argv, resource_limits)
     effective_env = _effective_env(env)
 
     if max_output_bytes is None:
-        return _run_uncapped(argv, cwd=cwd, timeout=timeout, env=effective_env)
+        return _run_uncapped(
+            spawn_argv, result_argv=argv, cwd=cwd, timeout=timeout, env=effective_env
+        )
     return _run_capped(
-        argv,
+        spawn_argv,
+        result_argv=argv,
         cwd=cwd,
         timeout=timeout,
         env=effective_env,
@@ -251,17 +286,60 @@ def run_command(
     )
 
 
+def _wrap_with_resource_launcher(
+    argv: list[str], resource_limits: Optional[ResourceLimits]
+) -> list[str]:
+    """Return the argv to actually spawn, wrapping with the launcher if needed.
+
+    ``None`` or an empty policy returns a fresh copy of the original argv (no
+    wrapping, no platform requirement). A non-empty policy on an unsupported
+    platform raises ``ResourceLimitsUnsupportedError`` before any spawn — the
+    policy is never silently skipped. Otherwise the original argv is wrapped with
+    ``sys.executable <abs launcher> --policy-json <json> -- <argv...>``; the
+    launcher enforces (and fails closed on) the policy, including deferred
+    fields, so the parent does not duplicate that field list.
+    """
+    if resource_limits is None:
+        return list(argv)
+    if not isinstance(resource_limits, ResourceLimits):
+        raise TypeError(
+            f"resource_limits must be None or a ResourceLimits, "
+            f"got {type(resource_limits)!r}."
+        )
+    if resource_limits.is_empty():
+        return list(argv)
+    if not resource_limits_supported():
+        raise ResourceLimitsUnsupportedError(
+            "resource limits are not supported on this platform; "
+            "refusing to silently skip the requested policy."
+        )
+    encoded_policy = json.dumps(resource_limits.to_dict(), separators=(",", ":"))
+    return [
+        sys.executable,
+        str(_LAUNCHER_PATH),
+        "--policy-json",
+        encoded_policy,
+        "--",
+        *argv,
+    ]
+
+
 def _run_uncapped(
-    argv: list[str],
+    spawn_argv: list[str],
     *,
+    result_argv: list[str],
     cwd: Union[str, Path],
     timeout: float,
     env: dict[str, str],
 ) -> CommandResult:
-    """Original uncapped path: ``subprocess.run`` with full in-memory capture."""
+    """Original uncapped path: ``subprocess.run`` with full in-memory capture.
+
+    ``spawn_argv`` is what is actually executed (possibly the launcher wrapper);
+    ``result_argv`` is the original caller command echoed in the result.
+    """
     try:
         completed = subprocess.run(
-            argv,
+            spawn_argv,
             cwd=str(cwd),
             env=env,
             stdin=subprocess.DEVNULL,
@@ -272,7 +350,7 @@ def _run_uncapped(
             start_new_session=True,
         )
         return _make_result(
-            argv=argv,
+            argv=result_argv,
             returncode=completed.returncode,
             stdout=_as_text(completed.stdout),
             stderr=_as_text(completed.stderr),
@@ -291,7 +369,7 @@ def _run_uncapped(
         # the uncapped path intentionally does not use.)
         _best_effort_kill_group(getattr(error, "pid", None))
         return _make_result(
-            argv=argv,
+            argv=result_argv,
             returncode=None,
             stdout=_as_text(error.stdout),
             stderr=_as_text(error.stderr),
@@ -305,14 +383,18 @@ def _run_uncapped(
 
 
 def _run_capped(
-    argv: list[str],
+    spawn_argv: list[str],
     *,
+    result_argv: list[str],
     cwd: Union[str, Path],
     timeout: float,
     env: dict[str, str],
     max_output_bytes: int,
 ) -> CommandResult:
     """Streaming ``Popen`` path with a per-stream capture-time output cap.
+
+    ``spawn_argv`` is what is actually executed (possibly the launcher wrapper);
+    ``result_argv`` is the original caller command echoed in the result.
 
     stdout and stderr are drained concurrently with a selector over the raw
     pipe fds, so neither stream can deadlock the other. Each stream retains at
@@ -325,7 +407,7 @@ def _run_capped(
     """
     deadline = time.monotonic() + float(timeout)
     proc = subprocess.Popen(  # noqa: S603 - argv-only, shell=False, confined here
-        argv,
+        spawn_argv,
         cwd=str(cwd),
         env=env,
         stdin=subprocess.DEVNULL,
@@ -408,7 +490,7 @@ def _run_capped(
     returncode = None if timed_out else proc.returncode
 
     return _make_result(
-        argv=argv,
+        argv=result_argv,
         returncode=returncode,
         stdout=_as_text(bytes(buffers["stdout"])),
         stderr=_as_text(bytes(buffers["stderr"])),

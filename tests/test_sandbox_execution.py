@@ -15,7 +15,19 @@ from pathlib import Path
 
 import pytest
 
-from backend.app.sandbox.execution import CommandResult, run_command
+from backend.app.sandbox.execution import (
+    CommandResult,
+    ResourceLimitsUnsupportedError,
+    _LAUNCHER_PATH,
+    run_command,
+)
+from backend.app.sandbox.limited_launcher import EXIT_UNSUPPORTED
+from backend.app.sandbox.resource_policy import ResourceLimits
+
+IS_LINUX = sys.platform.startswith("linux")
+linux_only = pytest.mark.skipif(
+    not IS_LINUX, reason="resource-limit enforcement is Linux-only"
+)
 
 RESULT_KEYS = {
     "command",
@@ -480,3 +492,253 @@ def test_allowlist_and_cap_work_together(tmp_path):
     assert result.returncode == 0
     assert result.stdout == "ok"
     assert result.output_limit_exceeded is False
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B-3B-2: resource-limit launcher integration
+# ---------------------------------------------------------------------------
+_ALL_NONE_POLICY = ResourceLimits(
+    cpu_seconds=None,
+    address_space_bytes=None,
+    file_size_bytes=None,
+    open_files=None,
+    process_count=None,
+    core_size_bytes=None,
+)
+
+
+def _getrlimit_cmd(const_name: str) -> list[str]:
+    return [
+        sys.executable,
+        "-c",
+        f"import resource; print(resource.getrlimit(resource.{const_name}))",
+    ]
+
+
+# 1. no policy -> existing behavior, original command echoed
+def test_resource_limits_none_preserves_behavior(tmp_path):
+    cmd = [sys.executable, "-c", "print('ok')"]
+    result = run_command(cmd, cwd=tmp_path, timeout=10, resource_limits=None)
+    assert result.returncode == 0
+    assert "ok" in result.stdout
+    assert result.command == cmd
+
+
+# 2. all-None policy is empty -> no wrapping, no platform requirement
+def test_all_none_policy_does_not_wrap_or_require_support(tmp_path, monkeypatch):
+    import backend.app.sandbox.execution as execution_module
+
+    # Even if the platform reports unsupported, an empty policy must still run
+    # (it never reaches the launcher / platform gate).
+    monkeypatch.setattr(execution_module, "resource_limits_supported", lambda: False)
+    assert _ALL_NONE_POLICY.is_empty() is True
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=10,
+        resource_limits=_ALL_NONE_POLICY,
+    )
+    assert result.returncode == 0
+    assert "ok" in result.stdout
+
+
+# 3. invalid policy type -> TypeError before any spawn
+@pytest.mark.parametrize("bad", ["policy", {"cpu_seconds": 1}, 5, object()])
+def test_invalid_resource_limits_type_rejected(tmp_path, bad):
+    sentinel = tmp_path / "sentinel.txt"
+    with pytest.raises(TypeError):
+        run_command(
+            [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
+            cwd=tmp_path,
+            timeout=10,
+            resource_limits=bad,
+        )
+    assert not sentinel.exists()
+
+
+# 4. default ResourceLimits() wraps and applies RLIMIT_CORE=(0, 0)
+@linux_only
+def test_default_policy_applies_core_zero(tmp_path):
+    result = run_command(
+        _getrlimit_cmd("RLIMIT_CORE"),
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == 0
+    assert "(0, 0)" in result.stdout
+
+
+# 5. original allowlist permits the original executable with a policy
+@linux_only
+def test_allowlist_permits_original_executable_with_policy(tmp_path):
+    basename = os.path.basename(sys.executable)
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=30,
+        allowed_executables=[basename],
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == 0
+    assert "ok" in result.stdout
+
+
+# 6. original allowlist rejects before wrapping; no child/launcher runs
+def test_allowlist_rejects_original_before_wrapping(tmp_path):
+    sentinel = tmp_path / "sentinel.txt"
+    with pytest.raises(ValueError):
+        run_command(
+            [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
+            cwd=tmp_path,
+            timeout=10,
+            allowed_executables=["definitely-not-this-binary"],
+            resource_limits=ResourceLimits(),
+        )
+    assert not sentinel.exists()
+
+
+# 7. original command identity is preserved (no wrapper leakage)
+@linux_only
+def test_command_echo_is_original_not_wrapper(tmp_path):
+    cmd = [sys.executable, "-c", "print('hi')"]
+    result = run_command(
+        cmd, cwd=tmp_path, timeout=30, resource_limits=ResourceLimits()
+    )
+    assert result.command == cmd
+    flat = " ".join(result.command)
+    assert str(_LAUNCHER_PATH) not in flat
+    assert "--policy-json" not in result.command
+    assert "core_size_bytes" not in flat
+
+
+# 8. uncapped path with a policy succeeds (harmless limit applied)
+@linux_only
+def test_uncapped_path_with_policy(tmp_path):
+    result = run_command(
+        _getrlimit_cmd("RLIMIT_NOFILE"),
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(open_files=256),
+    )
+    assert result.returncode == 0
+    assert "(256, 256)" in result.stdout
+
+
+# 9. capped path with a policy still caps flooding output
+@linux_only
+def test_capped_path_with_policy_truncates(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x' * 100000)"],
+        cwd=tmp_path,
+        timeout=30,
+        max_output_bytes=100,
+        resource_limits=ResourceLimits(),
+    )
+    assert len(result.stdout.encode("utf-8")) <= 100
+    assert result.stdout_capture_truncated is True
+    assert result.output_limit_exceeded is True
+
+
+# 10. timeout still fires with the launcher in the path
+@linux_only
+def test_timeout_with_policy(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "import time; time.sleep(5)"],
+        cwd=tmp_path,
+        timeout=0.5,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.timed_out is True
+    assert result.returncode is None
+
+
+# 11. arbitrary tmp_path cwd: launcher reachable, child sees the cwd
+@linux_only
+def test_policy_run_from_arbitrary_cwd(tmp_path):
+    result = run_command(
+        [sys.executable, "-c", "import os; print(os.getcwd())"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == str(tmp_path)
+
+
+# 12. unsupported platform fails closed before spawn
+def test_unsupported_platform_fails_closed(tmp_path, monkeypatch):
+    import backend.app.sandbox.execution as execution_module
+
+    monkeypatch.setattr(execution_module, "resource_limits_supported", lambda: False)
+    sentinel = tmp_path / "sentinel.txt"
+    with pytest.raises(ResourceLimitsUnsupportedError):
+        run_command(
+            [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
+            cwd=tmp_path,
+            timeout=10,
+            resource_limits=ResourceLimits(),
+        )
+    assert not sentinel.exists()
+
+
+# 13. deferred address_space_bytes -> launcher fails closed, target never runs
+@linux_only
+def test_deferred_address_space_fails_closed(tmp_path):
+    sentinel = tmp_path / "sentinel.txt"
+    result = run_command(
+        [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(address_space_bytes=1_000_000),
+    )
+    assert result.returncode == EXIT_UNSUPPORTED
+    assert not sentinel.exists()
+
+
+# 14. deferred process_count -> same fail-closed behavior
+@linux_only
+def test_deferred_process_count_fails_closed(tmp_path):
+    sentinel = tmp_path / "sentinel.txt"
+    result = run_command(
+        [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(process_count=8),
+    )
+    assert result.returncode == EXIT_UNSUPPORTED
+    assert not sentinel.exists()
+
+
+# 15. launcher path is absolute and present
+def test_launcher_path_is_absolute_and_exists():
+    assert _LAUNCHER_PATH.is_absolute()
+    assert _LAUNCHER_PATH.exists()
+
+
+# 16. signature includes resource_limits
+def test_run_command_signature_has_resource_limits():
+    params = inspect.signature(run_command).parameters
+    assert "resource_limits" in params
+
+
+# 17. CommandResult field set is unchanged by this stage
+def test_command_result_field_set_unchanged():
+    import dataclasses
+
+    field_names = {f.name for f in dataclasses.fields(CommandResult)}
+    assert field_names == RESULT_KEYS
+
+
+# 18. determinism for identical harmless policy-enabled runs
+@linux_only
+def test_policy_enabled_run_is_deterministic(tmp_path):
+    cmd = _getrlimit_cmd("RLIMIT_CORE")
+    first = run_command(
+        cmd, cwd=tmp_path, timeout=30, resource_limits=ResourceLimits()
+    ).to_dict()
+    second = run_command(
+        cmd, cwd=tmp_path, timeout=30, resource_limits=ResourceLimits()
+    ).to_dict()
+    assert first == second
+    assert set(first.keys()) == RESULT_KEYS
