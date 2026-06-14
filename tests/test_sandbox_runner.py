@@ -220,6 +220,12 @@ FORBIDDEN_IMPORTS = (
 # subprocess.run. Every other sandbox file remains subprocess-free.
 EXECUTION_FILE = "execution.py"
 
+# The standalone resource-limit launcher (Phase 11 Stage 9B-3B-1) is the ONLY
+# file allowed to import ``resource`` and to call ``os.exec*``. It must remain
+# subprocess-free (covered by the subprocess rules, since it is not the
+# execution file).
+LAUNCHER_FILE = "limited_launcher.py"
+
 # Calls banned in EVERY sandbox file, including execution.py. Note that
 # subprocess.run and subprocess.Popen are deliberately absent here — both are
 # allowed only in execution.py and handled separately below.
@@ -304,6 +310,43 @@ def test_sandbox_has_no_subprocess_or_shell_execution():
                         )
     assert not offenders, (
         "sandbox uses subprocess/shell execution:\n" + "\n".join(offenders)
+    )
+
+
+def test_resource_import_confined_to_launcher():
+    """``import resource`` is allowed ONLY in limited_launcher.py."""
+    offenders = []
+    for path in _sandbox_py_files():
+        is_launcher = path.name == LAUNCHER_FILE
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for name in _imported_names(tree):
+            if name.split(".")[0] == "resource" and not is_launcher:
+                offenders.append(f"{path.name}: imports {name}")
+    assert not offenders, (
+        "resource imported outside the launcher:\n" + "\n".join(offenders)
+    )
+
+
+def test_os_exec_confined_to_launcher():
+    """``os.exec*`` may be called ONLY in limited_launcher.py."""
+    offenders = []
+    for path in _sandbox_py_files():
+        is_launcher = path.name == LAUNCHER_FILE
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                value = node.func.value
+                if (
+                    isinstance(value, ast.Name)
+                    and value.id == "os"
+                    and node.func.attr.startswith("exec")
+                    and not is_launcher
+                ):
+                    offenders.append(
+                        f"{path.name}: calls os.{node.func.attr}() outside {LAUNCHER_FILE}"
+                    )
+    assert not offenders, (
+        "os.exec* called outside the launcher:\n" + "\n".join(offenders)
     )
 
 
