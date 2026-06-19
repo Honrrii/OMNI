@@ -62,8 +62,9 @@ def command_result_to_sandbox_report(
     - output limit exceeded -> ok=False, severity "error", status "completed",
       actual "output_limit_exceeded" (Stage 9B-2 capture-time cap).
     - launcher error -> ok=False, severity "error", status "completed",
-      actual "launcher_error:<kind>" (Stage 9B-3C-1; heuristic — a target can
-      itself exit the launcher's reserved codes).
+      actual "launcher_error:<kind>" (Stage 9B-3C-2; AUTHORITATIVE — reported by
+      the launcher's dedicated out-of-band status channel, not inferred from the
+      return code, so a target that exits a reserved code is not misattributed).
     - resource-limit termination -> ok=False, severity "error", status
       "completed", actual "resource_limit:<kind>" (reliable SIGXCPU/SIGXFSZ).
     - success (returncode == 0) -> ok=True, severity "info", status "passed".
@@ -100,9 +101,10 @@ def command_result_to_sandbox_report(
     # Outcome precedence: timeout > output-limit exceedance > launcher setup
     # failure > reliably-identified resource-limit termination > success >
     # ordinary nonzero exit. Parent-initiated kills (timeout, output cap) win
-    # because the parent KNOWS it caused them. A launcher error and a resource
-    # termination are mutually exclusive by return-code sign (positive reserved
-    # code vs negative signal), so their relative order is only nominal.
+    # because the parent KNOWS it caused them. A launcher error (reported
+    # authoritatively via the out-of-band status channel before the target ever
+    # runs) and a resource termination (a target killed by SIGXCPU/SIGXFSZ) are
+    # mutually exclusive in practice, so their relative order is only nominal.
     if timed_out:
         ok = False
         severity = "error"
@@ -169,8 +171,9 @@ def command_result_to_sandbox_report(
             "output_limit_exceeded": output_limit_exceeded,
             "stdout_capture_truncated": stdout_capture_truncated,
             "stderr_capture_truncated": stderr_capture_truncated,
-            # Resource-limit / launcher-outcome classification (Stage 9B-3C-1).
-            # ``launcher_error`` is heuristic (a target can itself exit 115-119).
+            # Resource-limit / launcher-outcome classification (Stage 9B-3C-2).
+            # ``launcher_error`` is authoritative — sourced from the launcher's
+            # dedicated out-of-band status channel, not the process return code.
             "resource_limits_requested": resource_limits_requested,
             "resource_limits_applied": resource_limits_applied,
             "resource_limit_exceeded": resource_limit_exceeded,

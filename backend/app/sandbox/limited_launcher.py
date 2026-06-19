@@ -30,6 +30,22 @@ DESIGN NOTES:
 - Setup failures occur strictly before ``execvp`` and exit with reserved codes,
   so the target never starts on a setup error.
 
+OUT-OF-BAND STATUS HANDSHAKE (Phase 11 Stage 9B-3C-2):
+When the parent passes an optional ``--status-fd <int>`` (an inherited write end
+of a dedicated pipe, never stdout/stderr), this launcher reports its own outcome
+through that fd so the parent never has to guess from the process return code:
+
+- On ANY launcher-owned failure (bad args, bad/invalid policy, unsupported
+  policy, failed limit application, failed ``execvp``) it writes a single
+  deterministic ASCII token (see ``STATUS_*``) to the status fd before exiting
+  with the matching reserved code.
+- Immediately before ``os.execvp`` it marks the status fd close-on-exec, so a
+  SUCCESSFUL exec closes it automatically — the parent then reads EOF with no
+  payload (success) and the exec'd target never inherits the descriptor.
+
+``--status-fd`` is OPTIONAL: omitting it preserves the original standalone
+reserved-exit-code behavior for direct invocation and existing tests.
+
 HONEST SECURITY NOTE — this is NOT a full security sandbox. Resource limits bound
 CPU/memory/file-size/fd quotas; they provide no filesystem jail, no network
 isolation, no seccomp/cgroups/container isolation, and no protection from
@@ -53,6 +69,22 @@ EXIT_BAD_POLICY = 118
 EXIT_UNSUPPORTED = 117
 EXIT_APPLY_FAILED = 116
 EXIT_EXEC_FAILED = 115
+
+
+# Deterministic ASCII status tokens written to the optional ``--status-fd`` pipe
+# (Stage 9B-3C-2). Each maps one-to-one to a reserved exit code above and to the
+# parent's ``launcher_error`` name, so a launcher failure is reported out-of-band
+# and is never confused with a target's own exit code. A successful ``execvp``
+# writes NOTHING (the fd is closed-on-exec -> parent reads EOF).
+STATUS_BAD_ARGS = "bad_launcher_args"
+STATUS_BAD_POLICY = "invalid_resource_policy"
+STATUS_UNSUPPORTED = "unsupported_resource_policy"
+STATUS_APPLY_FAILED = "resource_limit_apply_failed"
+STATUS_EXEC_FAILED = "launcher_exec_failed"
+# Emitted when the launcher cannot safely complete the status handshake itself
+# (e.g. it fails to make the status fd close-on-exec before execvp). Reported as
+# an authoritative launcher error; the target is never started in this case.
+STATUS_PROTOCOL_ERROR = "launcher_status_protocol_error"
 
 
 # The exact policy field set, duplicated from ``ResourceLimits`` on purpose: this
@@ -82,6 +114,43 @@ class LauncherPolicyError(Exception):
 
 class LauncherUnsupportedError(Exception):
     """Platform/limit not supported in this stage -> EXIT_UNSUPPORTED."""
+
+
+def extract_status_fd(argv):
+    """Split an optional leading ``--status-fd <int>`` off ``argv``.
+
+    Returns ``(status_fd, rest)`` where ``status_fd`` is ``None`` when the flag
+    is absent (standalone/back-compat mode) or a non-negative integer otherwise.
+    ``rest`` is the remaining argv to hand to ``parse_args``. Raises
+    ``LauncherArgsError`` if the flag is present but malformed.
+    """
+    if argv and argv[0] == "--status-fd":
+        if len(argv) < 2:
+            raise LauncherArgsError("missing value for '--status-fd'.")
+        try:
+            status_fd = int(argv[1])
+        except (TypeError, ValueError):
+            raise LauncherArgsError("'--status-fd' value must be an integer.")
+        if status_fd < 0:
+            raise LauncherArgsError("'--status-fd' must be a non-negative integer.")
+        return status_fd, argv[2:]
+    return None, argv
+
+
+def _emit_status(status_fd, token):
+    """Best-effort single-token write to the parent's status pipe; never raise.
+
+    Called only on a launcher-owned failure path, before exiting with the
+    matching reserved code. A successful ``execvp`` writes nothing.
+    """
+    if status_fd is None:
+        return
+    try:
+        os.write(status_fd, token.encode("ascii"))
+    except OSError:
+        # The parent already closed/abandoned the pipe — the reserved exit code
+        # remains the fallback signal. Never let status reporting mask the error.
+        pass
 
 
 def parse_args(argv):
@@ -222,31 +291,60 @@ def main(argv):
 
     On success ``execvp`` replaces this process and never returns. Setup
     failures occur before ``execvp`` and return a reserved exit code, so the
-    target never starts on a setup error.
+    target never starts on a setup error. When an optional ``--status-fd`` is
+    supplied, each launcher-owned failure also writes its matching ``STATUS_*``
+    token to that pipe before returning, and a successful ``execvp`` closes the
+    fd (close-on-exec) so the parent reads EOF with no payload.
     """
+    # The status fd is extracted first so every later failure can report on it.
+    # A malformed ``--status-fd`` cannot be trusted as a writable fd, so that
+    # one failure is signalled by the reserved exit code alone.
     try:
-        policy_json, command = parse_args(argv)
+        status_fd, rest = extract_status_fd(argv)
     except LauncherArgsError:
+        return EXIT_BAD_ARGS
+
+    try:
+        policy_json, command = parse_args(rest)
+    except LauncherArgsError:
+        _emit_status(status_fd, STATUS_BAD_ARGS)
         return EXIT_BAD_ARGS
 
     try:
         policy = parse_policy(policy_json)
     except LauncherPolicyError:
+        _emit_status(status_fd, STATUS_BAD_POLICY)
         return EXIT_BAD_POLICY
 
     try:
         settings = build_rlimit_settings(policy)
     except LauncherUnsupportedError:
+        _emit_status(status_fd, STATUS_UNSUPPORTED)
         return EXIT_UNSUPPORTED
 
     try:
         apply_limits(settings)
     except Exception:
+        _emit_status(status_fd, STATUS_APPLY_FAILED)
         return EXIT_APPLY_FAILED
+
+    # Mark the status fd close-on-exec so a SUCCESSFUL execvp closes it
+    # automatically (parent sees EOF, no payload) and the target never inherits
+    # it. The fd stays open in THIS process, so the exec-failure path below can
+    # still write its token. If we CANNOT make it close-on-exec we must fail
+    # closed: the target could otherwise inherit the status fd and corrupt the
+    # handshake, so we report a protocol error and never start the target.
+    if status_fd is not None:
+        try:
+            os.set_inheritable(status_fd, False)
+        except OSError:
+            _emit_status(status_fd, STATUS_PROTOCOL_ERROR)
+            return EXIT_EXEC_FAILED
 
     try:
         os.execvp(command[0], command)
     except OSError:
+        _emit_status(status_fd, STATUS_EXEC_FAILED)
         return EXIT_EXEC_FAILED
     # execvp does not return on success; this is unreachable in practice.
     return EXIT_EXEC_FAILED  # pragma: no cover
