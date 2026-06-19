@@ -9,6 +9,7 @@ inherited ``PYTHONPATH`` — proving the standalone-by-path design.
 """
 
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -23,10 +24,15 @@ from backend.app.sandbox.limited_launcher import (
     EXIT_BAD_POLICY,
     EXIT_EXEC_FAILED,
     EXIT_UNSUPPORTED,
+    STATUS_BAD_POLICY,
+    STATUS_EXEC_FAILED,
+    STATUS_PROTOCOL_ERROR,
+    STATUS_UNSUPPORTED,
     LauncherArgsError,
     LauncherPolicyError,
     LauncherUnsupportedError,
     build_rlimit_settings,
+    extract_status_fd,
     parse_args,
     parse_policy,
 )
@@ -363,3 +369,216 @@ def test_no_orphan_process_after_cpu_kill(tmp_path):
     # A terminal returncode means the child was reaped, not left orphaned.
     assert result.returncode is not None
     assert result.returncode == -signal.SIGXCPU
+
+
+# ---------------------------------------------------------------------------
+# 29-33. Stage 9B-3C-2: optional --status-fd extraction (pure, all platforms)
+# ---------------------------------------------------------------------------
+def test_extract_status_fd_present():
+    fd, rest = extract_status_fd(["--status-fd", "7", "--policy-json", "{}", "--", "echo"])
+    assert fd == 7
+    assert rest == ["--policy-json", "{}", "--", "echo"]
+
+
+def test_extract_status_fd_absent():
+    argv = ["--policy-json", "{}", "--", "echo"]
+    fd, rest = extract_status_fd(argv)
+    assert fd is None
+    assert rest == argv
+
+
+def test_extract_status_fd_missing_value():
+    with pytest.raises(LauncherArgsError):
+        extract_status_fd(["--status-fd"])
+
+
+def test_extract_status_fd_non_integer():
+    with pytest.raises(LauncherArgsError):
+        extract_status_fd(["--status-fd", "notanint", "--policy-json", "{}"])
+
+
+def test_extract_status_fd_negative():
+    with pytest.raises(LauncherArgsError):
+        extract_status_fd(["--status-fd", "-1", "--policy-json", "{}"])
+
+
+def test_status_fd_is_optional_parse_args_unchanged():
+    # parse_args still returns a 2-tuple and is unaware of --status-fd: the flag
+    # is stripped by extract_status_fd first. Proves standalone back-compat.
+    policy_json, command = parse_args(["--policy-json", "{}", "--", "echo", "hi"])
+    assert policy_json == "{}"
+    assert command == ["echo", "hi"]
+
+
+# ---------------------------------------------------------------------------
+# 34-38. Stage 9B-3C-2: the launcher reports outcome over a real status pipe
+# ---------------------------------------------------------------------------
+def _run_launcher_with_status(policy_json, target_argv, *, cwd, timeout=30):
+    """Run the launcher with a dedicated status pipe; return (proc, token bytes).
+
+    Mirrors the parent protocol: pass the write fd via --status-fd + pass_fds,
+    close the parent copy right after spawn, then read a bounded token.
+    """
+    read_fd, write_fd = os.pipe()
+    try:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(LAUNCHER_PATH),
+                "--status-fd",
+                str(write_fd),
+                "--policy-json",
+                policy_json,
+                "--",
+                *target_argv,
+            ],
+            cwd=str(cwd),
+            env=MINIMAL_ENV,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            pass_fds=(write_fd,),
+        )
+        os.close(write_fd)
+        write_fd = None
+        token = os.read(read_fd, 64)
+        return proc, token
+    finally:
+        if write_fd is not None:
+            os.close(write_fd)
+        os.close(read_fd)
+
+
+@linux_only
+def test_status_pipe_success_writes_no_payload(tmp_path):
+    proc, token = _run_launcher_with_status(
+        _policy_json(),
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 0
+    assert "ok" in proc.stdout
+    # Successful execvp closed the status fd -> EOF, no payload.
+    assert token == b""
+
+
+@linux_only
+def test_status_pipe_reports_bad_policy(tmp_path):
+    # Policy parse failure is reported through the status channel, not merely
+    # inferred from the reserved return code.
+    proc, token = _run_launcher_with_status(
+        "{not valid json",
+        [sys.executable, "-c", "print('unreached')"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == EXIT_BAD_POLICY
+    assert token == STATUS_BAD_POLICY.encode("ascii")
+
+
+@linux_only
+def test_status_pipe_reports_unsupported(tmp_path):
+    proc, token = _run_launcher_with_status(
+        _policy_json(address_space_bytes=1_000_000),
+        [sys.executable, "-c", "print('unreached')"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == EXIT_UNSUPPORTED
+    assert token == STATUS_UNSUPPORTED.encode("ascii")
+
+
+@linux_only
+def test_status_pipe_reports_exec_failed(tmp_path):
+    proc, token = _run_launcher_with_status(
+        _policy_json(),
+        ["/nonexistent/omni_no_such_binary_xyz"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == EXIT_EXEC_FAILED
+    assert token == STATUS_EXEC_FAILED.encode("ascii")
+
+
+@linux_only
+def test_set_inheritable_failure_fails_closed(monkeypatch, tmp_path):
+    # If the launcher cannot make the status fd close-on-exec before execvp it
+    # must fail closed: emit STATUS_PROTOCOL_ERROR, return nonzero, and never run
+    # the target. Driven in-process (main returns before any execvp).
+    read_fd, write_fd = os.pipe()
+    sentinel = tmp_path / "sentinel.txt"
+    try:
+        def _boom(*_args, **_kwargs):
+            raise OSError("cannot set close-on-exec")
+
+        monkeypatch.setattr(launcher.os, "set_inheritable", _boom)
+
+        returncode = launcher.main(
+            [
+                "--status-fd",
+                str(write_fd),
+                "--policy-json",
+                _policy_json(),
+                "--",
+                sys.executable,
+                "-c",
+                f"open({str(sentinel)!r}, 'w').write('x')",
+            ]
+        )
+        os.close(write_fd)
+        write_fd = None
+        token = os.read(read_fd, 64)
+
+        assert returncode != 0
+        assert returncode == EXIT_EXEC_FAILED
+        assert token == STATUS_PROTOCOL_ERROR.encode("ascii")
+        # The target never started, so its side effect never happened.
+        assert not sentinel.exists()
+    finally:
+        if write_fd is not None:
+            os.close(write_fd)
+        os.close(read_fd)
+
+
+@linux_only
+def test_status_fd_is_closed_in_execed_target(tmp_path):
+    # The launcher marks the status fd close-on-exec before execvp, so the
+    # target must NOT inherit it. The target fstat()s the exact fd number and
+    # reports CLOSED; the status pipe yields EOF (successful exec, no payload).
+    read_fd, write_fd = os.pipe()
+    try:
+        probe = (
+            "import os, sys\n"
+            f"try:\n"
+            f"    os.fstat({write_fd})\n"
+            f"    sys.stdout.write('OPEN')\n"
+            f"except OSError:\n"
+            f"    sys.stdout.write('CLOSED')\n"
+        )
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(LAUNCHER_PATH),
+                "--status-fd",
+                str(write_fd),
+                "--policy-json",
+                _policy_json(),
+                "--",
+                sys.executable,
+                "-c",
+                probe,
+            ],
+            cwd=str(tmp_path),
+            env=MINIMAL_ENV,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            pass_fds=(write_fd,),
+        )
+        os.close(write_fd)
+        write_fd = None
+        token = os.read(read_fd, 64)
+        assert proc.returncode == 0
+        assert proc.stdout == "CLOSED"
+        assert token == b""
+    finally:
+        if write_fd is not None:
+            os.close(write_fd)
+        os.close(read_fd)

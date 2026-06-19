@@ -9,6 +9,7 @@ escapes the caller-provided temp dir. Only harmless commands are ever run
 
 import ast
 import inspect
+import json
 import os
 import sys
 from pathlib import Path
@@ -19,9 +20,12 @@ import signal
 
 from backend.app.sandbox.execution import (
     CommandResult,
+    LAUNCHER_STATUS_PROTOCOL_ERROR,
     ResourceLimitsUnsupportedError,
     _LAUNCHER_PATH,
+    _LauncherStatusChannel,
     _classify_resource_outcome,
+    _classify_status,
     run_command,
 )
 from backend.app.sandbox.limited_launcher import (
@@ -759,64 +763,142 @@ def test_policy_enabled_run_is_deterministic(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Stage 9B-3C-1: resource-limit / launcher-outcome classification
+# Stage 9B-3C-1/9B-3C-2: resource-limit / launcher-outcome classification
 # ---------------------------------------------------------------------------
-# Pure classifier: deterministic, no spawning.
+# Pure resource classifier: deterministic, no spawning. It now reports only the
+# reliable SIGXCPU/SIGXFSZ signals as ``(exceeded, kind)``; launcher errors come
+# exclusively from the out-of-band status channel and are NOT inferred here.
 def test_classify_sigxcpu_is_cpu():
-    assert _classify_resource_outcome(-signal.SIGXCPU, True) == (True, "cpu", None)
-    # Reliable signals are classified regardless of the applied flag.
-    assert _classify_resource_outcome(-signal.SIGXCPU, False) == (True, "cpu", None)
+    assert _classify_resource_outcome(-signal.SIGXCPU) == (True, "cpu")
 
 
 def test_classify_sigxfsz_is_file_size():
-    assert _classify_resource_outcome(-signal.SIGXFSZ, True) == (
-        True,
-        "file_size",
-        None,
-    )
-
-
-@pytest.mark.parametrize(
-    "code, kind",
-    [
-        (EXIT_BAD_ARGS, "bad_launcher_args"),
-        (EXIT_BAD_POLICY, "invalid_resource_policy"),
-        (EXIT_UNSUPPORTED, "unsupported_resource_policy"),
-        (EXIT_APPLY_FAILED, "resource_limit_apply_failed"),
-        (EXIT_EXEC_FAILED, "target_exec_failed"),
-    ],
-)
-def test_classify_launcher_codes_when_applied(code, kind):
-    assert _classify_resource_outcome(code, True) == (False, None, kind)
+    assert _classify_resource_outcome(-signal.SIGXFSZ) == (True, "file_size")
 
 
 @pytest.mark.parametrize(
     "code",
     [EXIT_BAD_ARGS, EXIT_BAD_POLICY, EXIT_UNSUPPORTED, EXIT_APPLY_FAILED, EXIT_EXEC_FAILED],
 )
-def test_classify_launcher_codes_ignored_when_not_applied(code):
-    # Without wrapping, a positive reserved code is the target's own exit code.
-    assert _classify_resource_outcome(code, False) == (False, None, None)
+def test_classify_reserved_codes_are_not_resource_outcomes(code):
+    # A reserved positive code (115-119) is NOT a resource outcome: it could be
+    # the target's own exit code. Launcher attribution is the status channel's
+    # job, not the resource classifier's.
+    assert _classify_resource_outcome(code) == (False, None)
 
 
 def test_classify_success_is_unclassified():
-    assert _classify_resource_outcome(0, True) == (False, None, None)
+    assert _classify_resource_outcome(0) == (False, None)
 
 
 def test_classify_ordinary_nonzero_is_unclassified():
-    assert _classify_resource_outcome(3, True) == (False, None, None)
+    assert _classify_resource_outcome(3) == (False, None)
 
 
 def test_classify_sigkill_is_unclassified():
-    assert _classify_resource_outcome(-signal.SIGKILL, True) == (False, None, None)
+    assert _classify_resource_outcome(-signal.SIGKILL) == (False, None)
 
 
 def test_classify_sigsegv_is_unclassified():
-    assert _classify_resource_outcome(-signal.SIGSEGV, True) == (False, None, None)
+    assert _classify_resource_outcome(-signal.SIGSEGV) == (False, None)
 
 
 def test_classify_none_returncode_is_unclassified():
-    assert _classify_resource_outcome(None, True) == (False, None, None)
+    assert _classify_resource_outcome(None) == (False, None)
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B-3C-2: launcher-status channel — pure payload classification
+# ---------------------------------------------------------------------------
+def test_classify_status_eof_is_success():
+    # EOF / no payload (a successful execvp closed the fd) -> no launcher error.
+    assert _classify_status(b"") is None
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        b"bad_launcher_args",
+        b"invalid_resource_policy",
+        b"unsupported_resource_policy",
+        b"resource_limit_apply_failed",
+        b"launcher_exec_failed",
+    ],
+)
+def test_classify_status_known_tokens(token):
+    assert _classify_status(token) == token.decode("ascii")
+
+
+def test_classify_status_unknown_token_fails_closed():
+    assert _classify_status(b"totally_made_up") == LAUNCHER_STATUS_PROTOCOL_ERROR
+
+
+def test_classify_status_duplicated_token_fails_closed():
+    # A doubled token is not a single known token -> fail closed.
+    assert (
+        _classify_status(b"launcher_exec_failedlauncher_exec_failed")
+        == LAUNCHER_STATUS_PROTOCOL_ERROR
+    )
+
+
+def test_classify_status_oversized_fails_closed():
+    assert _classify_status(b"x" * 200) == LAUNCHER_STATUS_PROTOCOL_ERROR
+
+
+def test_classify_status_non_ascii_fails_closed():
+    assert _classify_status(b"\xff\xfe") == LAUNCHER_STATUS_PROTOCOL_ERROR
+
+
+def test_classify_status_read_error_fails_closed():
+    assert _classify_status(None) == LAUNCHER_STATUS_PROTOCOL_ERROR
+
+
+# Status channel object: real pipe, bounded read, fail-closed verdicts.
+def test_status_channel_reads_known_token():
+    ch = _LauncherStatusChannel()
+    try:
+        os.write(ch.write_fd, b"unsupported_resource_policy")
+        ch.close_write_end()
+        assert ch.read_status() == "unsupported_resource_policy"
+    finally:
+        ch.close()
+
+
+def test_status_channel_eof_is_no_error():
+    ch = _LauncherStatusChannel()
+    try:
+        ch.close_write_end()  # no payload -> EOF
+        assert ch.read_status() is None
+    finally:
+        ch.close()
+
+
+def test_status_channel_unknown_payload_fails_closed():
+    ch = _LauncherStatusChannel()
+    try:
+        os.write(ch.write_fd, b"garbage_token")
+        ch.close_write_end()
+        assert ch.read_status() == LAUNCHER_STATUS_PROTOCOL_ERROR
+    finally:
+        ch.close()
+
+
+def test_status_channel_oversized_payload_fails_closed():
+    ch = _LauncherStatusChannel()
+    try:
+        os.write(ch.write_fd, b"u" * 500)
+        ch.close_write_end()
+        assert ch.read_status() == LAUNCHER_STATUS_PROTOCOL_ERROR
+    finally:
+        ch.close()
+
+
+def test_status_channel_close_is_idempotent():
+    ch = _LauncherStatusChannel()
+    ch.close()
+    ch.close()  # must not raise
+    assert ch.read_fd is None
+    assert ch.write_fd is None
 
 
 # Execution facts: requested / applied recorded by run_command.
@@ -922,3 +1004,272 @@ def test_output_cap_with_policy_preserves_output_facts(tmp_path):
     assert result.resource_limit_kind is None
     assert result.launcher_error is None
     assert result.resource_limits_applied is True
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B-3C-2: exit-code collision is eliminated by the status handshake
+# ---------------------------------------------------------------------------
+# A target that itself exits with one of the launcher's reserved codes (115-119)
+# must NOT be misread as a launcher failure: after a successful execvp the status
+# fd is closed (EOF), so launcher_error stays None and the code is an ordinary
+# nonzero exit.
+RESERVED_CODES = [
+    EXIT_EXEC_FAILED,    # 115
+    EXIT_APPLY_FAILED,   # 116
+    EXIT_UNSUPPORTED,    # 117
+    EXIT_BAD_POLICY,     # 118
+    EXIT_BAD_ARGS,       # 119
+]
+
+
+@linux_only
+@pytest.mark.parametrize("code", RESERVED_CODES)
+def test_target_exit_collision_uncapped(tmp_path, code):
+    result = run_command(
+        [sys.executable, "-c", f"import sys; sys.exit({code})"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == code
+    # The handshake (not the return code) decides launcher errors: none here.
+    assert result.launcher_error is None
+    assert result.resource_limits_applied is True
+    assert result.resource_limit_exceeded is False
+    assert result.resource_limit_kind is None
+    assert result.timed_out is False
+
+
+@linux_only
+@pytest.mark.parametrize("code", RESERVED_CODES)
+def test_target_exit_collision_capped(tmp_path, code):
+    # Same collision proof through the capped streaming path, with output well
+    # under the cap so output-limit handling never fires.
+    result = run_command(
+        [
+            sys.executable,
+            "-c",
+            f"import sys; sys.stdout.write('hi'); sys.exit({code})",
+        ],
+        cwd=tmp_path,
+        timeout=30,
+        max_output_bytes=1024,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == code
+    assert result.launcher_error is None
+    assert result.output_limit_exceeded is False
+    assert result.stdout_capture_truncated is False
+    assert result.resource_limits_applied is True
+    assert result.resource_limit_exceeded is False
+
+
+@linux_only
+def test_launcher_exec_failure_reported_via_status_channel(tmp_path):
+    # A missing target executable -> the launcher's execvp fails -> it writes the
+    # launcher_exec_failed token before exiting with EXIT_EXEC_FAILED.
+    result = run_command(
+        ["/nonexistent/omni_no_such_binary_xyz"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(),
+        allowed_executables=None,
+    )
+    assert result.returncode == EXIT_EXEC_FAILED
+    assert result.launcher_error == "launcher_exec_failed"
+    assert result.resource_limits_applied is True
+    assert result.resource_limit_exceeded is False
+
+
+@linux_only
+def test_unsupported_policy_reports_launcher_error_capped(tmp_path):
+    # Real launcher unsupported-policy failure surfaces over the status channel
+    # in the capped path too (parity with the uncapped deferred-policy test).
+    result = run_command(
+        [sys.executable, "-c", "print('unreached')"],
+        cwd=tmp_path,
+        timeout=30,
+        max_output_bytes=1024,
+        resource_limits=ResourceLimits(process_count=8),
+    )
+    assert result.returncode == EXIT_UNSUPPORTED
+    assert result.launcher_error == "unsupported_resource_policy"
+    assert result.resource_limit_exceeded is False
+
+
+@linux_only
+def test_status_fd_does_not_leak_into_target(tmp_path):
+    # The status fd is close-on-exec'd before execvp, so the exec'd target never
+    # inherits it. If it leaked at any fd in [3, 256), the target's write would
+    # land in the status pipe and the parent would read a non-token payload,
+    # yielding a protocol error. launcher_error is None iff there was no leak.
+    leak_probe = (
+        "import os\n"
+        "for fd in range(3, 256):\n"
+        "    try:\n"
+        "        os.write(fd, b'LEAK')\n"
+        "    except OSError:\n"
+        "        pass\n"
+    )
+    result = run_command(
+        [sys.executable, "-c", leak_probe],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == 0
+    assert result.launcher_error is None
+
+
+@linux_only
+def test_wrapped_success_has_no_launcher_error(tmp_path):
+    # A plainly successful wrapped command yields EOF on the status channel.
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == 0
+    assert "ok" in result.stdout
+    assert result.launcher_error is None
+
+
+# ---------------------------------------------------------------------------
+# Stage 9B-3C-2 (lifecycle corrections): Popen uncapped path + CLOEXEC fail-close
+# ---------------------------------------------------------------------------
+def test_parent_maps_protocol_error_token_authoritatively():
+    # The launcher's STATUS_PROTOCOL_ERROR token is accepted as an explicit,
+    # authoritative launcher error (not inferred from a return code).
+    ch = _LauncherStatusChannel()
+    try:
+        os.write(ch.write_fd, b"launcher_status_protocol_error")
+        ch.close_write_end()
+        assert ch.read_status() == LAUNCHER_STATUS_PROTOCOL_ERROR
+        assert LAUNCHER_STATUS_PROTOCOL_ERROR == "launcher_status_protocol_error"
+    finally:
+        ch.close()
+
+
+@linux_only
+def test_wrapped_uncapped_uses_popen_and_closes_write_fd_before_communicate(
+    tmp_path, monkeypatch
+):
+    # The wrapped uncapped path must use Popen and close the parent's status
+    # write end IMMEDIATELY after spawning — before draining via communicate().
+    import backend.app.sandbox.execution as ex
+
+    events: list[str] = []
+    real_popen = ex.subprocess.Popen
+
+    class _SpyPopen(real_popen):
+        def communicate(self, *args, **kwargs):
+            events.append("communicate")
+            return super().communicate(*args, **kwargs)
+
+    def _popen_factory(*args, **kwargs):
+        events.append("popen")
+        return _SpyPopen(*args, **kwargs)
+
+    monkeypatch.setattr(ex.subprocess, "Popen", _popen_factory)
+
+    real_close = ex._LauncherStatusChannel.close_write_end
+
+    def _spy_close(self):
+        events.append("close_write_end")
+        return real_close(self)
+
+    monkeypatch.setattr(ex._LauncherStatusChannel, "close_write_end", _spy_close)
+
+    result = run_command(
+        [sys.executable, "-c", "print('ok')"],
+        cwd=tmp_path,
+        timeout=30,
+        resource_limits=ResourceLimits(),
+    )
+    assert result.returncode == 0
+    assert result.launcher_error is None
+    # Order: spawn, then close the write fd, then communicate.
+    assert events[0] == "popen"
+    assert events.index("close_write_end") < events.index("communicate")
+
+
+@linux_only
+def test_wrapped_uncapped_popen_failure_closes_descriptors(tmp_path, monkeypatch):
+    # If the Popen spawn itself fails, every status descriptor must still be
+    # closed (no fd leak) via the finally path.
+    import backend.app.sandbox.execution as ex
+
+    created: list[object] = []
+    real_init = ex._LauncherStatusChannel.__init__
+
+    def _spy_init(self):
+        real_init(self)
+        created.append(self)
+
+    monkeypatch.setattr(ex._LauncherStatusChannel, "__init__", _spy_init)
+
+    def _boom(*_args, **_kwargs):
+        raise OSError("spawn failed")
+
+    monkeypatch.setattr(ex.subprocess, "Popen", _boom)
+
+    with pytest.raises(OSError):
+        run_command(
+            [sys.executable, "-c", "print('x')"],
+            cwd=tmp_path,
+            timeout=30,
+            resource_limits=ResourceLimits(),
+        )
+
+    assert created, "a status channel should have been created when wrapped"
+    channel = created[0]
+    assert channel.read_fd is None
+    assert channel.write_fd is None
+
+
+@linux_only
+def test_cloexec_failure_maps_to_protocol_error_authoritatively(tmp_path, monkeypatch):
+    # When the launcher cannot make the status fd close-on-exec, it emits the
+    # protocol-error token; the parent reports it as an authoritative launcher
+    # error (target never runs) rather than inferring from the return code.
+    import backend.app.sandbox.limited_launcher as launcher_mod
+
+    # Make the real launcher subprocess fail the CLOEXEC step by overriding the
+    # launcher module file it executes is not feasible here; instead drive the
+    # launcher's own main() with a patched os.set_inheritable, then feed the
+    # produced token through the parent's classifier — proving end-to-end that
+    # the token the launcher emits is the token the parent honors.
+    read_fd, write_fd = os.pipe()
+    sentinel = tmp_path / "sentinel.txt"
+    try:
+        monkeypatch.setattr(
+            launcher_mod.os,
+            "set_inheritable",
+            lambda *a, **k: (_ for _ in ()).throw(OSError("no cloexec")),
+        )
+        rc = launcher_mod.main(
+            [
+                "--status-fd",
+                str(write_fd),
+                "--policy-json",
+                json.dumps(
+                    {f: None for f in launcher_mod.POLICY_FIELDS}, separators=(",", ":")
+                ),
+                "--",
+                sys.executable,
+                "-c",
+                f"open({str(sentinel)!r}, 'w').write('x')",
+            ]
+        )
+        os.close(write_fd)
+        write_fd = None
+        raw = os.read(read_fd, 64)
+    finally:
+        if write_fd is not None:
+            os.close(write_fd)
+        os.close(read_fd)
+
+    assert rc == EXIT_EXEC_FAILED
+    assert not sentinel.exists()
+    assert _classify_status(raw) == "launcher_status_protocol_error"
