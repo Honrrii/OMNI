@@ -700,18 +700,35 @@ def test_unsupported_platform_fails_closed(tmp_path, monkeypatch):
     assert not sentinel.exists()
 
 
-# 13. deferred address_space_bytes -> launcher fails closed, target never runs
+# 13. address_space_bytes -> launcher applies RLIMIT_AS and target fails safely
 @linux_only
-def test_deferred_address_space_fails_closed(tmp_path):
-    sentinel = tmp_path / "sentinel.txt"
+def test_address_space_limit_stops_memory_hog(tmp_path):
+    limit = 128 * 1024 * 1024
+    policy = ResourceLimits(address_space_bytes=limit)
+    memory_hog = (
+        "import sys\n"
+        "reserve = bytearray(1024 * 1024)\n"
+        "chunks = []\n"
+        "try:\n"
+        "    while True:\n"
+        "        chunks.append(bytearray(4 * 1024 * 1024))\n"
+        "except MemoryError:\n"
+        "    reserve = None\n"
+        "    sys.exit(42)\n"
+    )
     result = run_command(
-        [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
+        [sys.executable, "-c", memory_hog],
         cwd=tmp_path,
         timeout=30,
-        resource_limits=ResourceLimits(address_space_bytes=1_000_000),
+        resource_limits=policy,
     )
-    assert result.returncode == EXIT_UNSUPPORTED
-    assert not sentinel.exists()
+    assert result.returncode == 42
+    assert result.timed_out is False
+    assert result.resource_limits_requested == policy.to_dict()
+    assert result.resource_limits_applied is True
+    assert result.launcher_error is None
+    assert result.resource_limit_exceeded is False
+    assert result.resource_limit_kind is None
 
 
 # 14. deferred process_count -> same fail-closed behavior
@@ -956,13 +973,13 @@ def test_cpu_limit_integration_classifies_cpu(tmp_path):
 
 
 @linux_only
-def test_deferred_policy_classifies_launcher_error(tmp_path):
+def test_deferred_process_count_policy_classifies_launcher_error(tmp_path):
     sentinel = tmp_path / "sentinel.txt"
     result = run_command(
         [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
         cwd=tmp_path,
         timeout=30,
-        resource_limits=ResourceLimits(address_space_bytes=1_000_000),
+        resource_limits=ResourceLimits(process_count=8),
     )
     assert result.returncode == EXIT_UNSUPPORTED
     assert result.launcher_error == "unsupported_resource_policy"

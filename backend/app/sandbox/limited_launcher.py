@@ -99,9 +99,9 @@ POLICY_FIELDS = (
     "core_size_bytes",
 )
 
-# Fields whose enforcement is deferred in this stage. Requesting either of these
+# Fields whose enforcement is deferred in this stage. Requesting any of these
 # fails closed (EXIT_UNSUPPORTED) rather than being silently ignored.
-_DEFERRED_FIELDS = ("address_space_bytes", "process_count")
+_DEFERRED_FIELDS = ("process_count",)
 
 
 class LauncherArgsError(Exception):
@@ -238,6 +238,7 @@ def build_rlimit_settings(policy):
     requested limit.
 
     Soft/hard choices:
+    - ``address_space_bytes`` -> ``RLIMIT_AS`` ``(v, v)``
     - ``core_size_bytes`` -> ``RLIMIT_CORE`` ``(v, v)`` (``0`` disables cores)
     - ``cpu_seconds``     -> ``RLIMIT_CPU``  ``(v, v + 1)`` so ``SIGXCPU`` (soft)
       is delivered before the hard ``SIGKILL``
@@ -256,6 +257,10 @@ def build_rlimit_settings(policy):
             )
 
     settings = []
+
+    address_space = policy.get("address_space_bytes")
+    if address_space is not None:
+        settings.append((_rlimit_const("RLIMIT_AS"), address_space, address_space))
 
     core = policy.get("core_size_bytes")
     if core is not None:

@@ -169,11 +169,17 @@ def test_parse_policy_non_integer_value(bad):
 
 
 # ---------------------------------------------------------------------------
-# 13-16. build_rlimit_settings: deferred + unsupported fail closed
+# 13-16. build_rlimit_settings: address-space mapping + unsupported fail closed
 # ---------------------------------------------------------------------------
-def test_deferred_address_space_fails_closed():
-    with pytest.raises(LauncherUnsupportedError):
-        build_rlimit_settings(_policy_dict(address_space_bytes=1_000_000))
+def test_address_space_maps_to_rlimit_as(monkeypatch):
+    class FakeResource:
+        RLIMIT_AS = 123
+
+    monkeypatch.setattr(launcher, "resource", FakeResource())
+    limit = 128 * 1024 * 1024
+    assert build_rlimit_settings(_policy_dict(address_space_bytes=limit)) == [
+        (FakeResource.RLIMIT_AS, limit, limit)
+    ]
 
 
 def test_deferred_process_count_fails_closed():
@@ -194,6 +200,13 @@ def test_missing_rlimit_constant_fails_closed(monkeypatch):
     monkeypatch.setattr(launcher, "resource", object())
     with pytest.raises(LauncherUnsupportedError):
         build_rlimit_settings(_policy_dict(core_size_bytes=0))
+
+
+def test_missing_rlimit_as_constant_fails_closed(monkeypatch):
+    # Address-space enforcement must also fail closed if RLIMIT_AS is absent.
+    monkeypatch.setattr(launcher, "resource", object())
+    with pytest.raises(LauncherUnsupportedError):
+        build_rlimit_settings(_policy_dict(address_space_bytes=128 * 1024 * 1024))
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +237,25 @@ def test_launch_by_absolute_path_minimal_env(tmp_path):
 # ---------------------------------------------------------------------------
 # 19-21. child introspection of applied RLIMIT_* values
 # ---------------------------------------------------------------------------
+@linux_only
+def test_child_sees_rlimit_as(tmp_path):
+    if launcher.resource is None or not hasattr(launcher.resource, "RLIMIT_AS"):
+        pytest.skip("resource.RLIMIT_AS is unavailable on this platform")
+
+    limit = 128 * 1024 * 1024
+    result = _run_launcher(
+        _policy_json(address_space_bytes=limit),
+        [
+            sys.executable,
+            "-c",
+            "import resource; print(resource.getrlimit(resource.RLIMIT_AS))",
+        ],
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0
+    assert f"({limit}, {limit})" in result.stdout
+
+
 @linux_only
 def test_child_sees_rlimit_core(tmp_path):
     result = _run_launcher(
@@ -328,13 +360,13 @@ def test_bad_policy_returns_reserved_code_and_skips_target(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 25. deferred limit -> EXIT_UNSUPPORTED, target never runs
+# 25. deferred process-count limit -> EXIT_UNSUPPORTED, target never runs
 # ---------------------------------------------------------------------------
 @linux_only
 def test_deferred_limit_returns_unsupported_and_skips_target(tmp_path):
     sentinel = tmp_path / "sentinel.txt"
     result = _run_launcher(
-        _policy_json(address_space_bytes=1_000_000),
+        _policy_json(process_count=8),
         [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('x')"],
         cwd=tmp_path,
     )
@@ -478,7 +510,7 @@ def test_status_pipe_reports_bad_policy(tmp_path):
 @linux_only
 def test_status_pipe_reports_unsupported(tmp_path):
     proc, token = _run_launcher_with_status(
-        _policy_json(address_space_bytes=1_000_000),
+        _policy_json(process_count=8),
         [sys.executable, "-c", "print('unreached')"],
         cwd=tmp_path,
     )

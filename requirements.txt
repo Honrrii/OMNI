@@ -89,6 +89,7 @@ launch-testing==1.0.14
 launch-testing-ros==0.19.13
 launch-xml==1.0.14
 launch-yaml==1.0.14
+lark==1.3.1
 lifecycle-msgs==1.2.2
 logging-demo==0.20.9
 map-msgs==2.1.0
