@@ -1,4 +1,32 @@
 import json
+import pprint
+
+try:
+    from backend.app.cad.cad_detail_pass_planner import (
+        plan_cad_detail_passes,
+        assembly_spec_to_dict,
+        summarize_assembly_spec,
+    )
+except Exception:
+    try:
+        from cad.cad_detail_pass_planner import (
+            plan_cad_detail_passes,
+            assembly_spec_to_dict,
+            summarize_assembly_spec,
+        )
+    except Exception:
+        try:
+            from app.cad.cad_detail_pass_planner import (
+                plan_cad_detail_passes,
+                assembly_spec_to_dict,
+                summarize_assembly_spec,
+            )
+        except Exception:
+            plan_cad_detail_passes = None
+            assembly_spec_to_dict = None
+            summarize_assembly_spec = None
+
+
 import re
 from pathlib import Path
 from typing import Any, Dict, List
@@ -29,6 +57,18 @@ except Exception:
     except Exception:
         get_aircraft_cad_context = None
         mission_matches_aircraft_cad = None
+
+
+# ---------------------------------------------------------
+# CAD Morphology Compiler
+# ---------------------------------------------------------
+try:
+    from backend.app.cad.morphology_artifact_writer import build_morphology_artifacts
+except Exception:
+    try:
+        from cad.morphology_artifact_writer import build_morphology_artifacts
+    except Exception:
+        build_morphology_artifacts = None
 
 
 # ---------------------------------------------------------
@@ -378,6 +418,71 @@ def model_name_from_morphology(
     return fallback_model_name
 
 
+def fusion_project_type_from_morphology_spec(
+    fallback_project_type: str,
+    morphology_spec: Dict[str, Any],
+) -> str:
+    """
+    Use the new MorphologySpec family as Fusion export identity.
+
+    Existing builder-compatible families map to old project types.
+    New biomorphic families keep their own family name so generated artifacts
+    stop appearing as generic_robotics.
+    """
+    if not isinstance(morphology_spec, dict):
+        return fallback_project_type or "concept"
+
+    family = str(morphology_spec.get("morphology_family", "") or "").lower().strip()
+
+    if not family:
+        return fallback_project_type or "concept"
+
+    builder_compatible = {
+        "aerial_drone": "drone",
+        "wheeled_rover": "rover",
+        "tracked_rover": "rover",
+        "armored_rover": "rover",
+        "manipulator_arm": "robot_arm",
+        "sensor_pod": "enclosure",
+        "insectoid_legged_robot": "insect_robot",
+        "hexapod_robot": "insect_robot",
+    }
+
+    if family in builder_compatible:
+        return builder_compatible[family]
+
+    # New biomorphic families are allowed to pass through as their own
+    # project_type. The generated Fusion script will safely fall back to the
+    # generic builder until specialized visual builders are added.
+    return family
+
+
+def model_name_from_morphology_spec(
+    fallback_model_name: str,
+    morphology_spec: Dict[str, Any],
+) -> str:
+    """
+    Create a more descriptive model name from MorphologySpec.
+
+    Example:
+        gecko + wall_climbing_robot
+        -> omni_gecko_wall_climbing_robot_fusion_concept
+    """
+    if not isinstance(morphology_spec, dict):
+        return fallback_model_name
+
+    family = str(morphology_spec.get("morphology_family", "") or "").strip()
+    bio = morphology_spec.get("bio_inspiration", {}) or {}
+    source_creature = str(bio.get("source_creature", "") or "").strip()
+
+    parts = [p for p in [source_creature, family] if p]
+
+    if not parts:
+        return fallback_model_name
+
+    return f"omni_{safe_name('_'.join(parts))}_fusion_concept"
+
+
 def build_cad_context(
     project_type: str,
     morphology_plan: Dict[str, Any] | None = None,
@@ -504,7 +609,7 @@ def generate_fusion360_script(
     cad_reference_brief: str = "",
     morphology_id: str = "",
 ) -> str:
-    params_json = json.dumps(parameters, indent=4)
+    params_json = pprint.pformat(parameters, indent=4, width=120, sort_dicts=False)
     cad_reference_json = json.dumps(cad_reference_brief, indent=4)
 
     return f'''"""
@@ -1333,6 +1438,593 @@ def build_enclosure(component):
     create_reference_note_label(component)
 
 
+
+def _bio_clean_name(value, fallback):
+    text = str(value or fallback).lower().strip()
+    text = text.replace(" ", "_").replace("-", "_").replace("/", "_")
+    safe = ""
+    for ch in text:
+        if ch.isalnum() or ch == "_":
+            safe += ch
+    if not safe:
+        safe = fallback
+    return safe
+
+
+def _bio_float(value, fallback):
+    try:
+        return float(value)
+    except Exception:
+        return float(fallback)
+
+
+def _bio_list(value):
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _get_morphology_spec():
+    spec = PARAMS.get("morphology_spec", dict())
+    if isinstance(spec, dict):
+        return spec
+    return dict()
+
+
+def _bio_segment_box(component, segment, index, x_offset):
+    name = _bio_clean_name(segment.get("name", "segment"), "segment_" + str(index + 1))
+    length = _bio_float(segment.get("length_mm", 70), 70)
+    width = _bio_float(segment.get("width_mm", 36), 36)
+    height = _bio_float(segment.get("height_mm", 18), 18)
+    z_base = _bio_float(segment.get("z_base_mm", 0), 0)
+
+    create_box(
+        component,
+        "bio_segment_" + name,
+        length,
+        width,
+        height,
+        x_offset,
+        0,
+        z_base,
+    )
+
+
+def _bio_draw_low_quadruped(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "creature"), "creature")
+
+    create_box(component, source + "_low_torso", 95, 45, 18, 0, 0, 14)
+    create_box(component, source + "_sensor_head", 35, 28, 18, 62, 0, 18)
+    create_box(component, source + "_tail_stabilizer", 70, 10, 8, -78, 0, 16)
+
+    leg_x = [-28, 28]
+    leg_y = [-32, 32]
+
+    index = 1
+    for x in leg_x:
+        for y in leg_y:
+            create_box(component, source + "_splayed_limb_" + str(index), 52, 8, 8, x, y, 8)
+            create_box(component, source + "_adhesive_foot_pad_" + str(index), 24, 18, 4, x, y + 16 if y > 0 else y - 16, 2)
+            index += 1
+
+    create_label(component, source + " wall-climbing morphology", -95, -60, 8)
+
+
+def _bio_draw_quadruped_runner(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "quadruped"), "quadruped")
+
+    create_box(component, source + "_raised_torso", 110, 38, 28, 0, 0, 52)
+    create_box(component, source + "_hip_body", 46, 36, 22, -58, 0, 48)
+    create_box(component, source + "_sensor_head", 38, 28, 22, 72, 0, 58)
+    create_box(component, source + "_tail_balance_beam", 70, 8, 8, -100, 0, 56)
+
+    positions = [(32, 24), (32, -24), (-38, 24), (-38, -24)]
+    for i, pos in enumerate(positions):
+        x = pos[0]
+        y = pos[1]
+        create_box(component, source + "_upper_leg_" + str(i + 1), 10, 8, 34, x, y, 31)
+        create_box(component, source + "_lower_leg_" + str(i + 1), 8, 7, 32, x + 8, y, 12)
+        create_box(component, source + "_foot_" + str(i + 1), 24, 10, 5, x + 16, y, 1)
+
+    create_label(component, source + " quadruped morphology", -95, -60, 12)
+
+
+def _bio_draw_serpentine(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "snake"), "snake")
+
+    module_count = 8
+    spacing = 34
+    start_x = -spacing * (module_count - 1) / 2
+
+    for i in range(module_count):
+        x = start_x + i * spacing
+        create_box(component, source + "_body_module_" + str(i + 1), 28, 24, 18, x, 0, 8)
+        if i < module_count - 1:
+            create_box(component, source + "_flex_joint_" + str(i + 1), 10, 14, 12, x + spacing / 2, 0, 8)
+
+    create_box(component, source + "_front_sensor_head", 34, 26, 22, start_x + module_count * spacing, 0, 10)
+    create_label(component, source + " serpentine modular chain", start_x, -45, 8)
+
+
+def _bio_draw_aquatic_glider(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "manta"), "manta")
+
+    create_box(component, source + "_central_hydrodynamic_body", 90, 45, 14, 0, 0, 8)
+    create_box(component, source + "_left_wide_fin", 80, 95, 4, 0, 72, 7)
+    create_box(component, source + "_right_wide_fin", 80, 95, 4, 0, -72, 7)
+    create_box(component, source + "_front_sensor_pod", 28, 24, 16, 58, 0, 10)
+    create_box(component, source + "_tail_stabilizer", 70, 8, 5, -78, 0, 8)
+
+    create_label(component, source + " aquatic glider morphology", -95, -95, 8)
+
+
+def _bio_draw_winged_uav(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "bird"), "bird")
+
+    create_box(component, source + "_lightweight_fuselage", 125, 28, 18, 0, 0, 14)
+    create_box(component, source + "_left_wing_surface", 85, 100, 4, 0, 72, 15)
+    create_box(component, source + "_right_wing_surface", 85, 100, 4, 0, -72, 15)
+    create_box(component, source + "_tail_plane", 38, 62, 4, -80, 0, 18)
+    create_box(component, source + "_nose_sensor", 24, 22, 16, 75, 0, 18)
+
+    if source in ("dragonfly", "damselfly"):
+        create_box(component, source + "_front_left_wing", 62, 72, 3, 26, 58, 18)
+        create_box(component, source + "_front_right_wing", 62, 72, 3, 26, -58, 18)
+        create_box(component, source + "_rear_left_wing", 58, 68, 3, -22, 52, 18)
+        create_box(component, source + "_rear_right_wing", 58, 68, 3, -22, -52, 18)
+        create_box(component, source + "_long_tail_boom", 95, 8, 8, -78, 0, 15)
+
+    create_label(component, source + " winged biomorphic morphology", -95, -95, 8)
+
+
+def _bio_draw_crustacean(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "crab"), "crab")
+
+    create_box(component, source + "_wide_armored_shell", 80, 105, 24, 0, 0, 16)
+    create_box(component, source + "_front_sensor_bar", 36, 42, 14, 52, 0, 22)
+
+    y_values = [62, 82, -62, -82]
+    x_values = [30, 5, -20, -45]
+    index = 1
+
+    for side in [1, -1]:
+        for x in x_values:
+            y = 62 * side
+            create_box(component, source + "_lateral_leg_" + str(index), 55, 8, 7, x, y, 8)
+            create_box(component, source + "_foot_pad_" + str(index), 16, 18, 4, x, y + 24 * side, 2)
+            index += 1
+
+    create_box(component, source + "_left_front_claw", 34, 18, 10, 70, 42, 14)
+    create_box(component, source + "_right_front_claw", 34, 18, 10, 70, -42, 14)
+
+    create_label(component, source + " crustacean lateral walker", -95, -95, 8)
+
+
+def _bio_draw_soft_radial(component, spec):
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", "octopus"), "octopus")
+
+    create_cylinder(component, source + "_central_soft_body", 32, 28, 0, 0, 18)
+    create_box(component, source + "_sensor_head", 36, 24, 18, 0, 0, 42)
+
+    arm_count = 8
+    for i in range(arm_count):
+        angle = math.radians(i * 360.0 / arm_count)
+        x = math.cos(angle) * 45
+        y = math.sin(angle) * 45
+        create_box(component, source + "_soft_arm_" + str(i + 1), 52, 7, 7, x, y, 10)
+
+    create_label(component, source + " soft radial morphology", -95, -95, 8)
+
+
+def _bio_draw_from_spec_generic(component, spec):
+    segments = _bio_list(spec.get("primary_segments", []))
+    appendages = _bio_list(spec.get("appendages", []))
+
+    if not segments:
+        create_box(component, "biomorphic_generic_body", 100, 55, 24, 0, 0, 18)
+    else:
+        spacing = 55
+        start_x = -spacing * max(0, len(segments) - 1) / 2
+        for i, segment in enumerate(segments):
+            _bio_segment_box(component, segment, i, start_x + i * spacing)
+
+    for i, app in enumerate(appendages):
+        app_type = str(app.get("appendage_type", app.get("type", "appendage")) or "appendage")
+        attach = app.get("attach", [0, 0, 0])
+        if not isinstance(attach, list) or len(attach) != 3:
+            attach = [app.get("attach_x_mm", 0), app.get("attach_y_mm", 0), app.get("attach_z_mm", 0)]
+
+        x = _bio_float(attach[0], 0)
+        y = _bio_float(attach[1], 0)
+        z = _bio_float(attach[2], 8)
+
+        length = _bio_float(app.get("length_mm", 45), 45)
+        width = _bio_float(app.get("width_mm", 8), 8)
+        height = _bio_float(app.get("height_mm", 8), 8)
+
+        create_box(
+            component,
+            "bio_" + _bio_clean_name(app_type, "appendage") + "_" + str(i + 1),
+            max(12, length),
+            max(4, width),
+            max(3, height),
+            x,
+            y,
+            z,
+        )
+
+        if app.get("ground_contact", False):
+            create_box(
+                component,
+                "bio_foot_contact_" + str(i + 1),
+                18,
+                14,
+                4,
+                x,
+                y,
+                1,
+            )
+
+
+
+# ─────────────────────────────────────────────────────────────
+# AssemblySpec Rendering Helpers
+# ─────────────────────────────────────────────────────────────
+
+def _get_assembly_spec():
+    spec = PARAMS.get("assembly_spec", dict())
+    if isinstance(spec, dict):
+        return spec
+    return dict()
+
+
+def _has_assembly_spec():
+    spec = _get_assembly_spec()
+    return bool(spec)
+
+
+def _asm_float(value, fallback):
+    try:
+        return float(value)
+    except Exception:
+        return float(fallback)
+
+
+def _asm_list(value):
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _asm_dict(value):
+    if isinstance(value, dict):
+        return value
+    return dict()
+
+
+def _asm_name(value, fallback):
+    return _bio_clean_name(value, fallback)
+
+
+def _asm_component_dims(component):
+    length = _asm_float(component.get("length_mm", 0), 0)
+    width = _asm_float(component.get("width_mm", 0), 0)
+    height = _asm_float(component.get("height_mm", 0), 0)
+
+    if length <= 0:
+        length = 50
+    if width <= 0:
+        width = 28
+    if height <= 0:
+        height = 12
+
+    return length, width, height
+
+
+def _asm_draw_panel(component, panel):
+    panel = _asm_dict(panel)
+
+    name = _asm_name(panel.get("name", "panel"), "panel")
+    panel_type = str(panel.get("panel_type", "panel") or "panel")
+    transparent = bool(panel.get("transparent", False))
+
+    length = _asm_float(panel.get("length_mm", 100), 100)
+    width = _asm_float(panel.get("width_mm", 50), 50)
+    thickness = _asm_float(panel.get("thickness_mm", 3), 3)
+
+    x = _asm_float(panel.get("x_mm", 0), 0)
+    y = _asm_float(panel.get("y_mm", 0), 0)
+    z = _asm_float(panel.get("z_mm", 0), 0)
+    angle = _asm_float(panel.get("angle_deg", 0), 0)
+
+    body_name = "asm_panel_" + name
+    if transparent:
+        body_name = body_name + "_transparent_marker"
+
+    create_box(
+        component,
+        body_name,
+        length,
+        width,
+        thickness,
+        x,
+        y,
+        z,
+        angle,
+    )
+
+    if transparent:
+        create_label(component, "transparent cutaway shell", x - length / 2, y, z + thickness + 2)
+
+    if panel_type in ("fin_panel", "wing_panel"):
+        create_label(component, panel_type, x - length / 2, y, z + thickness + 2)
+
+
+def _asm_draw_component(component, comp):
+    comp = _asm_dict(comp)
+
+    name = _asm_name(comp.get("name", "component"), "component")
+    ctype = str(comp.get("component_type", "box") or "box").lower()
+
+    x = _asm_float(comp.get("x_mm", 0), 0)
+    y = _asm_float(comp.get("y_mm", 0), 0)
+    z = _asm_float(comp.get("z_mm", 0), 0)
+    angle = _asm_float(comp.get("angle_deg", 0), 0)
+
+    length, width, height = _asm_component_dims(comp)
+
+    label = str(comp.get("label", "") or name)
+
+    # Cylindrical components use width as radius by convention.
+    if ctype in ("motor_can", "propeller_disk", "sonar_ring", "camera_lens", "standoff", "screw_boss"):
+        radius = max(2.0, width)
+        create_cylinder(
+            component,
+            "asm_component_" + name,
+            radius,
+            height,
+            x,
+            y,
+            z,
+        )
+    else:
+        create_box(
+            component,
+            "asm_component_" + name,
+            length,
+            width,
+            height,
+            x,
+            y,
+            z,
+            angle,
+        )
+
+    if ctype in ("battery_pack", "electronics_board", "compute_module", "flight_controller", "sensor_pod"):
+        create_label(component, label, x - length / 2, y - width / 2, z + height + 2)
+
+
+def _asm_draw_mounting_feature(component, mount):
+    mount = _asm_dict(mount)
+
+    name = _asm_name(mount.get("name", "mount"), "mount")
+    feature_type = str(mount.get("feature_type", "boss") or "boss").lower()
+
+    x = _asm_float(mount.get("x_mm", 0), 0)
+    y = _asm_float(mount.get("y_mm", 0), 0)
+    z = _asm_float(mount.get("z_mm", 0), 0)
+
+    diameter = _asm_float(mount.get("diameter_mm", 6), 6)
+    height = _asm_float(mount.get("height_mm", 8), 8)
+
+    if feature_type in ("boss", "standoff", "hole_pattern"):
+        create_cylinder(
+            component,
+            "asm_mount_" + name,
+            diameter / 2.0,
+            height,
+            x,
+            y,
+            z,
+        )
+    elif feature_type in ("rail", "slot"):
+        create_box(
+            component,
+            "asm_mount_" + name,
+            80,
+            max(4, diameter),
+            max(3, height),
+            x,
+            y,
+            z,
+        )
+    else:
+        create_box(
+            component,
+            "asm_mount_" + name,
+            20,
+            8,
+            height,
+            x,
+            y,
+            z,
+        )
+
+
+def _asm_draw_fastener_pattern(component, pattern):
+    pattern = _asm_dict(pattern)
+
+    name = _asm_name(pattern.get("name", "fasteners"), "fasteners")
+    xs = _asm_list(pattern.get("x_positions_mm", []))
+    ys = _asm_list(pattern.get("y_positions_mm", []))
+
+    z = _asm_float(pattern.get("z_mm", 0), 0)
+    diameter = _asm_float(pattern.get("diameter_mm", 3.2), 3.2)
+    depth = _asm_float(pattern.get("depth_mm", 4), 4)
+
+    index = 1
+    for x in xs:
+        for y in ys:
+            create_cylinder(
+                component,
+                "asm_fastener_" + name + "_" + str(index),
+                diameter / 2.0,
+                depth,
+                _asm_float(x, 0),
+                _asm_float(y, 0),
+                z,
+            )
+            index += 1
+
+
+def _asm_draw_structural_feature(component, feature):
+    feature = _asm_dict(feature)
+
+    name = _asm_name(feature.get("name", "structural"), "structural")
+    ftype = str(feature.get("feature_type", "rib") or "rib").lower()
+
+    length = _asm_float(feature.get("length_mm", 60), 60)
+    width = _asm_float(feature.get("width_mm", 4), 4)
+    height = _asm_float(feature.get("height_mm", 20), 20)
+
+    x = _asm_float(feature.get("x_mm", 0), 0)
+    y = _asm_float(feature.get("y_mm", 0), 0)
+    z = _asm_float(feature.get("z_mm", 0), 0)
+    angle = _asm_float(feature.get("angle_deg", 0), 0)
+
+    create_box(
+        component,
+        "asm_" + ftype + "_" + name,
+        length,
+        width,
+        height,
+        x,
+        y,
+        z,
+        angle,
+    )
+
+    if ftype in ("cable_corridor", "bulkhead"):
+        create_label(component, ftype, x - length / 2, y, z + height + 2)
+
+
+def _asm_draw_subassembly(component, subassembly):
+    subassembly = _asm_dict(subassembly)
+
+    for comp in _asm_list(subassembly.get("components", [])):
+        _asm_draw_component(component, comp)
+
+    for mount in _asm_list(subassembly.get("mounting_features", [])):
+        _asm_draw_mounting_feature(component, mount)
+
+    for pattern in _asm_list(subassembly.get("fastener_patterns", [])):
+        _asm_draw_fastener_pattern(component, pattern)
+
+
+def _asm_render_assembly_spec(component, family_label):
+    assembly = _get_assembly_spec()
+
+    if not assembly:
+        return False
+
+    outer_shell = _asm_dict(assembly.get("outer_shell", dict()))
+    panels = _asm_list(outer_shell.get("panels", []))
+
+    for panel in panels:
+        _asm_draw_panel(component, panel)
+
+    for subassembly in _asm_list(assembly.get("subassemblies", [])):
+        _asm_draw_subassembly(component, subassembly)
+
+    for feature in _asm_list(assembly.get("structural_features", [])):
+        _asm_draw_structural_feature(component, feature)
+
+    create_label(
+        component,
+        "Assembly: " + str(assembly.get("assembly_name", "assembly")),
+        -140,
+        125,
+        10,
+    )
+    create_label(
+        component,
+        "Detail: " + str(assembly.get("detail_level", "unknown")),
+        -140,
+        140,
+        10,
+    )
+    create_label(
+        component,
+        "Visibility: " + str(assembly.get("visibility_mode", "opaque")),
+        -140,
+        155,
+        10,
+    )
+    create_label(
+        component,
+        "Family: " + str(family_label),
+        -140,
+        170,
+        10,
+    )
+
+    create_reference_note_label(component)
+    return True
+
+
+def build_detailed_aquatic_glider(component):
+    rendered = _asm_render_assembly_spec(component, "aquatic_glider_robot")
+    if not rendered:
+        build_biomorphic_robot(component)
+
+
+def build_detailed_hybrid_biomorphic_drone(component):
+    rendered = _asm_render_assembly_spec(component, "hybrid_biomorphic_drone")
+    if not rendered:
+        build_biomorphic_robot(component)
+
+
+def build_detailed_biomorphic_rover(component):
+    rendered = _asm_render_assembly_spec(component, "biomorphic_rover")
+    if not rendered:
+        build_biomorphic_robot(component)
+
+
+def build_biomorphic_robot(component):
+    spec = _get_morphology_spec()
+    family = str(spec.get("morphology_family", PROJECT_TYPE) or PROJECT_TYPE).lower()
+    bio = spec.get("bio_inspiration", dict())
+    source = _bio_clean_name(bio.get("source_creature", family), family)
+
+    if family == "wall_climbing_robot":
+        _bio_draw_low_quadruped(component, spec)
+    elif family == "quadruped_robot":
+        _bio_draw_quadruped_runner(component, spec)
+    elif family == "serpentine_robot":
+        _bio_draw_serpentine(component, spec)
+    elif family == "aquatic_glider_robot":
+        _bio_draw_aquatic_glider(component, spec)
+    elif family == "winged_uav" or family == "biomorphic_micro_uav":
+        _bio_draw_winged_uav(component, spec)
+    elif family == "crustacean_walker":
+        _bio_draw_crustacean(component, spec)
+    elif family == "cephalopod_soft_robot":
+        _bio_draw_soft_radial(component, spec)
+    else:
+        _bio_draw_from_spec_generic(component, spec)
+
+    create_label(component, "Morphology: " + family, -130, 95, 8)
+    create_label(component, "Bio source: " + source, -130, 110, 8)
+    create_reference_note_label(component)
+
+
 def build_generic_robotics(component):
     create_box(
         component,
@@ -1379,6 +2071,29 @@ def run(context):
             build_robot_arm(model_component)
         elif PROJECT_TYPE == "enclosure":
             build_enclosure(model_component)
+        elif PROJECT_TYPE == "aquatic_glider_robot" and _has_assembly_spec():
+            build_detailed_aquatic_glider(model_component)
+        elif PROJECT_TYPE == "hybrid_biomorphic_drone" and _has_assembly_spec():
+            build_detailed_hybrid_biomorphic_drone(model_component)
+        elif PROJECT_TYPE == "biomorphic_rover" and _has_assembly_spec():
+            build_detailed_biomorphic_rover(model_component)
+        elif PROJECT_TYPE in (
+            "wall_climbing_robot",
+            "serpentine_robot",
+            "aquatic_glider_robot",
+            "winged_uav",
+            "crustacean_walker",
+            "cephalopod_soft_robot",
+            "armored_rover",
+            "jumping_robot",
+            "biomorphic_micro_uav",
+            "biomorphic_generic_robot",
+            "hybrid_biomorphic_drone",
+            "biomorphic_rover",
+            "biomorphic_underwater_robot",
+            "hybrid_biomorphic_walker",
+        ):
+            build_biomorphic_robot(model_component)
         else:
             build_generic_robotics(model_component)
 
@@ -1520,10 +2235,196 @@ def should_generate_fusion360_script(mission_result: Dict[str, Any]) -> bool:
     return any(keyword in combined for keyword in keywords)
 
 
+
+def clean_cad_mission_prompt(value: Any) -> str:
+    """
+    Extract the user's actual CAD mission prompt from possibly polluted text.
+
+    Frontend mission artifacts can contain generated README text, research excerpts,
+    matched terms, citations, ROS package summaries, or agent commentary. CAD
+    morphology must not infer animal/platform traits from those sections.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    # If a README-style mission section is present, keep only that section.
+    lower = text.lower()
+    mission_markers = [
+        "## mission",
+        "# mission",
+        "mission:",
+        "user mission:",
+        "original mission:",
+        "prompt:",
+    ]
+
+    for marker_text in mission_markers:
+        idx = lower.find(marker_text)
+        if idx != -1:
+            section = text[idx + len(marker_text):].strip()
+
+            # Stop at the next obvious generated/documentation section.
+            stop_markers = [
+                "\n## ",
+                "\n# ",
+                "\nmatched terms:",
+                "\nexcerpt:",
+                "\nreference",
+                "\nresearch",
+                "\nros2",
+                "\npackage",
+                "\ncommands",
+                "\nusage",
+                "\nvalidation",
+            ]
+
+            section_lower = section.lower()
+            stop_positions = [
+                section_lower.find(stop)
+                for stop in stop_markers
+                if section_lower.find(stop) != -1
+            ]
+
+            if stop_positions:
+                section = section[:min(stop_positions)].strip()
+
+            if len(section) >= 20:
+                text = section
+                break
+
+    # Cut off known pollution even without a formal heading.
+    pollution_markers = [
+        "\nmatched terms:",
+        "\nexcerpt:",
+        "\nreference hits",
+        "\nresearch context",
+        "\nretrieved context",
+        "\nagent output",
+        "\n## research",
+        "\n## references",
+        "\n## ros",
+        "\n## generated",
+    ]
+
+    lower = text.lower()
+    cut_positions = [
+        lower.find(marker)
+        for marker in pollution_markers
+        if lower.find(marker) != -1
+    ]
+
+    if cut_positions:
+        text = text[:min(cut_positions)].strip()
+
+    # Keep CAD prompt reasonably bounded. Real prompts are usually far shorter
+    # than retrieved research dumps.
+    if len(text) > 2500:
+        text = text[:2500].strip()
+
+    return text
+
+
+def select_cad_raw_mission_prompt(mission_result: Dict[str, Any]) -> str:
+    """
+    Choose the best raw user mission candidate for CAD morphology planning.
+    Prefer explicit/raw prompt fields, but clean every candidate defensively.
+    """
+    mission_result = mission_result or {}
+
+    candidates = []
+
+    for key in (
+        "raw_user_prompt",
+        "user_prompt",
+        "original_user_prompt",
+        "original_prompt",
+        "prompt",
+        "mission",
+        "mission_text",
+    ):
+        value = mission_result.get(key)
+        if value:
+            candidates.append((key, clean_cad_mission_prompt(value)))
+
+    for container_key in ("request", "input", "payload", "metadata", "mission_request", "context"):
+        container = mission_result.get(container_key)
+        if isinstance(container, dict):
+            for key in (
+                "raw_user_prompt",
+                "user_prompt",
+                "original_user_prompt",
+                "original_prompt",
+                "prompt",
+                "mission",
+                "mission_text",
+            ):
+                value = container.get(key)
+                if value:
+                    candidates.append((container_key + "." + key, clean_cad_mission_prompt(value)))
+
+    # Score candidates. Penalize obvious generated/retrieved content.
+    best_text = ""
+    best_score = -10**9
+
+    for key, candidate in candidates:
+        if not candidate:
+            continue
+
+        lower = candidate.lower()
+        score = 0
+
+        # User mission language should score well.
+        for token in ("design", "robot", "underwater", "aquatic", "manta", "fusion", "cad"):
+            if token in lower:
+                score += 10
+
+        # Pollution should score badly.
+        for token in ("excerpt:", "matched terms:", "research", "package:", "colcon", "ros2 launch"):
+            if token in lower:
+                score -= 60
+
+        # Prefer concise raw prompts over long generated reports.
+        score -= max(0, len(candidate) - 1200) // 50
+
+        # Prefer explicitly raw/original fields.
+        if "raw" in key or "original" in key or "prompt" in key:
+            score += 10
+
+        if score > best_score:
+            best_score = score
+            best_text = candidate
+
+    if best_text:
+        return best_text
+
+    return clean_cad_mission_prompt(
+        mission_result.get("mission")
+        or mission_result.get("mission_text")
+        or mission_result.get("prompt")
+        or ""
+    )
+
 def generate_fusion360_export(
     mission_result: Dict[str, Any],
     output_root: Path,
 ) -> Dict[str, Any]:
+    # CAD morphology and assembly planning must be grounded to the raw user prompt.
+    # Do not let research excerpts, generated ROS README text, memory summaries,
+    # or synthesized artifacts inject unrelated platform/creature traits.
+    raw_user_mission_text = select_cad_raw_mission_prompt(mission_result)
+
+    # Sanitized mission payload for CAD morphology planning only.
+    cad_safe_mission_result = dict(mission_result or {})
+    cad_safe_mission_result["mission"] = raw_user_mission_text
+    cad_safe_mission_result["mission_text"] = raw_user_mission_text
+    cad_safe_mission_result["prompt"] = raw_user_mission_text
+    cad_safe_mission_result["original_prompt"] = raw_user_mission_text
+    cad_safe_mission_result["artifacts"] = {}
+    cad_safe_mission_result["research_context"] = ""
+    cad_safe_mission_result["agent_outputs"] = {}
+    cad_safe_mission_result["memory_context"] = ""
+
     if not isinstance(mission_result, dict):
         raise ValueError("mission_result must be a dictionary.")
 
@@ -1533,6 +2434,32 @@ def generate_fusion360_export(
     model_name = f"omni_{project_type}_fusion_concept"
 
     morphology_plan = extract_morphology_plan(mission_result)
+
+    morphology_compiler_artifacts: Dict[str, Any] = {}
+    morphology_compiler_error = ""
+
+    assembly_spec = None
+    assembly_spec_dict = None
+    assembly_planner_error = ""
+
+    if build_morphology_artifacts is not None:
+        try:
+            morphology_compiler_artifacts = build_morphology_artifacts(
+                mission_text(mission_result)
+            )
+        except Exception as exc:
+            morphology_compiler_error = str(exc)
+
+    morphology_spec = (
+        morphology_compiler_artifacts.get("morphology_spec", {})
+        if isinstance(morphology_compiler_artifacts, dict)
+        else {}
+    )
+    morphology_quality_gate = (
+        morphology_compiler_artifacts.get("morphology_quality_gate", {})
+        if isinstance(morphology_compiler_artifacts, dict)
+        else {}
+    )
 
     project_type = fusion_project_type_from_morphology(
         fallback_project_type=project_type,
@@ -1544,7 +2471,120 @@ def generate_fusion360_export(
         morphology_plan=morphology_plan,
     )
 
+    # Hard guardrail: Fusion CAD morphology must be inferred from the cleaned
+    # CAD prompt, not from research excerpts, README text, generated ROS docs,
+    # or any synthesized artifact context.
+    if raw_user_mission_text:
+        try:
+            try:
+                from backend.app.cad.cad_morphology_planner import infer_morphology_spec as _clean_infer_morphology_spec
+                from backend.app.cad.morphology_quality_gate import validate_morphology_spec as _clean_validate_morphology_spec
+            except Exception:
+                from cad.cad_morphology_planner import infer_morphology_spec as _clean_infer_morphology_spec
+                from cad.morphology_quality_gate import validate_morphology_spec as _clean_validate_morphology_spec
+
+            clean_spec_obj = _clean_infer_morphology_spec(raw_user_mission_text)
+
+            if hasattr(clean_spec_obj, "to_dict"):
+                clean_spec_dict = clean_spec_obj.to_dict()
+            elif isinstance(clean_spec_obj, dict):
+                clean_spec_dict = clean_spec_obj
+            else:
+                clean_spec_dict = {}
+
+            if isinstance(clean_spec_dict, dict) and clean_spec_dict:
+                morphology_spec = clean_spec_dict
+
+                try:
+                    clean_gate_obj = _clean_validate_morphology_spec(clean_spec_obj, raw_user_mission_text)
+                    if hasattr(clean_gate_obj, "to_dict"):
+                        morphology_quality_gate = clean_gate_obj.to_dict()
+                    elif isinstance(clean_gate_obj, dict):
+                        morphology_quality_gate = clean_gate_obj
+                except Exception:
+                    pass
+
+        except Exception as exc:
+            morphology_compiler_error = (
+                (morphology_compiler_error + " | ") if morphology_compiler_error else ""
+            ) + "clean_prompt_morphology_override_failed: " + str(exc)
+
+    if morphology_spec:
+        project_type = fusion_project_type_from_morphology_spec(
+            fallback_project_type=project_type,
+            morphology_spec=morphology_spec,
+        )
+        model_name = model_name_from_morphology_spec(
+            fallback_model_name=model_name,
+            morphology_spec=morphology_spec,
+        )
+
     cad_context = build_cad_context(project_type, morphology_plan)
+
+    if morphology_spec:
+        # For data-driven biomorphic projects, avoid leaking old rover/drone
+        # pattern-library guidance into the CAD reference brief.
+        biomorphic_families = {
+            "wall_climbing_robot",
+            "serpentine_robot",
+            "aquatic_glider_robot",
+            "winged_uav",
+            "crustacean_walker",
+            "cephalopod_soft_robot",
+            "armored_rover",
+            "jumping_robot",
+            "biomorphic_micro_uav",
+            "biomorphic_generic_robot",
+        }
+
+        morphology_family = str(
+            morphology_spec.get("morphology_family", "")
+        ).lower().strip()
+
+        if morphology_family in biomorphic_families:
+            bio = morphology_spec.get("bio_inspiration", {}) or {}
+
+            cad_context = {
+                "project_type": project_type,
+                "morphology_spec": morphology_spec,
+                "recommended_features": (
+                    list(morphology_spec.get("specialized_features", []) or [])
+                    + list(morphology_spec.get("cad_rules", []) or [])
+                ),
+                "design_rules": [
+                    "Use morphology_spec as the structured CAD morphology contract.",
+                    "Respect morphology_spec body_posture, primary_segments, appendages, anchor_points, and vertical_structure.",
+                    "Avoid all morphology_spec hard_negatives.",
+                    f"Use biomorphic source creature: {bio.get('source_creature', 'unknown')}.",
+                    f"Use morphology archetype: {morphology_spec.get('morphology_archetype', 'unknown')}.",
+                ],
+                "reference_lessons": [
+                    "CAD Morphology Compiler context is active.",
+                    "Biomorphic trait library context is active.",
+                    "Generate creature-inspired robotic geometry from structured traits, not generic rover/drone defaults.",
+                    "Creature-inspired features should remain mechanically interpretable, not purely decorative.",
+                ],
+                "default_dimensions_mm": {},
+            }
+        else:
+            cad_context["morphology_spec"] = morphology_spec
+            cad_context.setdefault("reference_lessons", []).append(
+                "CAD Morphology Compiler context is active."
+            )
+            cad_context.setdefault("design_rules", []).extend(
+                [
+                    "Use morphology_spec as the structured CAD morphology contract.",
+                    "Respect morphology_spec body_posture, primary_segments, appendages, anchor_points, and vertical_structure.",
+                    "Avoid all morphology_spec hard_negatives.",
+                ]
+            )
+
+    if morphology_quality_gate:
+        cad_context["morphology_quality_gate"] = morphology_quality_gate
+        cad_context.setdefault("design_rules", []).append(
+            f"CAD morphology gate verdict: {morphology_quality_gate.get('verdict', 'UNKNOWN')}"
+        )
+
     cad_reference_brief = cad_context_to_brief(cad_context)
 
     cad_artifact = extract_cad_artifact(mission_result)
@@ -1557,26 +2597,68 @@ def generate_fusion360_export(
     if project_type == "drone":
         parameters["rotor_count"] = infer_rotor_count(mission_result)
 
+    if morphology_spec and plan_cad_detail_passes is not None and assembly_spec_to_dict is not None:
+        try:
+            detail_mission_text = str(
+                mission_result.get("mission")
+                or mission_result.get("mission_text")
+                or mission_result.get("prompt")
+                or mission_result.get("original_prompt")
+                or mission_text
+                or ""
+            )
+
+            assembly_spec = plan_cad_detail_passes(
+                mission_text=raw_user_mission_text,
+                morphology_spec=morphology_spec,
+                project_type=project_type,
+            )
+            assembly_spec_dict = assembly_spec_to_dict(assembly_spec)
+            parameters["assembly_spec"] = assembly_spec_dict
+
+            cad_context.setdefault("reference_lessons", []).append(
+                "Assembly detail planner context is active."
+            )
+            cad_context.setdefault("design_rules", []).append(
+                "Use PARAMS['assembly_spec'] for detailed internal assembly layout when available."
+            )
+        except Exception as exc:
+            assembly_planner_error = str(exc)
+            assembly_spec = None
+            assembly_spec_dict = None
+
+    if morphology_spec:
+        parameters["morphology_spec"] = morphology_spec
+
+    if morphology_quality_gate:
+        parameters["morphology_quality_gate"] = morphology_quality_gate
+
     fusion_dir = output_root / "generated_fusion360"
     fusion_dir.mkdir(parents=True, exist_ok=True)
 
     script_path = fusion_dir / "fusion360_model_generator.py"
     params_path = fusion_dir / "fusion360_parameters.json"
     readme_path = fusion_dir / "CAD_README.md"
+    morphology_spec_path = fusion_dir / "morphology_spec.json"
+    morphology_gate_path = fusion_dir / "morphology_quality_gate.json"
+    assembly_spec_path = fusion_dir / "assembly_spec.json"
 
     script_content = generate_fusion360_script(
         model_name=model_name,
         project_type=project_type,
         parameters=parameters,
         cad_reference_brief=cad_reference_brief,
-        morphology_id=morphology_plan.get("morphology_id", ""),
+        morphology_id=(
+            morphology_plan.get("morphology_id", "")
+            or morphology_spec.get("morphology_family", "")
+        ),
     )
 
     params_content = generate_parameters_json(
         model_name=model_name,
         project_type=project_type,
         parameters=parameters,
-        mission_result=mission_result,
+        mission_result=cad_safe_mission_result,
         cad_context=cad_context,
         cad_reference_brief=cad_reference_brief,
     )
@@ -1591,11 +2673,38 @@ def generate_fusion360_export(
     params_path.write_text(json.dumps(params_content, indent=2), encoding="utf-8")
     readme_path.write_text(readme_content, encoding="utf-8")
 
+    if morphology_spec:
+        morphology_spec_path.write_text(
+            json.dumps(morphology_spec, indent=2),
+            encoding="utf-8",
+        )
+
+    if morphology_quality_gate:
+        morphology_gate_path.write_text(
+            json.dumps(morphology_quality_gate, indent=2),
+            encoding="utf-8",
+        )
+
+    if assembly_spec_dict:
+        assembly_spec_path.write_text(
+            json.dumps(assembly_spec_dict, indent=2),
+            encoding="utf-8",
+        )
+
     files = [
         str(script_path.relative_to(output_root)),
         str(params_path.relative_to(output_root)),
         str(readme_path.relative_to(output_root)),
     ]
+
+    if morphology_spec:
+        files.append(str(morphology_spec_path.relative_to(output_root)))
+
+    if morphology_quality_gate:
+        files.append(str(morphology_gate_path.relative_to(output_root)))
+
+    if assembly_spec_dict:
+        files.append(str(assembly_spec_path.relative_to(output_root)))
 
     return {
         "status": "generated",
@@ -1605,5 +2714,54 @@ def generate_fusion360_export(
         "files": files,
         "file_count": len(files),
         "cad_reference_context_available": bool(cad_reference_brief),
+        "morphology_compiler_available": bool(morphology_spec),
+        "morphology_gate_verdict": (
+            morphology_quality_gate.get("verdict")
+            if isinstance(morphology_quality_gate, dict)
+            else None
+        ),
+        "morphology_gate_score": (
+            morphology_quality_gate.get("overall_score")
+            if isinstance(morphology_quality_gate, dict)
+            else None
+        ),
+        "morphology_compiler_error": morphology_compiler_error or None,
+        "assembly_detail_available": bool(assembly_spec_dict),
+        "assembly_detail_level": (
+            assembly_spec_dict.get("detail_level")
+            if isinstance(assembly_spec_dict, dict)
+            else None
+        ),
+        "assembly_visibility_mode": (
+            assembly_spec_dict.get("visibility_mode")
+            if isinstance(assembly_spec_dict, dict)
+            else None
+        ),
+        "assembly_component_count": (
+            assembly_spec_dict.get("component_count")
+            if isinstance(assembly_spec_dict, dict)
+            else None
+        ),
+        "assembly_structural_feature_count": (
+            assembly_spec_dict.get("structural_feature_count")
+            if isinstance(assembly_spec_dict, dict)
+            else None
+        ),
+        "assembly_planner_error": assembly_planner_error or None,
+        "morphology_family": (
+            morphology_spec.get("morphology_family")
+            if isinstance(morphology_spec, dict)
+            else None
+        ),
+        "morphology_archetype": (
+            morphology_spec.get("morphology_archetype")
+            if isinstance(morphology_spec, dict)
+            else None
+        ),
+        "bio_inspiration": (
+            morphology_spec.get("bio_inspiration")
+            if isinstance(morphology_spec, dict)
+            else None
+        ),
         "rotor_count": parameters.get("rotor_count") if project_type == "drone" else None,
     }

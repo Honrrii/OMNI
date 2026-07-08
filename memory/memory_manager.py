@@ -4,9 +4,10 @@ from pathlib import Path
 
 
 MEMORY_DIR = Path("memory")
-MEMORY_FILE = MEMORY_DIR / "project_memory.json"
+MEMORY_FILE = MEMORY_DIR / "omni_memory.json"
 
 MAX_MISSIONS_TO_KEEP = 25
+MAX_MEMORY_SEEDS_TO_KEEP = 100
 MAX_SUMMARY_CHARS = 1400
 MAX_MISSION_CHARS = 500
 
@@ -110,9 +111,9 @@ def add_mission_to_memory(mission, summary):
     save_memory(memory)
 
 
-def get_recent_memory(limit=3):
+def get_recent_memory(n=5):
     memory = load_memory()
-    recent = memory["missions"][-limit:]
+    recent = memory["missions"][-n:]
 
     if not recent:
         return "No previous mission memory yet."
@@ -152,3 +153,122 @@ def get_memory_stats():
         "memory_file": str(MEMORY_FILE),
         "max_missions_to_keep": MAX_MISSIONS_TO_KEEP,
     }
+
+
+def add_mission_memory_seed(seed: dict, mission: str = "") -> bool:
+    """
+    Append a compact mission_memory_seed record to omni_memory.json.
+
+    Returns True on successful write, False on any failure.
+    Never raises.
+    """
+    try:
+        if not isinstance(seed, dict):
+            return False
+        if seed.get("status") == "empty":
+            return False
+
+        memory = load_memory()
+        seeds = memory.get("memory_seeds", [])
+        if not isinstance(seeds, list):
+            seeds = []
+
+        mission_clean = clean_text(mission, MAX_MISSION_CHARS)
+        summary = seed.get("memory_summary", "") or ""
+
+        # Deduplicate: skip if same (mission, memory_summary) already stored.
+        for existing in seeds:
+            if (existing.get("mission") == mission_clean and
+                    existing.get("memory_summary") == summary):
+                return False
+
+        record = {
+            "type": "mission_memory_seed",
+            "timestamp": datetime.now().isoformat(),
+            "mission": mission_clean,
+            "mission_type": seed.get("mission_type"),
+            "platform_intent": seed.get("platform_intent"),
+            "recommended_candidate_id": seed.get("recommended_candidate_id"),
+            "risk_level": seed.get("risk_level"),
+            "safety_status": seed.get("safety_status"),
+            "required_human_review": bool(seed.get("required_human_review", False)),
+            "unresolved_questions": list(seed.get("unresolved_questions") or []),
+            "recurring_risk_themes": list(seed.get("recurring_risk_themes") or []),
+            "next_design_lessons": list(seed.get("next_design_lessons") or []),
+            "memory_summary": summary,
+        }
+
+        seeds.append(record)
+        # Cap to the most recent MAX_MEMORY_SEEDS_TO_KEEP entries.
+        seeds = seeds[-MAX_MEMORY_SEEDS_TO_KEEP:]
+        memory["memory_seeds"] = seeds
+        save_memory(memory)
+        return True
+
+    except Exception:
+        return False
+
+
+def get_recent_memory_seeds(n: int = 5) -> list:
+    """Return up to n most recent mission_memory_seed records (newest last)."""
+    try:
+        memory = load_memory()
+        seeds = memory.get("memory_seeds", [])
+        if not isinstance(seeds, list):
+            return []
+        return seeds[-n:]
+    except Exception:
+        return []
+
+
+def get_recent_memory_seed_context(n: int = 5) -> str:
+    """
+    Return a compact human-readable text block from recent mission memory seeds.
+
+    Suitable for injection into agent prompts as lightweight prior-mission context.
+    Returns "" if no seeds exist or on any error.
+    Never raises.
+    """
+    try:
+        if n <= 0:
+            return ""
+        seeds = get_recent_memory_seeds(n)
+        if not seeds:
+            return ""
+
+        lines = [f"Recent OMNI mission lessons ({len(seeds)}):"]
+
+        # Present newest first so the most relevant lesson appears first.
+        for seed in reversed(seeds):
+            mission_type    = seed.get("mission_type") or "unknown"
+            platform        = seed.get("platform_intent") or "unknown"
+            safety_status   = seed.get("safety_status") or "unknown"
+            risk_level      = seed.get("risk_level") or "unknown"
+            human_review    = "human review required" if seed.get("required_human_review") else "no human review"
+            lessons         = seed.get("next_design_lessons") or []
+            summary         = str(seed.get("memory_summary") or "").strip()
+
+            # Compact one-line header.
+            header = (
+                f"- {mission_type} / {platform}: "
+                f"Pluto {safety_status}/{risk_level}, {human_review}."
+            )
+
+            # Append up to three lessons, each capped at 80 chars.
+            if lessons:
+                lesson_text = "; ".join(
+                    str(l).strip()[:80] for l in lessons[:3] if str(l).strip()
+                )
+                if lesson_text:
+                    header += f" Lesson: {lesson_text}"
+
+            lines.append(header)
+
+            # One-line summary (max 200 chars) on indented follow-up line.
+            if summary:
+                lines.append(f"  {summary[:200]}")
+
+        return "\n".join(lines)
+
+    except Exception:
+        return ""

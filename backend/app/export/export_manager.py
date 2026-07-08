@@ -20,6 +20,105 @@ from backend.app.engineering.morphology_gate_validator import validate_morpholog
 
 OUTPUT_ROOT = Path("outputs") / "omni_missions"
 
+# -------------------------------------------------------------------------
+# Visual Bay delivery bounds
+# -------------------------------------------------------------------------
+
+MAX_VISUAL_BAY_PREVIEW_ASSETS = 25
+MAX_VISUAL_BAY_PATH_CHARS     = 240
+MAX_VISUAL_BAY_NOTE_CHARS     = 180
+MAX_VISUAL_BAY_NOTES          = 3
+
+_PREVIEW_ASSET_ALLOWLIST: frozenset = frozenset({
+    "path",
+    "kind",
+    "browser_preview_ready",
+    "browser_preview_candidate",
+    "engineering_only",
+    "execution_blocked",
+    "requires_conversion",
+    "requires_external_tool",
+    "notes",
+})
+
+
+def _sanitize_preview_assets(
+    assets: List[Dict[str, Any]],
+    export_dir: Optional[Path] = None,
+    mission_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Bound and sanitize preview_assets before delivering them in the API summary.
+
+    - Caps list to MAX_VISUAL_BAY_PREVIEW_ASSETS.
+    - Strips fields not in the allowlist.
+    - Ensures path is relative; absolute paths are rebased or replaced with filename.
+    - Truncates paths longer than MAX_VISUAL_BAY_PATH_CHARS.
+    - Caps notes to MAX_VISUAL_BAY_NOTES entries, each truncated to MAX_VISUAL_BAY_NOTE_CHARS.
+    - Adds asset_url for servable (non-execution-blocked, allowed-extension) assets when
+      mission_id is provided; omits asset_url for blocked/script assets.
+    """
+    if not isinstance(assets, list):
+        return []
+
+    # Import asset service once; skip silently if unavailable.
+    _svc = None
+    if mission_id:
+        try:
+            from backend.app.visual_bay import asset_service as _svc  # type: ignore[assignment]
+        except Exception:
+            pass
+
+    result: List[Dict[str, Any]] = []
+    for asset in assets[:MAX_VISUAL_BAY_PREVIEW_ASSETS]:
+        if not isinstance(asset, dict):
+            continue
+
+        clean: Dict[str, Any] = {
+            field: asset[field]
+            for field in _PREVIEW_ASSET_ALLOWLIST
+            if field in asset
+        }
+
+        raw_path = str(clean.get("path", ""))
+        if raw_path:
+            p = Path(raw_path)
+            if p.is_absolute():
+                if export_dir is not None:
+                    try:
+                        raw_path = str(p.relative_to(export_dir))
+                    except ValueError:
+                        raw_path = p.name
+                else:
+                    raw_path = p.name
+            if len(raw_path) > MAX_VISUAL_BAY_PATH_CHARS:
+                raw_path = raw_path[:MAX_VISUAL_BAY_PATH_CHARS]
+            clean["path"] = raw_path
+
+        notes = clean.get("notes")
+        if isinstance(notes, list):
+            bounded: List[str] = []
+            for note in notes[:MAX_VISUAL_BAY_NOTES]:
+                s = str(note)
+                bounded.append(s[:MAX_VISUAL_BAY_NOTE_CHARS] if len(s) > MAX_VISUAL_BAY_NOTE_CHARS else s)
+            clean["notes"] = bounded
+        else:
+            clean["notes"] = []
+
+        # Attach asset_url only for servable, non-execution-blocked assets.
+        if _svc is not None and mission_id and clean.get("path"):
+            try:
+                if _svc.is_visual_bay_asset_servable(clean):
+                    clean["asset_url"] = _svc.build_visual_bay_asset_url(
+                        mission_id, clean["path"]
+                    )
+            except Exception:
+                pass
+
+        result.append(clean)
+
+    return result
+
 
 # -------------------------------------------------------------------------
 # Basic file writers
@@ -697,6 +796,447 @@ def run_morphology_gate(export_dir: Path) -> Dict[str, Any]:
 
 
 # -------------------------------------------------------------------------
+# Mission Knowledge Graph + Review helper
+# -------------------------------------------------------------------------
+
+
+def _write_graph_review(export_dir: Path) -> Dict[str, Any]:
+    """
+    Build a MissionKnowledgeGraph from export_dir/mission.json, run the
+    deterministic reviewer, and write both output files into export_dir.
+
+    Assumes mission.json already exists in export_dir (written by
+    export_mission_files before this is called).  May raise; callers are
+    responsible for catching errors.
+    """
+    from backend.app.mission_graph.builder import build_graph
+    from backend.app.mission_graph.finding_projection import project_review_findings
+    from backend.app.mission_graph.reviewer import review_graph
+
+    graph = build_graph(export_dir)
+    review = review_graph(graph)
+
+    graph_path = export_dir / "mission_graph.json"
+    write_json(graph_path, graph.model_dump(mode="json"))
+
+    # Additive findings projection: a normalized, read-only view of the
+    # review's issues + consistency_warnings. Does not change the
+    # MissionGraphReview model or any existing exported field.
+    review_data = review.model_dump(mode="json")
+    projection_items = project_review_findings(review)
+    review_data["findings_projection"] = {
+        "schema": "omni.mission_graph.findings_projection.v1",
+        "source": "mission_graph_review",
+        "origin_fields": ["issues", "consistency_warnings"],
+        "count": len(projection_items),
+        "items": projection_items,
+    }
+
+    review_path = export_dir / "mission_graph_review.json"
+    write_json(review_path, review_data)
+
+    return {
+        "status": "reviewed",
+        "graph_path": str(graph_path),
+        "review_path": str(review_path),
+        "issue_count": len(review.issues),
+        "warning_count": len(review.warnings),
+        "recommendation_count": len(review.recommendations),
+        **review_data,
+    }
+
+
+def _write_candidate_evaluation(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Write candidate_evaluation_report.json into export_dir.
+
+    Priority order:
+    1. Pre-computed candidate_evaluation from mission_result artifacts.
+    2. Evaluate design_candidates from mission_result artifacts on-demand.
+    3. Write a skipped marker if neither is available.
+
+    Always writes the file. May raise; callers must catch.
+    """
+    from agents.candidate_evaluator import evaluate_design_candidates
+
+    artifacts = as_dict(mission_result.get("artifacts", {}))
+    report_path = export_dir / "candidate_evaluation_report.json"
+
+    candidate_evaluation = artifacts.get("candidate_evaluation")
+    if (
+        isinstance(candidate_evaluation, dict)
+        and candidate_evaluation.get("candidates_evaluated", 0) > 0
+    ):
+        write_json(report_path, candidate_evaluation)
+        return {
+            "status": "evaluated",
+            "report_path": str(report_path),
+            "candidates_evaluated": candidate_evaluation["candidates_evaluated"],
+            "recommended_candidate_id": candidate_evaluation.get("recommended_candidate_id"),
+            "ranking": candidate_evaluation.get("ranking", []),
+        }
+
+    design_candidates = artifacts.get("design_candidates")
+    if isinstance(design_candidates, list) and design_candidates:
+        candidate_evaluation = evaluate_design_candidates(
+            design_candidates, mission_text=mission_text
+        )
+        write_json(report_path, candidate_evaluation)
+        return {
+            "status": "evaluated",
+            "report_path": str(report_path),
+            "candidates_evaluated": candidate_evaluation["candidates_evaluated"],
+            "recommended_candidate_id": candidate_evaluation.get("recommended_candidate_id"),
+            "ranking": candidate_evaluation.get("ranking", []),
+        }
+
+    skipped: Dict[str, Any] = {
+        "status": "skipped",
+        "reason": "No design candidates available for evaluation.",
+    }
+    write_json(report_path, skipped)
+    return {
+        "status": "skipped",
+        "report_path": str(report_path),
+        "candidates_evaluated": 0,
+        "recommended_candidate_id": None,
+        "ranking": [],
+    }
+
+
+def _write_mission_intent(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Write mission_intent_report.json into export_dir.
+
+    Priority order:
+    1. Pre-computed mission_intent from mission_result artifacts.
+    2. Compile from mission_text on-demand.
+    3. Write a failed marker if compilation raises.
+
+    Always writes the file. May raise; callers must catch.
+    """
+    from backend.app.omni_core.mission_intent import compile_mission_intent
+
+    artifacts = as_dict(mission_result.get("artifacts", {}))
+    report_path = export_dir / "mission_intent_report.json"
+
+    precomputed = artifacts.get("mission_intent")
+    if isinstance(precomputed, dict) and precomputed.get("mission_type"):
+        intent = precomputed
+    else:
+        intent = compile_mission_intent(mission_text)
+
+    write_json(report_path, intent)
+    return {
+        "status": "compiled",
+        "report_path": str(report_path),
+        "mission_type": intent.get("mission_type", ""),
+        "platform_intent": intent.get("platform_intent"),
+        "detected_domain_count": len(intent.get("detected_domains") or []),
+        "open_question_count": len(intent.get("open_questions") or []),
+    }
+
+
+def _write_pluto_safety_gate(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Write pluto_safety_gate_report.json into export_dir.
+
+    Priority order:
+    1. Pre-computed pluto_safety_gate from mission_result artifacts.
+    2. Evaluate on-demand from artifacts["mission_intent"] / ["candidate_evaluation"].
+    3. Write a failed marker if evaluation raises.
+
+    Always writes the file. May raise; callers must catch.
+    """
+    from backend.app.omni_core.safety_gate import evaluate_safety_gate
+
+    artifacts = as_dict(mission_result.get("artifacts", {}))
+    report_path = export_dir / "pluto_safety_gate_report.json"
+
+    precomputed = artifacts.get("pluto_safety_gate")
+    if isinstance(precomputed, dict) and precomputed.get("gate") == "pluto_safety_gate":
+        gate = precomputed
+    else:
+        gate = evaluate_safety_gate(
+            mission_intent=artifacts.get("mission_intent"),
+            candidate_evaluation=artifacts.get("candidate_evaluation"),
+            artifacts=artifacts,
+        )
+
+    write_json(report_path, gate)
+    return {
+        "status": gate.get("status", "unknown"),
+        "report_path": str(report_path),
+        "risk_level": gate.get("risk_level", "unknown"),
+        "required_human_review": bool(gate.get("required_human_review", False)),
+        "blocker_count": len(gate.get("blockers") or []),
+        "warning_count": len(gate.get("warnings") or []),
+        "next_check_count": len(gate.get("required_next_checks") or []),
+    }
+
+
+def _write_aeroforge_reports(
+    export_dir: Path,
+    mission_text: str,
+    artifacts: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Write aeroforge_intent_report.json and aeroforge_entry_gate_report.json
+    when aerospace signals are detected.
+
+    Priority order:
+    1. Pre-computed aeroforge_intent / aeroforge_entry_gate from artifacts.
+    2. Classify and evaluate on-demand from mission_text.
+    3. If aerospace is not detected, return status "not_applicable" without
+       writing any report files.
+
+    May raise; callers must catch.
+    """
+    from backend.app.aeroforge.foundation import (
+        classify_aeroforge_intent,
+        evaluate_aeroforge_entry_gate,
+    )
+
+    precomputed_intent = artifacts.get("aeroforge_intent")
+    if isinstance(precomputed_intent, dict):
+        aeroforge_intent = precomputed_intent
+    else:
+        aeroforge_intent = classify_aeroforge_intent(
+            mission_text=mission_text,
+            mission_intent=as_dict(artifacts.get("mission_intent")),
+        )
+
+    if not aeroforge_intent.get("aerospace_detected", False):
+        return {"status": "not_applicable", "aerospace_detected": False}
+
+    precomputed_gate = artifacts.get("aeroforge_entry_gate")
+    if isinstance(precomputed_gate, dict):
+        aeroforge_entry_gate = precomputed_gate
+    else:
+        aeroforge_entry_gate = evaluate_aeroforge_entry_gate(
+            mission_text=mission_text,
+            mission_intent=as_dict(artifacts.get("mission_intent")),
+            readiness=as_dict(artifacts.get("mission_intelligence_readiness")),
+        )
+
+    intent_path = export_dir / "aeroforge_intent_report.json"
+    gate_path = export_dir / "aeroforge_entry_gate_report.json"
+
+    write_json(intent_path, aeroforge_intent)
+    write_json(gate_path, aeroforge_entry_gate)
+
+    return {
+        "status": "detected",
+        "intent_report_path": str(intent_path),
+        "entry_gate_report_path": str(gate_path),
+        "entry_gate_status": aeroforge_entry_gate.get("status"),
+        "aerospace_detected": True,
+        "platform_hint": aeroforge_intent.get("platform_hint"),
+        "domain_count": len(as_list(aeroforge_intent.get("aero_domains", []))),
+        "human_review_required": bool(aeroforge_entry_gate.get("human_review_required", False)),
+        "concept_stage_only": bool(aeroforge_entry_gate.get("concept_stage_only", True)),
+    }
+
+
+def _write_design_understanding(
+    export_dir: Path,
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Build the mission graph and review, evaluate design understanding, and write
+    design_understanding_report.json into export_dir.
+
+    Rebuilds the graph/review objects so this helper stays self-contained and
+    does not require callers to thread live objects through.  May raise; callers
+    are responsible for catching errors.
+    """
+    from backend.app.mission_graph.builder import build_graph
+    from backend.app.mission_graph.reviewer import review_graph
+    from backend.app.cortex.design_evaluator import evaluate_design_understanding
+
+    graph = build_graph(export_dir)
+    review = review_graph(graph)
+
+    report = evaluate_design_understanding(
+        mission_text,
+        graph=graph,
+        graph_review=review,
+    )
+
+    report_path = export_dir / "design_understanding_report.json"
+    write_json(report_path, report.model_dump(mode="json"))
+
+    return {
+        "status": "evaluated",
+        "report_path": str(report_path),
+        "intended_platform": report.intended_platform,
+        "semantic_match_score": report.semantic_match_score,
+        "strength_count": len(report.strengths),
+        "mismatch_count": len(report.mismatches),
+        "next_action_count": len(report.next_design_actions),
+    }
+
+
+# -------------------------------------------------------------------------
+# Phase 17E — Engineering Brain export helpers
+# -------------------------------------------------------------------------
+
+
+def _extract_engineering_inputs(
+    mission_result: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """
+    Return explicit engineering inputs from mission_result without inventing values.
+    Checks:
+      1. mission_result.artifacts.engineering_inputs
+      2. mission_result.engineering_inputs
+    Returns None when no valid dict is found.
+    """
+    if not isinstance(mission_result, dict):
+        return None
+    artifacts = mission_result.get("artifacts", {})
+    if isinstance(artifacts, dict):
+        ei = artifacts.get("engineering_inputs")
+        if isinstance(ei, dict) and ei:
+            return ei
+    ei = mission_result.get("engineering_inputs")
+    if isinstance(ei, dict) and ei:
+        return ei
+    return None
+
+
+def _write_engineering_brain(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Build and write the Phase 17 engineering brain reports.
+
+    Writes:
+      engineering_knowledge_selection_report.json
+      engineering_input_readiness_report.json
+      engineering_calculation_report.json
+
+    Returns a compact summary dict.
+    No LLM calls. No internet. No simulation. No engineering validation implied.
+    Concept-stage estimates only.
+    """
+    from backend.app.engineering.knowledge_selection_report import (
+        build_engineering_knowledge_selection_report,
+    )
+    from backend.app.engineering.input_readiness_report import (
+        build_engineering_input_readiness_report,
+    )
+    from backend.app.engineering.calculation_engine import (
+        build_engineering_calculation_report,
+    )
+
+    provided_inputs = _extract_engineering_inputs(mission_result)
+
+    selection_report = build_engineering_knowledge_selection_report(
+        mission_result=mission_result,
+        mission_text=mission_text,
+    )
+    readiness_report = build_engineering_input_readiness_report(
+        mission_result=mission_result,
+        mission_text=mission_text,
+        provided_inputs=provided_inputs,
+    )
+    calc_report = build_engineering_calculation_report(
+        mission_result=mission_result,
+        mission_text=mission_text,
+        provided_inputs=provided_inputs,
+    )
+
+    sel_path      = export_dir / "engineering_knowledge_selection_report.json"
+    readiness_path = export_dir / "engineering_input_readiness_report.json"
+    calc_path     = export_dir / "engineering_calculation_report.json"
+
+    write_json(sel_path, selection_report)
+    write_json(readiness_path, readiness_report)
+    write_json(calc_path, calc_report)
+
+    readiness_summary = readiness_report.get("readiness_summary", {})
+
+    return {
+        "status": "generated",
+        "knowledge_selection": {
+            "schema":                    selection_report.get("schema"),
+            "platform_intent":           selection_report.get("platform_intent"),
+            "platform_resolution_source": selection_report.get("platform_resolution_source"),
+            "selected_check_count":      selection_report.get("selected_check_count"),
+            "report_path":               str(sel_path),
+        },
+        "input_readiness": {
+            "schema":          readiness_report.get("schema"),
+            "platform_intent": readiness_report.get("platform_intent"),
+            "overall_status":  readiness_summary.get("overall_status"),
+            "total_checks":    readiness_summary.get("total_checks"),
+            "ready_count":     readiness_summary.get("ready_count"),
+            "partial_count":   readiness_summary.get("partial_count"),
+            "missing_count":   readiness_summary.get("missing_count"),
+            "report_path":     str(readiness_path),
+        },
+        "calculations": {
+            "schema":                      calc_report.get("schema"),
+            "calculation_performed":       calc_report.get("calculation_performed"),
+            "computed_metric_count":       calc_report.get("computed_metric_count"),
+            "blocked_calculation_count":   calc_report.get("blocked_calculation_count"),
+            "supported_calculation_count": calc_report.get("supported_calculation_count"),
+            "report_path":                 str(calc_path),
+        },
+    }
+
+
+# -------------------------------------------------------------------------
+# Phase 18A — Concept Dossier export helper
+# -------------------------------------------------------------------------
+
+
+def _write_concept_dossier(
+    export_dir: Path,
+    mission_result: Dict[str, Any],
+    mission_text: str,
+) -> Dict[str, Any]:
+    """
+    Build and write the Phase 18A Concept Dossier Manifest.
+    Reads Visual Bay and Engineering Brain reports already present in export_dir.
+    Returns a compact summary dict.
+    No LLM calls. No internet. No simulation. No engineering validation implied.
+    """
+    from backend.app.concept_dossier.manifest import build_concept_dossier_manifest
+
+    manifest = build_concept_dossier_manifest(
+        mission_result=mission_result,
+        mission_text=mission_text,
+        export_dir=export_dir,
+    )
+
+    dossier_path = export_dir / "concept_dossier_manifest.json"
+    write_json(dossier_path, manifest)
+
+    return {
+        "status":      manifest.get("status", "generated"),
+        "schema":      manifest.get("schema"),
+        "panel_count": len(manifest.get("dossier_panels", [])),
+        "report_path": str(dossier_path),
+        "manifest":    manifest if isinstance(manifest, dict) else None,
+    }
+
+
+# -------------------------------------------------------------------------
 # Main export function
 # -------------------------------------------------------------------------
 
@@ -824,6 +1364,107 @@ def export_mission_files(
     path = export_dir / "validation.json"
     write_json(path, mission_result.get("validation", {}))
     record(path)
+
+    # ---------------------------------------------------------
+    # Mission Knowledge Graph + deterministic review
+    # (mission.json is guaranteed to exist at this point)
+    # ---------------------------------------------------------
+
+    graph_review: Optional[Dict[str, Any]] = None
+
+    try:
+        graph_review = _write_graph_review(export_dir)
+        record(Path(graph_review["graph_path"]))
+        record(Path(graph_review["review_path"]))
+    except Exception as error:
+        graph_review = {"status": "failed", "error": str(error)}
+        path = export_dir / "mission_graph_review.json"
+        write_json(path, graph_review)
+        record(path)
+
+    # ---------------------------------------------------------
+    # Cortex — design understanding evaluation
+    # (depends on mission_graph.json written above)
+    # ---------------------------------------------------------
+
+    design_understanding: Optional[Dict[str, Any]] = None
+
+    try:
+        design_understanding = _write_design_understanding(export_dir, mission)
+        record(Path(design_understanding["report_path"]))
+    except Exception as error:
+        design_understanding = {"status": "failed", "error": str(error)}
+        path = export_dir / "design_understanding_report.json"
+        write_json(path, design_understanding)
+        record(path)
+
+    # ---------------------------------------------------------
+    # Candidate evaluation export
+    # ---------------------------------------------------------
+
+    candidate_evaluation_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        candidate_evaluation_summary = _write_candidate_evaluation(
+            export_dir, mission_result, mission
+        )
+        record(Path(candidate_evaluation_summary["report_path"]))
+    except Exception as error:
+        candidate_evaluation_summary = {"status": "failed", "error": str(error)}
+        path = export_dir / "candidate_evaluation_report.json"
+        write_json(path, candidate_evaluation_summary)
+        record(path)
+
+    # ---------------------------------------------------------
+    # Mission intent export
+    # ---------------------------------------------------------
+
+    mission_intent_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        mission_intent_summary = _write_mission_intent(export_dir, mission_result, mission)
+        record(Path(mission_intent_summary["report_path"]))
+    except Exception as error:
+        mission_intent_summary = {"status": "failed", "error": str(error)}
+        path = export_dir / "mission_intent_report.json"
+        write_json(path, mission_intent_summary)
+        record(path)
+
+    # ---------------------------------------------------------
+    # Pluto safety gate export
+    # ---------------------------------------------------------
+
+    pluto_safety_gate_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        pluto_safety_gate_summary = _write_pluto_safety_gate(export_dir, mission_result)
+        record(Path(pluto_safety_gate_summary["report_path"]))
+    except Exception as error:
+        pluto_safety_gate_summary = {"status": "failed", "error": str(error)}
+        path = export_dir / "pluto_safety_gate_report.json"
+        write_json(path, pluto_safety_gate_summary)
+        record(path)
+
+    # ---------------------------------------------------------
+    # AeroForge aerospace concept reports
+    # ---------------------------------------------------------
+
+    aeroforge_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        aeroforge_summary = _write_aeroforge_reports(
+            export_dir=export_dir,
+            mission_text=mission,
+            artifacts=artifacts,
+        )
+        if aeroforge_summary.get("aerospace_detected"):
+            record(Path(aeroforge_summary["intent_report_path"]))
+            record(Path(aeroforge_summary["entry_gate_report_path"]))
+    except Exception as error:
+        aeroforge_summary = {"status": "failed", "error": str(error)}
+        path = export_dir / "aeroforge_export_error.json"
+        write_json(path, aeroforge_summary)
+        record(path)
 
     # ---------------------------------------------------------
     # Agent reports
@@ -1000,6 +1641,22 @@ def export_mission_files(
 
             kicad_validation = run_kicad_knowledge_gate(export_dir)
 
+            # Additive findings projection: normalized, read-only view of the
+            # gate report's issues. Does not change validator behavior or any
+            # existing report field.
+            from backend.app.engineering.finding_projection import (
+                project_kicad_gate_findings,
+            )
+
+            kicad_items = project_kicad_gate_findings(kicad_validation)
+            kicad_validation["findings_projection"] = {
+                "schema": "omni.engineering.kicad_knowledge_gate.findings_projection.v1",
+                "source": "kicad_knowledge_gate_report",
+                "origin_fields": ["issues"],
+                "count": len(kicad_items),
+                "items": kicad_items,
+            }
+
             kicad_validation_path = (
                 export_dir / "generated_kicad" / "kicad_knowledge_gate_report.json"
             )
@@ -1042,9 +1699,155 @@ def export_mission_files(
 
     morphology_validation = run_morphology_gate(export_dir)
 
+    # Additive findings projection: normalized, read-only view of the gate
+    # report's issues. Does not change validator behavior or any existing field.
+    from backend.app.engineering.finding_projection import (
+        project_morphology_gate_findings,
+    )
+
+    morphology_items = project_morphology_gate_findings(morphology_validation)
+    morphology_validation["findings_projection"] = {
+        "schema": "omni.engineering.morphology_gate.findings_projection.v1",
+        "source": "morphology_gate_report",
+        "origin_fields": ["issues"],
+        "count": len(morphology_items),
+        "items": morphology_items,
+    }
+
     path = artifact_dir / "morphology_gate_report.json"
     write_json(path, morphology_validation)
     record(path)
+
+    # ---------------------------------------------------------
+    # Visual Bay manifest
+    # ---------------------------------------------------------
+
+    visual_bay_summary: Optional[Dict[str, Any]] = None
+
+    try:
+        from backend.app.visual_bay.manifest import build_visual_bay_manifest
+
+        visual_bay_manifest = build_visual_bay_manifest(
+            export_dir=export_dir,
+            mission_result=mission_result,
+        )
+
+        sim  = visual_bay_manifest.get("simulation", {})
+        f360 = visual_bay_manifest.get("fusion360", {})
+        cq   = visual_bay_manifest.get("cadquery", {})
+        r2   = visual_bay_manifest.get("ros2_preview", {})
+
+        has_visual_artifacts = bool(
+            f360.get("detected") or
+            cq.get("detected") or
+            r2.get("detected") or
+            sim.get("status") != "not_available"
+        )
+
+        if has_visual_artifacts:
+            try:
+                from backend.app.visual_bay.gltf_preview import write_visual_bay_gltf_preview
+                _gltf_result = write_visual_bay_gltf_preview(
+                    export_dir,
+                    manifest=visual_bay_manifest,
+                    mission_result=mission_result,
+                )
+                if _gltf_result.get("written"):
+                    record(_gltf_result["abs_path"])
+                    visual_bay_manifest = build_visual_bay_manifest(
+                        export_dir=export_dir,
+                        mission_result=mission_result,
+                    )
+                    sim  = visual_bay_manifest.get("simulation", {})
+                    f360 = visual_bay_manifest.get("fusion360", {})
+                    cq   = visual_bay_manifest.get("cadquery", {})
+                    r2   = visual_bay_manifest.get("ros2_preview", {})
+            except Exception:
+                pass
+
+        manifest_path = export_dir / "visual_bay_manifest.json"
+        write_json(manifest_path, visual_bay_manifest)
+        record(manifest_path)
+
+        raw_preview_assets = visual_bay_manifest.get("preview_assets", [])
+        preview_assets_delivery = _sanitize_preview_assets(
+            raw_preview_assets, export_dir, mission_id=folder_name
+        )
+
+        visual_bay_summary = {
+            "status":                  visual_bay_manifest["status"],
+            "report_path":             str(manifest_path),
+            "has_cad":                 f360.get("detected", False) or cq.get("detected", False),
+            "has_ros2":                r2.get("detected", False),
+            "has_simulation_assets":   sim.get("status") != "not_available",
+            "browser_preview_ready":   (
+                f360.get("browser_preview_ready", False) or
+                cq.get("browser_preview_ready", False)
+            ),
+            "safe_to_launch":          False,
+            "browser_preview_ready_count":     visual_bay_manifest.get("browser_preview_ready_count", 0),
+            "browser_preview_candidate_count": visual_bay_manifest.get("browser_preview_candidate_count", 0),
+            "engineering_only_count":          visual_bay_manifest.get("engineering_only_count", 0),
+            "execution_blocked_count":         visual_bay_manifest.get("execution_blocked_count", 0),
+            "preview_assets":          preview_assets_delivery,
+            "preview_asset_count":     len(preview_assets_delivery),
+        }
+    except Exception as error:
+        visual_bay_summary = {"status": "failed", "error": str(error), "safe_to_launch": False}
+        try:
+            _err_path = export_dir / "visual_bay_manifest.json"
+            write_json(_err_path, visual_bay_summary)
+            record(_err_path)
+        except Exception:
+            pass
+
+    # ---------------------------------------------------------
+    # Phase 17E — Engineering Brain reports
+    # ---------------------------------------------------------
+
+    engineering_brain: Optional[Dict[str, Any]] = None
+
+    try:
+        engineering_brain = _write_engineering_brain(
+            export_dir=export_dir,
+            mission_result=mission_result,
+            mission_text=mission,
+        )
+        record(Path(engineering_brain["knowledge_selection"]["report_path"]))
+        record(Path(engineering_brain["input_readiness"]["report_path"]))
+        record(Path(engineering_brain["calculations"]["report_path"]))
+    except Exception as _eb_error:
+        engineering_brain = {"status": "failed", "error": str(_eb_error)[:500]}
+        try:
+            _eb_path = export_dir / "engineering_calculation_report.json"
+            write_json(_eb_path, engineering_brain)
+            record(_eb_path)
+        except Exception:
+            pass
+
+    # ---------------------------------------------------------
+    # Phase 18A — Concept Dossier manifest
+    # ---------------------------------------------------------
+
+    concept_dossier: Optional[Dict[str, Any]] = None
+    concept_dossier_manifest_full: Optional[Dict[str, Any]] = None
+
+    try:
+        concept_dossier = _write_concept_dossier(
+            export_dir=export_dir,
+            mission_result=mission_result,
+            mission_text=mission,
+        )
+        record(Path(concept_dossier["report_path"]))
+        concept_dossier_manifest_full = concept_dossier.pop("manifest", None)
+    except Exception as _cd_error:
+        concept_dossier = {"status": "failed", "error": str(_cd_error)[:500]}
+        try:
+            _cd_path = export_dir / "concept_dossier_manifest.json"
+            write_json(_cd_path, concept_dossier)
+            record(_cd_path)
+        except Exception:
+            pass
 
     # ---------------------------------------------------------
     # Human-readable README values
@@ -1211,4 +2014,16 @@ def export_mission_files(
         "kicad_validation": kicad_validation,
         "morphology_validation": morphology_validation,
         "mission_report": mission_report,
+        "graph_review": graph_review,
+        "cortex": {
+            "design_understanding": design_understanding,
+            "candidate_evaluation": candidate_evaluation_summary,
+            "mission_intent": mission_intent_summary,
+            "pluto_safety_gate": pluto_safety_gate_summary,
+        },
+        "aeroforge": aeroforge_summary,
+        "visual_bay": visual_bay_summary,
+        "engineering_brain": engineering_brain,
+        "concept_dossier":          concept_dossier,
+        "concept_dossier_manifest": concept_dossier_manifest_full,
     }

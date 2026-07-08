@@ -1,13 +1,21 @@
 import json
 import os
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait as _futures_wait
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from agents.robotics_agent import RoboticsAgent
 from agents.research_agent import ResearchAgent
 from agents.code_agent import CodeAgent
 from agents.critic_agent import CriticAgent
 from agents.design_agent import DesignAgent
+from agents.design_candidates import extract_design_candidates_from_text
+from agents.candidate_evaluator import evaluate_design_candidates
+from backend.app.omni_core.mission_intent import compile_mission_intent
+from backend.app.omni_core.safety_gate import evaluate_safety_gate
+from backend.app.omni_core.mission_memory_seed import build_mission_memory_seed
 from agents.artifact_synthesizer import synthesize_artifacts
 from agents.validator_agent import ValidatorAgent
 
@@ -20,116 +28,15 @@ from backend.app.omni_core.formatters import (
     sanitize_payload as format_sanitize_payload,
 )
 
-from memory.memory_manager import get_recent_memory, add_mission_to_memory
+from memory.memory_manager import (
+    get_recent_memory,
+    add_mission_to_memory,
+    add_mission_memory_seed,
+    get_recent_memory_seed_context,
+)
 
 
-# ---------------------------------------------------------------------
-# Week 2 imports with safe fallbacks.
-# ---------------------------------------------------------------------
-try:
-    from backend.app.core.mission_state import MissionState
-except Exception:
-    class MissionState:
-        def __init__(self, mission_text: str):
-            now = datetime.now().isoformat()
-            self.mission_text = mission_text
-            self.mission_id = now.replace(":", "-").replace(".", "-")
-            self.status = "created"
-            self.created_at = now
-            self.updated_at = now
-            self.agent_records = {}
-            self.structured_outputs = {}
-            self.synthesis_input = {}
-            self.synthesized_artifacts = {}
-            self.warnings = []
-            self.errors = []
-            self.metadata = {}
-
-        def touch(self):
-            self.updated_at = datetime.now().isoformat()
-
-        def set_status(self, status: str):
-            self.status = status
-            self.touch()
-
-        def start_agent(self, agent_id: str, agent_name: str):
-            self.agent_records[agent_id] = {
-                "agent_id": agent_id,
-                "agent_name": agent_name,
-                "status": "running",
-                "started_at": datetime.now().isoformat(),
-                "finished_at": None,
-                "raw_output": None,
-                "parsed_output": {},
-                "errors": [],
-            }
-            self.touch()
-
-        def finish_agent(self, agent_id: str, raw_output: str, parsed_output: Dict[str, Any]):
-            record = self.agent_records.get(agent_id, {})
-            record.update(
-                {
-                    "agent_id": agent_id,
-                    "raw_output": raw_output,
-                    "parsed_output": parsed_output,
-                    "status": "completed",
-                    "finished_at": datetime.now().isoformat(),
-                }
-            )
-            self.agent_records[agent_id] = record
-            self.structured_outputs[agent_id] = parsed_output
-            self.touch()
-
-        def fail_agent(self, agent_id: str, error: str, raw_output: Optional[str] = None):
-            record = self.agent_records.get(agent_id, {})
-            record.update(
-                {
-                    "agent_id": agent_id,
-                    "raw_output": raw_output,
-                    "status": "failed",
-                    "finished_at": datetime.now().isoformat(),
-                    "errors": record.get("errors", []) + [error],
-                }
-            )
-            self.agent_records[agent_id] = record
-            self.errors.append(f"{agent_id}: {error}")
-            self.touch()
-
-        def add_warning(self, warning: str):
-            self.warnings.append(warning)
-            self.touch()
-
-        def add_error(self, error: str):
-            self.errors.append(error)
-            self.touch()
-
-        def build_synthesis_input(self):
-            self.synthesis_input = {
-                "mission_id": self.mission_id,
-                "mission_text": self.mission_text,
-                "agent_outputs": self.structured_outputs,
-                "warnings": self.warnings,
-                "errors": self.errors,
-                "metadata": self.metadata,
-            }
-            self.touch()
-            return self.synthesis_input
-
-        def to_dict(self):
-            return {
-                "mission_id": self.mission_id,
-                "mission_text": self.mission_text,
-                "status": self.status,
-                "created_at": self.created_at,
-                "updated_at": self.updated_at,
-                "agent_records": self.agent_records,
-                "structured_outputs": self.structured_outputs,
-                "synthesis_input": self.synthesis_input,
-                "synthesized_artifacts": self.synthesized_artifacts,
-                "warnings": self.warnings,
-                "errors": self.errors,
-                "metadata": self.metadata,
-            }
+from backend.app.omni_core.mission_state import MissionState
 
 
 try:
@@ -1201,7 +1108,80 @@ Give the final go/no-go style decision.
             "warnings": getattr(state, "warnings", []),
             "errors": getattr(state, "errors", []),
         }
-        artifacts["design_alternatives"] = {"owner": "Vega", "content": design_report}
+        try:
+            mission_text = getattr(state, "mission_text", "")
+            artifacts["mission_intent"] = compile_mission_intent(mission_text)
+        except Exception:
+            artifacts["mission_intent"] = {"error": "mission intent compilation failed"}
+        design_candidates = extract_design_candidates_from_text(design_report)
+        artifacts["design_alternatives"] = {
+            "owner": "Vega",
+            "content": design_report,
+            "candidates": design_candidates,
+        }
+        artifacts["design_candidates"] = design_candidates
+        if design_candidates:
+            try:
+                mission_text = getattr(state, "mission_text", "")
+                artifacts["candidate_evaluation"] = evaluate_design_candidates(
+                    design_candidates, mission_text=mission_text
+                )
+            except Exception:
+                artifacts["candidate_evaluation"] = {"candidates_evaluated": 0, "error": "evaluation failed"}
+        try:
+            artifacts["pluto_safety_gate"] = evaluate_safety_gate(
+                mission_intent=artifacts.get("mission_intent"),
+                candidate_evaluation=artifacts.get("candidate_evaluation"),
+            )
+        except Exception:
+            artifacts["pluto_safety_gate"] = {"gate": "pluto_safety_gate", "error": "safety gate evaluation failed"}
+        try:
+            artifacts["mission_memory_seed"] = build_mission_memory_seed(
+                mission_intent=artifacts.get("mission_intent"),
+                candidate_evaluation=artifacts.get("candidate_evaluation"),
+                pluto_safety_gate=artifacts.get("pluto_safety_gate"),
+                mission_text=getattr(state, "mission_text", ""),
+            )
+        except Exception:
+            artifacts["mission_memory_seed"] = {"status": "empty", "error": "memory seed build failed"}
+        try:
+            _seed = artifacts.get("mission_memory_seed", {})
+            _mission_text = getattr(state, "mission_text", "")
+            _saved = add_mission_memory_seed(_seed, mission=_mission_text)
+            artifacts["mission_memory_persistence"] = {
+                "status": "saved" if _saved else "skipped"
+            }
+        except Exception:
+            artifacts["mission_memory_persistence"] = {"status": "failed"}
+        try:
+            from backend.app.omni_core.intelligence_readiness import (
+                evaluate_mission_intelligence_readiness,
+            )
+            artifacts["mission_intelligence_readiness"] = evaluate_mission_intelligence_readiness(
+                artifacts=artifacts,
+                mission_text=getattr(state, "mission_text", ""),
+            )
+        except Exception:
+            pass
+        try:
+            from backend.app.aeroforge.foundation import (
+                classify_aeroforge_intent,
+                evaluate_aeroforge_entry_gate,
+            )
+            _aero_text = getattr(state, "mission_text", "")
+            _aero = classify_aeroforge_intent(
+                mission_text=_aero_text,
+                mission_intent=artifacts.get("mission_intent"),
+            )
+            if _aero.get("aerospace_detected"):
+                artifacts["aeroforge_intent"] = _aero
+                artifacts["aeroforge_entry_gate"] = evaluate_aeroforge_entry_gate(
+                    mission_text=_aero_text,
+                    mission_intent=artifacts.get("mission_intent"),
+                    readiness=artifacts.get("mission_intelligence_readiness"),
+                )
+        except Exception:
+            pass
         artifacts["revision_summary"] = revision_payload
         artifacts["export_manifest"] = export_manifest
 
@@ -1259,9 +1239,138 @@ Give the final go/no-go style decision.
         return self.sanitize_payload(artifacts)
 
     # ---------------------------------------------------------
+    # Parallel specialist runner (Phase 4A)
+    # ---------------------------------------------------------
+    def _run_specialists_parallel(
+        self,
+        state: MissionState,
+        memory_context: str,
+    ) -> Tuple[str, str, str, str]:
+        """
+        Run Sky, Isy, Oli, Korva concurrently.
+
+        Invariants enforced here:
+        - All prompts are built on the main thread before any worker starts
+          (frozen state snapshot — workers never read state).
+        - Worker threads only return raw strings or raise; they never touch state.
+        - All state mutations (start_agent, finish_agent, fail_agent) happen on
+          the main thread in deterministic order: sky → isy → oli → korva.
+
+        Returns (sky_report, isy_report, oli_report, korva_report).
+        """
+        _TIMEOUT = 300  # seconds; one hanging specialist will not block indefinitely
+
+        # Build all prompts before any thread starts.
+        _SPECIALISTS: List[Tuple] = [
+            (
+                "sky", "Sky", "robotics_software_architecture",
+                self.build_sky_prompt(state, memory_context),
+                self.robotics_agent.run,
+                "Sky could not generate a robotics/ROS2 structured report.",
+            ),
+            (
+                "isy", "Isy", "physics_controls_feasibility",
+                self.build_isy_prompt(state, memory_context),
+                self.research_agent.run,
+                "Isy could not generate a physics/controls/feasibility structured report.",
+            ),
+            (
+                "oli", "Oli", "cad_visual_artifacts",
+                self.build_oli_prompt(state, memory_context),
+                self.code_agent.run,
+                "Oli could not generate a CAD/Fusion 360 structured report.",
+            ),
+            (
+                "korva", "Korva", "hardware_electronics_embedded",
+                self.build_korva_prompt(state, memory_context),
+                lambda p: call_llm(p, role="Korva"),
+                "Korva could not generate a hardware/electronics structured report.",
+            ),
+        ]
+
+        print(f"[{self.name}] Parallel specialists: sky, isy, oli, korva")
+
+        # Worker: pure function — returns raw string, never touches state.
+        def _worker(prompt: str, runner: Callable) -> str:
+            raw = runner(prompt)
+            return self.sanitize_payload(raw if raw is not None else "")
+
+        # Submit all four concurrently.
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            future_map: Dict = {
+                pool.submit(_worker, prompt, runner): i
+                for i, (_, _, _, prompt, runner, _) in enumerate(_SPECIALISTS)
+            }
+            done, not_done = _futures_wait(future_map, timeout=_TIMEOUT)
+            for fut in not_done:
+                fut.cancel()
+
+        # Collect raw results indexed by order position.
+        raw_results: Dict[int, Any] = {}
+        for fut, i in future_map.items():
+            if fut in not_done:
+                raw_results[i] = TimeoutError(
+                    f"{_SPECIALISTS[i][0]} timed out after {_TIMEOUT}s"
+                )
+            elif fut.exception() is not None:
+                raw_results[i] = fut.exception()
+            else:
+                raw_results[i] = fut.result()
+
+        # Deterministic merge on the main thread: sky → isy → oli → korva.
+        reports: List[str] = []
+        for i, (agent_id, agent_name, role, _, _, fallback_message) in enumerate(_SPECIALISTS):
+            result = raw_results.get(i, RuntimeError(f"{agent_id}: no result collected"))
+
+            if isinstance(result, BaseException):
+                error_message = f"{type(result).__name__}: {result}"
+                print(
+                    f"[{self.name}] Parallel specialist {agent_id} failed: {error_message}",
+                    file=sys.stderr,
+                )
+                fallback_raw = self.sanitize_legacy_names(
+                    f"# {agent_name} — Error / Fallback\n\n"
+                    f"{fallback_message}\n\n"
+                    f"Technical detail: {error_message}"
+                )
+                fallback_parsed = {
+                    "agent_id": agent_id,
+                    "role": role,
+                    "status": "error_fallback",
+                    "content": {"raw_report": fallback_raw},
+                    "errors": [error_message],
+                    "warnings": [
+                        "This step failed during parallel execution. "
+                        "OMNI continued with fallback output."
+                    ],
+                }
+                state.start_agent(agent_id=agent_id, agent_name=agent_name)
+                try:
+                    state.fail_agent(
+                        agent_id=agent_id,
+                        error=error_message,
+                        raw_output=fallback_raw,
+                    )
+                    state.structured_outputs[agent_id] = fallback_parsed
+                except Exception:
+                    pass
+                log_agent_failed(state, agent_id, error_message)
+                reports.append(fallback_raw)
+
+            else:
+                raw = str(result)
+                parsed = self.parse_structured_agent_output(raw, state, agent_id, role)
+                state.start_agent(agent_id=agent_id, agent_name=agent_name)
+                state.finish_agent(agent_id=agent_id, raw_output=raw, parsed_output=parsed)
+                log_agent_finished(state, agent_id, parsed)
+                reports.append(raw)
+
+        return tuple(reports)  # (sky_report, isy_report, oli_report, korva_report)
+
+    # ---------------------------------------------------------
     # Main pipeline
     # ---------------------------------------------------------
-    def run_mission_structured(self, mission):
+    def run_mission_structured(self, mission, use_parallel_specialists: bool = False):
         print(f"\n[{self.name}] Mission received.")
         print(f"[{self.name}] Deploying OMNI council...\n")
 
@@ -1272,6 +1381,12 @@ Give the final go/no-go style decision.
         result_id = str(getattr(state, "mission_id", created_at)).replace(":", "-").replace(".", "-")
         export_manifest = self.build_export_manifest(mission, result_id)
         memory_context = get_recent_memory()
+        try:
+            seed_context = get_recent_memory_seed_context(n=5)
+            if seed_context:
+                memory_context = memory_context + "\n\n" + seed_context
+        except Exception:
+            pass
 
         state.metadata["created_at"] = created_at
         state.metadata["result_id"] = result_id
@@ -1305,49 +1420,54 @@ Give the final go/no-go style decision.
         )
 
         # 3. Structured specialist agents.
-        sky_report, _ = self.run_state_step(
-            state=state,
-            agent_id="sky",
-            agent_name="Sky",
-            role="robotics_software_architecture",
-            prompt_builder=lambda s: self.build_sky_prompt(s, memory_context),
-            runner=lambda prompt: self.robotics_agent.run(prompt),
-            parser=lambda raw, s: self.parse_structured_agent_output(raw, s, "sky", "robotics_software_architecture"),
-            fallback_message="Sky could not generate a robotics/ROS2 structured report.",
-        )
+        if use_parallel_specialists:
+            sky_report, isy_report, oli_report, korva_report = (
+                self._run_specialists_parallel(state, memory_context)
+            )
+        else:
+            sky_report, _ = self.run_state_step(
+                state=state,
+                agent_id="sky",
+                agent_name="Sky",
+                role="robotics_software_architecture",
+                prompt_builder=lambda s: self.build_sky_prompt(s, memory_context),
+                runner=lambda prompt: self.robotics_agent.run(prompt),
+                parser=lambda raw, s: self.parse_structured_agent_output(raw, s, "sky", "robotics_software_architecture"),
+                fallback_message="Sky could not generate a robotics/ROS2 structured report.",
+            )
 
-        isy_report, _ = self.run_state_step(
-            state=state,
-            agent_id="isy",
-            agent_name="Isy",
-            role="physics_controls_feasibility",
-            prompt_builder=lambda s: self.build_isy_prompt(s, memory_context),
-            runner=lambda prompt: self.research_agent.run(prompt),
-            parser=lambda raw, s: self.parse_structured_agent_output(raw, s, "isy", "physics_controls_feasibility"),
-            fallback_message="Isy could not generate a physics/controls/feasibility structured report.",
-        )
+            isy_report, _ = self.run_state_step(
+                state=state,
+                agent_id="isy",
+                agent_name="Isy",
+                role="physics_controls_feasibility",
+                prompt_builder=lambda s: self.build_isy_prompt(s, memory_context),
+                runner=lambda prompt: self.research_agent.run(prompt),
+                parser=lambda raw, s: self.parse_structured_agent_output(raw, s, "isy", "physics_controls_feasibility"),
+                fallback_message="Isy could not generate a physics/controls/feasibility structured report.",
+            )
 
-        oli_report, _ = self.run_state_step(
-            state=state,
-            agent_id="oli",
-            agent_name="Oli",
-            role="cad_visual_artifacts",
-            prompt_builder=lambda s: self.build_oli_prompt(s, memory_context),
-            runner=lambda prompt: self.code_agent.run(prompt),
-            parser=lambda raw, s: self.parse_structured_agent_output(raw, s, "oli", "cad_visual_artifacts"),
-            fallback_message="Oli could not generate a CAD/Fusion 360 structured report.",
-        )
+            oli_report, _ = self.run_state_step(
+                state=state,
+                agent_id="oli",
+                agent_name="Oli",
+                role="cad_visual_artifacts",
+                prompt_builder=lambda s: self.build_oli_prompt(s, memory_context),
+                runner=lambda prompt: self.code_agent.run(prompt),
+                parser=lambda raw, s: self.parse_structured_agent_output(raw, s, "oli", "cad_visual_artifacts"),
+                fallback_message="Oli could not generate a CAD/Fusion 360 structured report.",
+            )
 
-        korva_report, _ = self.run_state_step(
-            state=state,
-            agent_id="korva",
-            agent_name="Korva",
-            role="hardware_electronics_embedded",
-            prompt_builder=lambda s: self.build_korva_prompt(s, memory_context),
-            runner=lambda prompt: call_llm(prompt, role="Korva"),
-            parser=lambda raw, s: self.parse_structured_agent_output(raw, s, "korva", "hardware_electronics_embedded"),
-            fallback_message="Korva could not generate a hardware/electronics structured report.",
-        )
+            korva_report, _ = self.run_state_step(
+                state=state,
+                agent_id="korva",
+                agent_name="Korva",
+                role="hardware_electronics_embedded",
+                prompt_builder=lambda s: self.build_korva_prompt(s, memory_context),
+                runner=lambda prompt: call_llm(prompt, role="Korva"),
+                parser=lambda raw, s: self.parse_structured_agent_output(raw, s, "korva", "hardware_electronics_embedded"),
+                fallback_message="Korva could not generate a hardware/electronics structured report.",
+            )
 
         # 4. Pluto critique.
         pluto_report, _ = self.run_state_step(

@@ -1,0 +1,452 @@
+/* =========================================================
+   OMNI Design System — Phase 18E Foundation
+   Token namespace:  --omni-ds-*
+   Class prefix:     omni-ds-
+
+   Additive only. App.css loads after this file and wins
+   for same-specificity conflicts. Do not add !important.
+   ========================================================= */
+
+/* =========================================================
+   1. Design Tokens
+   ========================================================= */
+
+:root {
+  /* Surface / background */
+  --omni-ds-bg-root:           #01030a;
+  --omni-ds-bg-canvas:         #030818;
+  --omni-ds-bg-panel:          rgba(6, 12, 28, 0.72);
+  --omni-ds-bg-panel-elevated: rgba(10, 18, 42, 0.80);
+  --omni-ds-bg-inset:          rgba(2, 5, 14, 0.60);
+  --omni-ds-bg-overlay:        rgba(0, 3, 12, 0.88);
+
+  /* Border / divider */
+  --omni-ds-border-soft:   rgba(80, 160, 255, 0.08);
+  --omni-ds-border-medium: rgba(80, 160, 255, 0.14);
+  --omni-ds-border-strong: rgba(80, 160, 255, 0.24);
+  --omni-ds-divider:       rgba(80, 160, 255, 0.10);
+
+  /* Text */
+  --omni-ds-text-primary:   #f0f6ff;
+  --omni-ds-text-secondary: #c6d2e4;
+  --omni-ds-text-muted:     #8898aa;
+  --omni-ds-text-faint:     #566070;
+  --omni-ds-text-code:      #bff4ff;
+
+  /* Accents */
+  --omni-ds-accent-cyan:   #49e6ff;
+  --omni-ds-accent-blue:   #4da3ff;
+  --omni-ds-accent-orange: #ff8c42;
+  --omni-ds-accent-green:  #7cffc8;
+  --omni-ds-accent-amber:  #ffbf4a;
+  --omni-ds-accent-red:    #ff4d5e;
+  --omni-ds-accent-purple: #9b6cff;
+
+  /* Themed accent values — referenced by theme modifier classes */
+  --omni-ds-theme-henry:       #ff8c42;
+  --omni-ds-theme-dossier:     #9d7aff;
+  --omni-ds-theme-visual-bay:  #4aaa6e;
+  --omni-ds-theme-aeroforge:   #4a90d9;
+  --omni-ds-theme-engineering: #7cffc8;
+
+  /* Active theme defaults — overridden by .omni-ds-theme-* modifiers */
+  --omni-ds-active-accent:      var(--omni-ds-accent-cyan);
+  --omni-ds-active-accent-glow: rgba(73, 230, 255, 0.16);
+  --omni-ds-active-border:      rgba(73, 230, 255, 0.18);
+
+  /* Spacing */
+  --omni-ds-space-2xs: 4px;
+  --omni-ds-space-xs:  6px;
+  --omni-ds-space-sm:  10px;
+  --omni-ds-space-md:  16px;
+  --omni-ds-space-lg:  24px;
+  --omni-ds-space-xl:  36px;
+
+  /* Radius */
+  --omni-ds-radius-xs: 4px;
+  --omni-ds-radius-sm: 8px;
+  --omni-ds-radius-md: 14px;
+  --omni-ds-radius-lg: 20px;
+  --omni-ds-radius-xl: 28px;
+
+  /* Typography */
+  --omni-ds-font-display: "Rajdhani", "Barlow", Inter, ui-sans-serif, system-ui, sans-serif;
+  --omni-ds-font-body:    "Barlow", Inter, ui-sans-serif, system-ui, sans-serif;
+  --omni-ds-font-mono:    "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  --omni-ds-letter-tight: -0.03em;
+  --omni-ds-letter-label: 0.12em;
+  --omni-ds-letter-wide:  0.20em;
+
+  /* Glow / shadow / blur */
+  --omni-ds-glow-soft:   0 0 14px rgba(73, 230, 255, 0.12);
+  --omni-ds-glow-medium: 0 0 28px rgba(73, 230, 255, 0.20);
+  --omni-ds-glow-strong: 0 0 48px rgba(73, 230, 255, 0.32);
+  --omni-ds-shadow-panel:
+    0 16px 48px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --omni-ds-blur-panel: blur(14px);
+
+  /* Motion */
+  --omni-ds-duration-fast:   120ms;
+  --omni-ds-duration-normal: 200ms;
+  --omni-ds-duration-slow:   360ms;
+  --omni-ds-ease-standard:   cubic-bezier(0.22, 0.68, 0, 1.2);
+
+  /* Z-index */
+  --omni-ds-z-overlay: 30;
+  --omni-ds-z-modal:   50;
+  --omni-ds-z-loader: 100;
+}
+
+/* =========================================================
+   2. Theme Modifiers
+   Set --omni-ds-active-* for contextual theming.
+   Visual-only custom properties; do not alter layout.
+   ========================================================= */
+
+.omni-ds-theme-cinematic {
+  --omni-ds-active-accent:      var(--omni-ds-theme-henry);
+  --omni-ds-active-accent-glow: rgba(255, 140, 66, 0.18);
+  --omni-ds-active-border:      rgba(255, 140, 66, 0.18);
+}
+
+.omni-ds-theme-dossier {
+  --omni-ds-active-accent:      var(--omni-ds-theme-dossier);
+  --omni-ds-active-accent-glow: rgba(157, 122, 255, 0.16);
+  --omni-ds-active-border:      rgba(157, 122, 255, 0.18);
+}
+
+.omni-ds-theme-visual-bay {
+  --omni-ds-active-accent:      var(--omni-ds-theme-visual-bay);
+  --omni-ds-active-accent-glow: rgba(74, 170, 110, 0.16);
+  --omni-ds-active-border:      rgba(74, 170, 110, 0.18);
+}
+
+.omni-ds-theme-aeroforge {
+  --omni-ds-active-accent:      var(--omni-ds-theme-aeroforge);
+  --omni-ds-active-accent-glow: rgba(74, 144, 217, 0.16);
+  --omni-ds-active-border:      rgba(74, 144, 217, 0.18);
+}
+
+.omni-ds-theme-engineering {
+  --omni-ds-active-accent:      var(--omni-ds-theme-engineering);
+  --omni-ds-active-accent-glow: rgba(124, 255, 200, 0.16);
+  --omni-ds-active-border:      rgba(124, 255, 200, 0.18);
+}
+
+.omni-ds-theme-system {
+  --omni-ds-active-accent:      var(--omni-ds-accent-blue);
+  --omni-ds-active-accent-glow: rgba(77, 163, 255, 0.16);
+  --omni-ds-active-border:      rgba(77, 163, 255, 0.18);
+}
+
+/* =========================================================
+   3. Panel Primitives
+   ========================================================= */
+
+.omni-ds-panel {
+  position: relative;
+  border: 1px solid var(--omni-ds-border-medium);
+  border-radius: var(--omni-ds-radius-lg);
+  background: var(--omni-ds-bg-panel);
+  box-shadow: var(--omni-ds-shadow-panel);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .omni-ds-panel {
+    backdrop-filter: var(--omni-ds-blur-panel);
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .omni-ds-panel {
+    background: rgba(5, 12, 28, 0.93);
+  }
+}
+
+.omni-ds-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--omni-ds-space-sm);
+  padding: var(--omni-ds-space-sm) var(--omni-ds-space-md);
+  border-bottom: 1px solid var(--omni-ds-border-soft);
+  flex-wrap: wrap;
+}
+
+.omni-ds-panel-title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: var(--omni-ds-letter-label);
+  text-transform: uppercase;
+  color: var(--omni-ds-active-accent, var(--omni-ds-accent-cyan));
+  white-space: nowrap;
+}
+
+.omni-ds-panel-body {
+  padding: var(--omni-ds-space-md);
+}
+
+.omni-ds-subpanel {
+  padding: var(--omni-ds-space-sm) var(--omni-ds-space-md);
+  border: 1px solid var(--omni-ds-border-soft);
+  border-radius: var(--omni-ds-radius-md);
+  background: var(--omni-ds-bg-inset);
+}
+
+.omni-ds-section {
+  margin-bottom: var(--omni-ds-space-md);
+}
+
+.omni-ds-section-title {
+  display: block;
+  margin-bottom: var(--omni-ds-space-xs);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: var(--omni-ds-letter-wide);
+  text-transform: uppercase;
+  color: rgba(200, 220, 255, 0.45);
+}
+
+/* =========================================================
+   4. Chip Primitives
+   Base chip — App.css component chip classes override when
+   both are applied, since App.css loads after.
+   ========================================================= */
+
+.omni-ds-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  border: 1px solid var(--omni-ds-border-medium);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--omni-ds-text-secondary);
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.omni-ds-chip-info {
+  color: #a8d4ff;
+  background: rgba(77, 163, 255, 0.08);
+  border-color: rgba(77, 163, 255, 0.22);
+}
+
+.omni-ds-chip-success {
+  color: #b3ffe2;
+  background: rgba(124, 255, 200, 0.08);
+  border-color: rgba(124, 255, 200, 0.22);
+}
+
+.omni-ds-chip-warning {
+  color: #ffe0a0;
+  background: rgba(255, 191, 74, 0.08);
+  border-color: rgba(255, 191, 74, 0.22);
+}
+
+.omni-ds-chip-danger {
+  color: #ffb4b4;
+  background: rgba(255, 61, 77, 0.08);
+  border-color: rgba(255, 61, 77, 0.22);
+}
+
+/* Concept-stage safety framing chip */
+.omni-ds-chip-concept {
+  color: #d4b4ff;
+  background: rgba(157, 122, 255, 0.08);
+  border-color: rgba(157, 122, 255, 0.22);
+}
+
+.omni-ds-chip-muted {
+  color: var(--omni-ds-text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+/* =========================================================
+   5. Metadata Primitives
+   ========================================================= */
+
+.omni-ds-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--omni-ds-space-sm);
+}
+
+.omni-ds-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--omni-ds-space-sm);
+  border: 1px solid var(--omni-ds-border-soft);
+  border-radius: var(--omni-ds-radius-sm);
+  background: var(--omni-ds-bg-inset);
+}
+
+.omni-ds-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: var(--omni-ds-letter-label);
+  text-transform: uppercase;
+  color: var(--omni-ds-text-faint);
+}
+
+.omni-ds-value {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--omni-ds-text-secondary);
+  line-height: 1.4;
+}
+
+.omni-ds-path {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-family: var(--omni-ds-font-mono);
+  font-size: 0.80rem;
+  color: var(--omni-ds-text-code);
+  line-height: 1.5;
+}
+
+.omni-ds-code {
+  display: inline;
+  padding: 2px 6px;
+  font-family: var(--omni-ds-font-mono);
+  font-size: 0.80rem;
+  color: var(--omni-ds-text-code);
+  background: rgba(191, 244, 255, 0.06);
+  border: 1px solid rgba(191, 244, 255, 0.12);
+  border-radius: var(--omni-ds-radius-xs);
+}
+
+/* =========================================================
+   6. Safety / Status Primitives
+   ========================================================= */
+
+.omni-ds-safety-note {
+  margin: 0;
+  padding: var(--omni-ds-space-sm) var(--omni-ds-space-md);
+  font-size: 0.76rem;
+  color: rgba(255, 235, 190, 0.68);
+  background: rgba(255, 200, 100, 0.04);
+  border: 1px solid rgba(255, 200, 100, 0.12);
+  border-radius: var(--omni-ds-radius-sm);
+  line-height: 1.55;
+}
+
+.omni-ds-status-note {
+  margin: 0;
+  padding: var(--omni-ds-space-sm) var(--omni-ds-space-md);
+  font-size: 0.78rem;
+  color: var(--omni-ds-text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--omni-ds-border-soft);
+  border-radius: var(--omni-ds-radius-sm);
+  line-height: 1.55;
+}
+
+.omni-ds-blocked-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: var(--omni-ds-space-xs);
+  color: #ffb4b4;
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.omni-ds-blocked-list li::marker {
+  color: var(--omni-ds-accent-red);
+}
+
+.omni-ds-safe-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: var(--omni-ds-space-xs);
+  color: #b3ffe2;
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.omni-ds-safe-list li::marker {
+  color: var(--omni-ds-accent-green);
+}
+
+/* =========================================================
+   7. Accessibility / Utilities
+   ========================================================= */
+
+.omni-ds-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.omni-ds-focus-ring:focus-visible {
+  outline: 2px solid var(--omni-ds-active-accent, var(--omni-ds-accent-cyan));
+  outline-offset: 2px;
+  border-radius: var(--omni-ds-radius-xs);
+}
+
+.omni-ds-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.omni-ds-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--omni-ds-space-xs);
+  align-items: center;
+}
+
+/* =========================================================
+   8. Responsive Guards
+   ========================================================= */
+
+@media (max-width: 600px) {
+  .omni-ds-meta-grid {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  }
+
+  .omni-ds-panel-header {
+    gap: var(--omni-ds-space-xs);
+  }
+}
+
+@media (max-width: 375px) {
+  .omni-ds-meta-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .omni-ds-chip-row {
+    gap: var(--omni-ds-space-2xs);
+  }
+}
+
+/* =========================================================
+   9. Prefers Reduced Motion
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .omni-ds-panel,
+  .omni-ds-chip,
+  .omni-ds-meta-item,
+  .omni-ds-subpanel {
+    transition: none;
+    animation: none;
+  }
+}

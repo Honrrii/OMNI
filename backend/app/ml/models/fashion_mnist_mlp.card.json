@@ -1,0 +1,32 @@
+{
+  "model_name": "fashion_mnist_mlp",
+  "system_name": "OMNITorch",
+  "version": "0.1.0",
+  "task_type": "image_classification",
+  "input_type": "grayscale_image_28x28",
+  "framework": "pytorch",
+  "classes": [
+    "T-shirt/top",
+    "Trouser",
+    "Pullover",
+    "Dress",
+    "Coat",
+    "Sandal",
+    "Shirt",
+    "Sneaker",
+    "Bag",
+    "Ankle boot"
+  ],
+  "intended_use": "Demo classifier for the OMNITorch subsystem. Classifies Fashion-MNIST clothing categories from 28x28 grayscale images. Used to validate the OMNITorch inference pipeline before robotics-specific models are trained.",
+  "limitations": "This model only understands Fashion-MNIST clothing categories. It has no knowledge of CAD geometry, robot components, PCB layouts, sensor readings, or engineering artifacts. It should not be used to make engineering decisions. Confidence values on non-clothing images are meaningless.",
+  "future_replacement_targets": [
+    "CAD morphology reviewer: detects flat/planar vs fully 3D Fusion 360 models",
+    "Robot component classifier: identifies motor mounts, sensors, chassis plates from photos",
+    "Sensor anomaly detector: flags unusual IMU or distance sensor readings",
+    "Simulation result classifier: labels ROS2/Gazebo output as pass/warn/fail"
+  ],
+  "training_summary": "Trained on the Fashion-MNIST dataset (60,000 training images, 10,000 test images). MLP architecture with fully connected layers. Achieves approximately 88% test accuracy on the standard benchmark.",
+  "omni_relevance": "First registered OMNITorch model. Validates that the OMNITorch pipeline — model loading, preprocessing, inference, schema generation, and OMNI interpretation — works end-to-end before engineering-specific models are introduced.",
+  "model_card_version": "1.0",
+  "review_required_before_hardware_use": true
+}

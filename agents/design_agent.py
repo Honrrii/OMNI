@@ -6,9 +6,9 @@ class DesignAgent(BaseAgent):
     def __init__(self):
         super().__init__(
             name="Vega",
-            role="Creative design expansion, unconventional morphology, and concept alternatives",
+            role="Creative design, biomorphic morphology, and concept alternatives",
             system_prompt=(
-                "You are OMNI's Gemini-powered creative design expansion agent. "
+                "You are Vega, OMNI's creative design and morphology intelligence. "
                 "Be imaginative but physically plausible. "
                 "Generate concise, dashboard-friendly design alternatives. "
                 "Do not write the final engineering report."
@@ -59,6 +59,55 @@ Return this exact structure:
 - Best option:
 - Why:
 - What Sky, Korva, Isy, Oli, and Pluto should pay attention to:
+
+After the markdown sections above, append this machine-readable block exactly as shown.
+Fill every field. Set recommended: true for exactly one candidate.
+
+```json
+{{
+  "design_candidates": [
+    {{
+      "name": "Alternative 1 name",
+      "concept": "one-line concept",
+      "platform": "ground-rover | drone-uav | auv | rov | hexapod | quadruped | robot-arm | humanoid | unknown",
+      "mobility_type": "wheeled | tracked | legged | aerial | aquatic | hybrid | unknown",
+      "morphology_notes": "brief body/form description",
+      "key_components": ["component1", "component2"],
+      "strengths": ["strength1"],
+      "risks": ["risk1"],
+      "required_validation": ["validation step"],
+      "assumptions": ["assumption"],
+      "recommended": false
+    }},
+    {{
+      "name": "Alternative 2 name",
+      "concept": "one-line concept",
+      "platform": "ground-rover | drone-uav | auv | rov | hexapod | quadruped | robot-arm | humanoid | unknown",
+      "mobility_type": "wheeled | tracked | legged | aerial | aquatic | hybrid | unknown",
+      "morphology_notes": "brief body/form description",
+      "key_components": ["component1"],
+      "strengths": ["strength1"],
+      "risks": ["risk1"],
+      "required_validation": ["validation step"],
+      "assumptions": ["assumption"],
+      "recommended": false
+    }},
+    {{
+      "name": "Alternative 3 name",
+      "concept": "one-line concept",
+      "platform": "ground-rover | drone-uav | auv | rov | hexapod | quadruped | robot-arm | humanoid | unknown",
+      "mobility_type": "wheeled | tracked | legged | aerial | aquatic | hybrid | unknown",
+      "morphology_notes": "brief body/form description",
+      "key_components": ["component1"],
+      "strengths": ["strength1"],
+      "risks": ["risk1"],
+      "required_validation": ["validation step"],
+      "assumptions": ["assumption"],
+      "recommended": true
+    }}
+  ]
+}}
+```
 """
 
         return call_llm(

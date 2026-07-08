@@ -1,0 +1,374 @@
+"""Phase 11 Stage 1: sandbox runner + units/math check tests.
+
+Covers the units/math check (pass / mismatch / skip), runner determinism, the
+unknown-sandbox skip path, and two foundation-safety guards: the sandbox package
+imports no heavy/runtime modules and contains no subprocess/shell execution.
+"""
+
+import ast
+from pathlib import Path
+
+from backend.app.sandbox.runner import run_sandbox
+
+SANDBOX_DIR = Path(__file__).resolve().parent.parent / "backend" / "app" / "sandbox"
+
+
+# ---------------------------------------------------------------------------
+# units/math check behavior
+# ---------------------------------------------------------------------------
+def test_units_math_passing_case():
+    out = run_sandbox(
+        "units_math",
+        {
+            "declared_total_mass_kg": 2.4,
+            "component_masses_kg": [1.0, 1.4],
+            "tolerance_kg": 0.05,
+        },
+    ).to_dict()
+
+    assert out["sandbox"] == "units_math"
+    assert out["status"] == "passed"
+    assert len(out["checks"]) == 1
+    check = out["checks"][0]
+    assert check["check_id"] == "units.mass_balance"
+    assert check["ok"] is True
+    assert check["severity"] == "info"
+
+
+def test_units_math_mismatch_case():
+    out = run_sandbox(
+        "units_math",
+        {
+            "declared_total_mass_kg": 2.0,
+            "component_masses_kg": [1.0, 1.4],
+            "tolerance_kg": 0.05,
+        },
+    ).to_dict()
+
+    assert out["status"] == "completed"
+    assert len(out["checks"]) == 1
+    check = out["checks"][0]
+    assert check["check_id"] == "units.mass_balance"
+    assert check["ok"] is False
+    assert check["severity"] == "warning"
+    assert check["expected"] == "2.4 kg"
+    assert check["actual"] == "2.0 kg"
+
+
+def test_units_math_within_default_tolerance_passes():
+    # No tolerance_kg supplied -> default 0.05; 2.43 vs 2.4 is within it.
+    out = run_sandbox(
+        "units_math",
+        {
+            "declared_total_mass_kg": 2.43,
+            "component_masses_kg": [1.0, 1.4],
+        },
+    ).to_dict()
+    assert out["status"] == "passed"
+    assert out["checks"][0]["ok"] is True
+
+
+def test_units_math_missing_input_skips():
+    out = run_sandbox("units_math", {}).to_dict()
+    assert out["status"] == "skipped"
+    assert len(out["checks"]) == 1
+    assert out["checks"][0]["severity"] == "info"
+    assert out["checks"][0]["ok"] is True
+
+
+def test_units_math_none_input_skips():
+    out = run_sandbox("units_math", None).to_dict()
+    assert out["status"] == "skipped"
+    assert out["checks"][0]["severity"] == "info"
+
+
+def test_units_math_invalid_component_skips():
+    out = run_sandbox(
+        "units_math",
+        {
+            "declared_total_mass_kg": 2.0,
+            "component_masses_kg": [1.0, "heavy"],
+        },
+    ).to_dict()
+    assert out["status"] == "skipped"
+    assert out["checks"][0]["severity"] == "info"
+
+
+def test_units_math_bool_declared_is_invalid_and_skips():
+    # bools are not accepted as masses even though they are int subclasses.
+    out = run_sandbox(
+        "units_math",
+        {
+            "declared_total_mass_kg": True,
+            "component_masses_kg": [1.0, 1.4],
+        },
+    ).to_dict()
+    assert out["status"] == "skipped"
+
+
+# ---------------------------------------------------------------------------
+# determinism
+# ---------------------------------------------------------------------------
+def test_run_sandbox_units_math_is_deterministic():
+    inputs = {
+        "declared_total_mass_kg": 2.0,
+        "component_masses_kg": [1.0, 1.4],
+        "tolerance_kg": 0.05,
+    }
+    first = run_sandbox("units_math", inputs).to_dict()
+    second = run_sandbox("units_math", inputs).to_dict()
+    assert first == second
+
+
+def test_run_sandbox_does_not_mutate_inputs():
+    inputs = {
+        "declared_total_mass_kg": 2.0,
+        "component_masses_kg": [1.0, 1.4],
+        "tolerance_kg": 0.05,
+    }
+    snapshot = {
+        "declared_total_mass_kg": 2.0,
+        "component_masses_kg": [1.0, 1.4],
+        "tolerance_kg": 0.05,
+    }
+    run_sandbox("units_math", inputs)
+    assert inputs == snapshot
+
+
+# ---------------------------------------------------------------------------
+# unknown sandbox
+# ---------------------------------------------------------------------------
+def test_run_sandbox_unknown_name_skips():
+    out = run_sandbox("ros2_colcon", {"anything": 1}).to_dict()
+    assert out["sandbox"] == "ros2_colcon"
+    assert out["status"] == "skipped"
+    assert len(out["checks"]) == 1
+    check = out["checks"][0]
+    assert check["check_id"] == "sandbox.unknown"
+    assert check["ok"] is True
+    assert check["severity"] == "info"
+
+
+def test_run_sandbox_unknown_name_is_deterministic():
+    first = run_sandbox("nope", None).to_dict()
+    second = run_sandbox("nope", None).to_dict()
+    assert first == second
+
+
+def test_no_report_contains_findings_keys():
+    for name, inputs in (
+        ("units_math", {"declared_total_mass_kg": 2.0, "component_masses_kg": [1.0, 1.4]}),
+        ("units_math", {}),
+        ("dimensional_consistency", {"quantity": {"dimension": "mass"}, "expected_dimension": "length"}),
+        ("equation_sanity", {"left": "V", "right": "I * R", "values": {"V": 1, "I": 1, "R": 1}}),
+        ("artifact_shape", {"artifact": {"name": "x"}, "required_fields": {"name": "str"}}),
+        ("unknown_box", None),
+    ):
+        out = run_sandbox(name, inputs).to_dict()
+        assert "findings" not in out
+        assert "findings_projection" not in out
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: runner dispatches each registered check by name
+# ---------------------------------------------------------------------------
+def test_runner_dispatches_dimensional_consistency():
+    out = run_sandbox(
+        "dimensional_consistency",
+        {"quantity": {"name": "x", "dimension": "length"}, "expected_dimension": "length"},
+    ).to_dict()
+    assert out["sandbox"] == "dimensional_consistency"
+    assert out["status"] == "passed"
+
+
+def test_runner_dispatches_equation_sanity():
+    out = run_sandbox(
+        "equation_sanity",
+        {"left": "V", "right": "I * R", "values": {"V": 12, "I": 3, "R": 4}},
+    ).to_dict()
+    assert out["sandbox"] == "equation_sanity"
+    assert out["status"] == "passed"
+
+
+def test_runner_dispatches_artifact_shape():
+    out = run_sandbox(
+        "artifact_shape",
+        {
+            "artifact": {"name": "r", "type": "robot", "mass_kg": 2.4},
+            "required_fields": {"name": "str", "type": "str", "mass_kg": "number"},
+        },
+    ).to_dict()
+    assert out["sandbox"] == "artifact_shape"
+    assert out["status"] == "passed"
+
+
+# ---------------------------------------------------------------------------
+# foundation-safety guards (AST, no execution)
+# ---------------------------------------------------------------------------
+FORBIDDEN_IMPORTS = (
+    "backend.app.main",
+    "agents.supervisor",
+    "agents.validator_agent",
+    "agents.critic_agent",
+    "agents.artifact_synthesizer",
+    "backend.app.reliability",
+    "backend.app.export.export_manager",
+)
+
+# The sandbox subprocess wall (Phase 11 Stage 5) lives in exactly one file.
+# That file is the ONLY place allowed to import subprocess and call
+# subprocess.run. Every other sandbox file remains subprocess-free.
+EXECUTION_FILE = "execution.py"
+
+# The standalone resource-limit launcher (Phase 11 Stage 9B-3B-1) is the ONLY
+# file allowed to import ``resource`` and to call ``os.exec*``. It must remain
+# subprocess-free (covered by the subprocess rules, since it is not the
+# execution file).
+LAUNCHER_FILE = "limited_launcher.py"
+
+# Calls banned in EVERY sandbox file, including execution.py. Note that
+# subprocess.run and subprocess.Popen are deliberately absent here — both are
+# allowed only in execution.py and handled separately below.
+GLOBALLY_FORBIDDEN_CALL_ATTRS = {
+    ("os", "system"),
+    ("os", "popen"),
+    ("subprocess", "call"),
+    ("subprocess", "check_call"),
+    ("subprocess", "check_output"),
+}
+
+# subprocess.run and subprocess.Popen are permitted only in EXECUTION_FILE.
+# (Popen backs the Stage 9B-2 capture-time output cap; it stays confined here.)
+_SUBPROCESS_RUN = ("subprocess", "run")
+_SUBPROCESS_POPEN = ("subprocess", "Popen")
+
+# subprocess may be imported only in EXECUTION_FILE.
+FORBIDDEN_IMPORT_MODULES = {"subprocess"}
+
+
+def _sandbox_py_files():
+    return sorted(SANDBOX_DIR.rglob("*.py"))
+
+
+def _imported_names(tree):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                yield alias.name
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                yield node.module
+
+
+def test_sandbox_does_not_import_forbidden_modules():
+    offenders = []
+    for path in _sandbox_py_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for name in _imported_names(tree):
+            for forbidden in FORBIDDEN_IMPORTS:
+                if name == forbidden or name.startswith(forbidden + "."):
+                    offenders.append(f"{path.name}: imports {name}")
+    assert not offenders, "sandbox imports forbidden modules:\n" + "\n".join(offenders)
+
+
+def test_sandbox_has_no_subprocess_or_shell_execution():
+    """subprocess is confined to execution.py; everything else stays clean.
+
+    - ``import subprocess`` is allowed ONLY in execution.py.
+    - ``subprocess.run`` is allowed ONLY in execution.py.
+    - ``subprocess.Popen`` is allowed ONLY in execution.py (Stage 9B-2
+      capture-time output cap).
+    - os.system / os.popen / subprocess.call / .check_call / .check_output are
+      banned in EVERY sandbox file, including execution.py.
+    """
+    offenders = []
+    for path in _sandbox_py_files():
+        is_execution_file = path.name == EXECUTION_FILE
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+        for name in _imported_names(tree):
+            top = name.split(".")[0]
+            if top in FORBIDDEN_IMPORT_MODULES and not is_execution_file:
+                offenders.append(f"{path.name}: imports {name}")
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                value = node.func.value
+                if isinstance(value, ast.Name):
+                    call = (value.id, node.func.attr)
+                    if call in GLOBALLY_FORBIDDEN_CALL_ATTRS:
+                        offenders.append(
+                            f"{path.name}: calls {value.id}.{node.func.attr}()"
+                        )
+                    elif call == _SUBPROCESS_RUN and not is_execution_file:
+                        offenders.append(
+                            f"{path.name}: calls subprocess.run() outside {EXECUTION_FILE}"
+                        )
+                    elif call == _SUBPROCESS_POPEN and not is_execution_file:
+                        offenders.append(
+                            f"{path.name}: calls subprocess.Popen() outside {EXECUTION_FILE}"
+                        )
+    assert not offenders, (
+        "sandbox uses subprocess/shell execution:\n" + "\n".join(offenders)
+    )
+
+
+def test_resource_import_confined_to_launcher():
+    """``import resource`` is allowed ONLY in limited_launcher.py."""
+    offenders = []
+    for path in _sandbox_py_files():
+        is_launcher = path.name == LAUNCHER_FILE
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for name in _imported_names(tree):
+            if name.split(".")[0] == "resource" and not is_launcher:
+                offenders.append(f"{path.name}: imports {name}")
+    assert not offenders, (
+        "resource imported outside the launcher:\n" + "\n".join(offenders)
+    )
+
+
+def test_os_exec_confined_to_launcher():
+    """``os.exec*`` may be called ONLY in limited_launcher.py."""
+    offenders = []
+    for path in _sandbox_py_files():
+        is_launcher = path.name == LAUNCHER_FILE
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                value = node.func.value
+                if (
+                    isinstance(value, ast.Name)
+                    and value.id == "os"
+                    and node.func.attr.startswith("exec")
+                    and not is_launcher
+                ):
+                    offenders.append(
+                        f"{path.name}: calls os.{node.func.attr}() outside {LAUNCHER_FILE}"
+                    )
+    assert not offenders, (
+        "os.exec* called outside the launcher:\n" + "\n".join(offenders)
+    )
+
+
+def _uses_shell_true(tree) -> bool:
+    """True if any call passes shell=True (constant) as a keyword argument."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if (
+                    keyword.arg == "shell"
+                    and isinstance(keyword.value, ast.Constant)
+                    and keyword.value.value is True
+                ):
+                    return True
+    return False
+
+
+def test_no_sandbox_file_uses_shell_true():
+    """Positive assertion: shell=True appears in no sandbox file, ever."""
+    offenders = []
+    for path in _sandbox_py_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if _uses_shell_true(tree):
+            offenders.append(path.name)
+    assert not offenders, "sandbox files use shell=True:\n" + "\n".join(offenders)
