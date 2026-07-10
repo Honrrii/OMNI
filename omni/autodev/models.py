@@ -67,3 +67,13 @@ class AutoDevRunState:
     reviewer: str = "codex"
     status: str = "planned"
     human_approval_required: bool = True
+
+
+@dataclass
+class AutoDevIssueReadiness:
+    """Result of checking a local issue body file for required Auto Dev sections."""
+
+    verdict: str
+    present_sections: list[str] = field(default_factory=list)
+    missing_sections: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)

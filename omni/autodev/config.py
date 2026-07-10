@@ -55,3 +55,20 @@ RUN_TEMPLATE_FILENAMES: list[str] = [
     "REVIEW_REPORT.md",
     "README.md",
 ]
+
+# Sections a local issue body file must contain to be considered "ready" for
+# an Auto Dev run. Each entry pairs a canonical name with recognized heading
+# aliases (matched case-insensitively, whitespace-normalized).
+DEFAULT_REQUIRED_ISSUE_SECTIONS: list[tuple[str, list[str]]] = [
+    ("Goal", ["Goal", "Goals"]),
+    ("Scope", ["Scope"]),
+    (
+        "Out of Scope / Non-goals",
+        ["Out of Scope / Non-goals", "Out of Scope", "Non-goals", "Non Goals"],
+    ),
+    ("Expected Files", ["Expected Files"]),
+    ("Acceptance Criteria", ["Acceptance Criteria"]),
+    ("Validation Commands", ["Validation Commands"]),
+    ("Stop Conditions", ["Stop Conditions"]),
+    ("Final Report", ["Final Report"]),
+]

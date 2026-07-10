@@ -11,6 +11,7 @@ Usage:
     python scripts/omni_autodev.py --dry-run
     python scripts/omni_autodev.py init-run --issue 60 --title "..." --dry-run
     python scripts/omni_autodev.py init-run --issue 60 --title "..."
+    python scripts/omni_autodev.py check-issue --file /tmp/omni_issue_ready.md
 """
 from __future__ import annotations
 
@@ -22,8 +23,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from omni.autodev.config import DEFAULT_IMPLEMENTER, DEFAULT_REVIEWER, DEFAULT_RUN_STATUS
-from omni.autodev.models import AutoDevDryRunSummary, AutoDevRunState
+from omni.autodev.config import (
+    DEFAULT_IMPLEMENTER,
+    DEFAULT_REQUIRED_ISSUE_SECTIONS,
+    DEFAULT_REVIEWER,
+    DEFAULT_RUN_STATUS,
+)
+from omni.autodev.issue_readiness import check_issue_file
+from omni.autodev.models import AutoDevDryRunSummary, AutoDevIssueReadiness, AutoDevRunState
 from omni.autodev.run_layout import (
     AutoDevRunConflictError,
     build_run_files,
@@ -33,7 +40,6 @@ from omni.autodev.run_layout import (
 
 PLANNED_FUTURE_LAYERS: list[str] = [
     "campaign YAML loading",
-    "issue readiness scoring",
     "handoff packet generation",
     "validation result tracking",
     "protected path checks",
@@ -108,6 +114,40 @@ def run_init_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def render_issue_readiness_report(report: AutoDevIssueReadiness) -> str:
+    present = set(report.present_sections)
+    lines = [f"Issue readiness: {report.verdict}", "", "Required sections:"]
+    for name, _ in DEFAULT_REQUIRED_ISSUE_SECTIONS:
+        status = "present" if name in present else "missing"
+        lines.append(f"- {name}: {status}")
+
+    lines.append("")
+    if report.missing_sections:
+        lines.append("Missing sections:")
+        lines.extend(f"- {name}" for name in report.missing_sections)
+    else:
+        lines.append("Missing sections: none")
+
+    if report.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in report.warnings)
+    else:
+        lines.append("Warnings: none")
+
+    return "\n".join(lines)
+
+
+def run_check_issue(args: argparse.Namespace) -> int:
+    try:
+        report = check_issue_file(Path(args.file))
+    except FileNotFoundError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    print(render_issue_readiness_report(report))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -150,6 +190,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print what would be created without writing any files.",
     )
+
+    check_issue = subparsers.add_parser(
+        "check-issue",
+        help="Check a local Markdown/text issue body file for required Auto Dev sections.",
+    )
+    check_issue.add_argument("--file", required=True, help="Path to a local issue body file.")
     return parser
 
 
@@ -159,6 +205,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init-run":
         return run_init_run(args)
+
+    if args.command == "check-issue":
+        return run_check_issue(args)
 
     if args.dry_run:
         print(render_dry_run_summary(build_dry_run_summary()))
