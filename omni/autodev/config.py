@@ -36,3 +36,22 @@ DEFAULT_NON_GOALS: list[str] = [
 DEFAULT_VALIDATION_COMMANDS: list[str] = [
     "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests -q",
 ]
+
+# Default AI roles for a local Auto Dev run. Names only — no agent is
+# launched by this skeleton.
+DEFAULT_IMPLEMENTER: str = "claude"
+DEFAULT_REVIEWER: str = "codex"
+DEFAULT_RUN_STATUS: str = "planned"
+
+# Where local run directories are created by default.
+DEFAULT_RUNS_ROOT: str = "artifacts/autodev/runs"
+
+# Filenames every run directory scaffold must contain.
+RUN_TEMPLATE_FILENAMES: list[str] = [
+    "STATE.json",
+    "IMPLEMENTER_PACKET.md",
+    "REVIEWER_PACKET.md",
+    "IMPLEMENTER_REPORT.md",
+    "REVIEW_REPORT.md",
+    "README.md",
+]

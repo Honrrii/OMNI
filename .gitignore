@@ -27,6 +27,7 @@ outputs/
 test_outputs/
 knowledge/cad_sources/
 memory/project_memory.json
+artifacts/autodev/runs/
 
 # ROS2 generated build artifacts
 **/build/
