@@ -9,8 +9,10 @@ campaigns. This document describes the Phase 11 core skeleton only.
   campaign: `AutoDevCampaign`, `AutoDevTask`, `AutoDevSafetyRule`,
   `AutoDevValidationPlan`, `AutoDevDryRunSummary`. No validation logic yet.
 * `omni/autodev/config.py` — default lists: `DEFAULT_PROTECTED_AREAS`,
-  `DEFAULT_NON_GOALS`, `DEFAULT_VALIDATION_COMMANDS`. Plain data, not
-  enforcement.
+  `DEFAULT_NON_GOALS`, `DEFAULT_VALIDATION_COMMANDS`, and
+  `DEFAULT_REQUIRED_ISSUE_SECTIONS`. Plain data, not enforcement.
+* `omni/autodev/issue_readiness.py` — deterministic heading-text matching
+  that checks a local issue body file for the required Auto Dev sections.
 * `scripts/omni_autodev.py` — a CLI with `--help` and `--dry-run`. The
   dry run prints a skeleton-only summary and does not touch the network,
   call a model, or call the GitHub API.
@@ -64,14 +66,43 @@ Every step (creating the directory, pasting packets, filling in reports) is
 done by a human. Nothing here starts an agent, fetches an issue, or executes
 code automatically.
 
+## Local issue readiness checker
+
+Before scaffolding a run, a human can check whether an issue body (saved
+locally as Markdown/text — Auto Dev does not fetch it from GitHub) has the
+sections an implementer/reviewer packet needs.
+
+```bash
+python scripts/omni_autodev.py check-issue --file /tmp/omni_issue_ready.md
+```
+
+Required sections (matched by markdown heading text, case-insensitively;
+`Out of Scope / Non-goals` also accepts `Out of Scope` or `Non-goals` alone):
+
+```text
+Goal
+Scope
+Out of Scope / Non-goals
+Expected Files
+Acceptance Criteria
+Validation Commands
+Stop Conditions
+Final Report
+```
+
+The verdict is `READY` when every required section is present, or
+`NEEDS_DETAIL` when any are missing — output lists each section's status plus
+the missing ones by name. A missing input file is a clear, nonzero-exit CLI
+error, not a `NEEDS_DETAIL` verdict. This checker only reads a local file; it
+never fetches from GitHub, calls a model, or uses the `gh` CLI.
+
 ## Planned future layers
 
 Later phases may add, in order:
 
 1. Campaign YAML loading
-2. Issue readiness scoring
-3. Handoff packet generation
-4. Validation result tracking
-5. Protected path checks
+2. Handoff packet generation
+3. Validation result tracking
+4. Protected path checks
 
 Each of these is a separate, reviewed change — not part of this skeleton.
