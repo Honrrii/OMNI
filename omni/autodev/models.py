@@ -54,3 +54,16 @@ class AutoDevDryRunSummary:
     github_api_enabled: bool = False
     autonomous_execution_enabled: bool = False
     planned_future_layers: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AutoDevRunState:
+    """Metadata for one local Auto Dev run directory (STATE.json contents)."""
+
+    issue_number: int
+    issue_title: str
+    branch: str
+    implementer: str = "claude"
+    reviewer: str = "codex"
+    status: str = "planned"
+    human_approval_required: bool = True
