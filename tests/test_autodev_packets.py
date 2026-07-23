@@ -31,6 +31,7 @@ from omni.autodev.packets import (
     task_packet_from_dict,
     to_dict,
     to_json,
+    validate_repair_within_task_scope,
 )
 
 
@@ -135,6 +136,7 @@ def test_task_packet_round_trips_through_dict():
         goal="Do the thing",
         in_scope_paths=["a.py"],
         out_of_scope_paths=["b.py"],
+        acceptance_criteria=["a.py does the thing"],
         readiness_status="READY",
     )
     restored = task_packet_from_dict(to_dict(task))
@@ -374,7 +376,146 @@ def test_task_packet_out_of_scope_paths_align_with_protected_path_matcher():
         goal="Touch only omni/autodev",
         in_scope_paths=["omni/autodev/packets.py"],
         out_of_scope_paths=["backend/app/sandbox/**", "frontend/**"],
+        acceptance_criteria=["packets.py adds no protected-path touches"],
         readiness_status="READY",
     )
     assert match_protected_path(task.in_scope_paths[0]) is None
     assert match_protected_path("backend/app/sandbox/limited_launcher.py") is not None
+
+
+# ---------------------------------------------------------------------------
+# Repair cycle 1 (Codex review): required-string emptiness, packet-version
+# mismatch, duplicate acceptance-criterion identity, and repair-scope
+# containment. See docs/agentic/packet_contracts.md.
+# ---------------------------------------------------------------------------
+
+
+def test_task_packet_rejects_empty_task_id_and_goal():
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="", goal="g")
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="   ", goal="g")
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="t", goal="")
+
+
+def test_run_manifest_rejects_empty_required_fields():
+    with pytest.raises(ValueError):
+        RunManifest(
+            run_id="",
+            created_at="now",
+            repo_root="/repo",
+            start_commit="c",
+            branch="b",
+            requested_operation="op",
+        )
+    with pytest.raises(ValueError):
+        RunManifest(
+            run_id="r",
+            created_at="",
+            repo_root="/repo",
+            start_commit="c",
+            branch="b",
+            requested_operation="op",
+        )
+
+
+def test_implementation_handoff_and_review_packet_reject_empty_task_id():
+    with pytest.raises(ValueError):
+        ImplementationHandoff(task_id="")
+    with pytest.raises(ValueError):
+        ReviewPacket(task_id="", verdict="APPROVED")
+
+
+def test_closeout_packet_rejects_empty_task_id():
+    with pytest.raises(ValueError):
+        CloseoutPacket(task_id="", final_verdict="APPROVED")
+
+
+def test_task_packet_ready_without_acceptance_criteria_is_rejected():
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="t", goal="g", readiness_status="READY")
+
+
+def test_task_packet_not_ready_without_acceptance_criteria_is_allowed():
+    task = TaskPacket(task_id="t", goal="g", readiness_status="NOT_READY")
+    assert task.acceptance_criteria == []
+
+
+def test_packet_version_mismatch_is_rejected_on_every_top_level_packet():
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="t", goal="g", packet_version="9.9")
+    with pytest.raises(ValueError):
+        RunManifest(
+            run_id="r", created_at="now", repo_root="/repo", start_commit="c",
+            branch="b", requested_operation="op", packet_version="9.9",
+        )
+    with pytest.raises(ValueError):
+        ImplementationHandoff(task_id="t", packet_version="9.9")
+    with pytest.raises(ValueError):
+        ReviewPacket(task_id="t", verdict="APPROVED", packet_version="9.9")
+    with pytest.raises(ValueError):
+        RepairPacket(review_cycle=1, packet_version="9.9")
+    with pytest.raises(ValueError):
+        CloseoutPacket(task_id="t", final_verdict="APPROVED", packet_version="9.9")
+
+
+def test_packet_version_mismatch_is_rejected_on_deserialization():
+    payload = to_dict(TaskPacket(task_id="t", goal="g"))
+    payload["packet_version"] = "9.9"
+    with pytest.raises(ValueError):
+        task_packet_from_dict(payload)
+
+
+def test_implementation_handoff_rejects_duplicate_acceptance_criteria():
+    with pytest.raises(ValueError):
+        ImplementationHandoff(
+            task_id="t",
+            acceptance_criterion_results=[
+                AcceptanceCriterionResult(criterion="c1", status="VERIFIED"),
+                AcceptanceCriterionResult(criterion="c1", status="FAILED"),
+            ],
+        )
+
+
+def test_review_packet_rejects_duplicate_acceptance_criteria():
+    with pytest.raises(ValueError):
+        ReviewPacket(
+            task_id="t",
+            verdict="APPROVED",
+            acceptance_criterion_results=[
+                AcceptanceCriterionResult(criterion="c1", status="VERIFIED"),
+                AcceptanceCriterionResult(criterion="c1", status="VERIFIED"),
+            ],
+        )
+
+
+def test_validate_repair_within_task_scope_accepts_subset_of_in_scope_paths():
+    task = TaskPacket(
+        task_id="t",
+        goal="g",
+        in_scope_paths=["a.py", "b.py"],
+        out_of_scope_paths=["c.py"],
+    )
+    repair = RepairPacket(review_cycle=1, allowed_repair_scope=["a.py"])
+    validate_repair_within_task_scope(repair, task)  # does not raise
+
+
+def test_validate_repair_within_task_scope_rejects_path_outside_in_scope():
+    task = TaskPacket(task_id="t", goal="g", in_scope_paths=["a.py"])
+    repair = RepairPacket(review_cycle=1, allowed_repair_scope=["z.py"])
+    with pytest.raises(ValueError):
+        validate_repair_within_task_scope(repair, task)
+
+
+def test_validate_repair_within_task_scope_rejects_out_of_scope_path():
+    task = TaskPacket(task_id="t", goal="g", out_of_scope_paths=["backend/app/sandbox/**"])
+    repair = RepairPacket(review_cycle=1, allowed_repair_scope=["backend/app/sandbox/**"])
+    with pytest.raises(ValueError):
+        validate_repair_within_task_scope(repair, task)
+
+
+def test_validate_repair_within_task_scope_allows_any_path_when_in_scope_unspecified():
+    task = TaskPacket(task_id="t", goal="g")
+    repair = RepairPacket(review_cycle=1, allowed_repair_scope=["anything.py"])
+    validate_repair_within_task_scope(repair, task)  # does not raise: unconstrained task

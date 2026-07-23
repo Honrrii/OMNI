@@ -38,6 +38,34 @@ ACCEPTANCE_CRITERION_STATUSES = ("VERIFIED", "PARTIAL", "FAILED", "NOT_VERIFIED"
 TEST_EVIDENCE_OUTCOMES = ("passed", "failed", "timeout")
 
 
+def _require_nonempty(value: str, field_name: str, packet_name: str) -> None:
+    if not value or not value.strip():
+        raise ValueError(f"{packet_name}.{field_name} must be a non-empty string")
+
+
+def _require_packet_version(value: str, packet_name: str) -> None:
+    if value != PACKET_VERSION:
+        raise ValueError(
+            f"{packet_name}.packet_version {value!r} does not match the current "
+            f"PACKET_VERSION {PACKET_VERSION!r} — a version bump is a deliberate "
+            f"change to omni/autodev/packets.py, not something a packet can drift into"
+        )
+
+
+def _require_no_duplicate_criteria(
+    results: list[AcceptanceCriterionResult], packet_name: str
+) -> None:
+    seen: set[str] = set()
+    for result in results:
+        if result.criterion in seen:
+            raise ValueError(
+                f"{packet_name}.acceptance_criterion_results has a duplicate "
+                f"criterion {result.criterion!r} — each criterion must map to "
+                f"exactly one result"
+            )
+        seen.add(result.criterion)
+
+
 # ---------------------------------------------------------------------------
 # Run manifest
 # ---------------------------------------------------------------------------
@@ -55,6 +83,11 @@ class RunManifest:
     requested_operation: str
     dirty_state_summary: list[str] = field(default_factory=list)
     packet_version: str = PACKET_VERSION
+
+    def __post_init__(self) -> None:
+        for name in ("run_id", "created_at", "repo_root", "start_commit", "branch", "requested_operation"):
+            _require_nonempty(getattr(self, name), name, "RunManifest")
+        _require_packet_version(self.packet_version, "RunManifest")
 
 
 # ---------------------------------------------------------------------------
@@ -78,10 +111,19 @@ class TaskPacket:
     packet_version: str = PACKET_VERSION
 
     def __post_init__(self) -> None:
+        _require_nonempty(self.task_id, "task_id", "TaskPacket")
+        _require_nonempty(self.goal, "goal", "TaskPacket")
+        _require_packet_version(self.packet_version, "TaskPacket")
         if self.readiness_status not in TASK_READINESS_STATUSES:
             raise ValueError(
                 f"invalid readiness_status {self.readiness_status!r}; "
                 f"must be one of {TASK_READINESS_STATUSES}"
+            )
+        if self.readiness_status == "READY" and not self.acceptance_criteria:
+            raise ValueError(
+                "TaskPacket.acceptance_criteria must be non-empty when "
+                "readiness_status is READY — a task ready for implementation "
+                "needs at least one acceptance criterion to be traceable"
             )
 
 
@@ -173,6 +215,11 @@ class ImplementationHandoff:
     reviewer_attention_areas: list[str] = field(default_factory=list)
     packet_version: str = PACKET_VERSION
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self.task_id, "task_id", "ImplementationHandoff")
+        _require_packet_version(self.packet_version, "ImplementationHandoff")
+        _require_no_duplicate_criteria(self.acceptance_criterion_results, "ImplementationHandoff")
+
 
 # ---------------------------------------------------------------------------
 # Review packet
@@ -192,10 +239,13 @@ class ReviewPacket:
     packet_version: str = PACKET_VERSION
 
     def __post_init__(self) -> None:
+        _require_nonempty(self.task_id, "task_id", "ReviewPacket")
+        _require_packet_version(self.packet_version, "ReviewPacket")
         if self.verdict not in REVIEW_VERDICTS:
             raise ValueError(
                 f"invalid review verdict {self.verdict!r}; must be one of {REVIEW_VERDICTS}"
             )
+        _require_no_duplicate_criteria(self.acceptance_criterion_results, "ReviewPacket")
 
 
 # ---------------------------------------------------------------------------
@@ -219,10 +269,39 @@ class RepairPacket:
     packet_version: str = PACKET_VERSION
 
     def __post_init__(self) -> None:
+        _require_packet_version(self.packet_version, "RepairPacket")
         if not (1 <= self.review_cycle <= MAX_REPAIR_CYCLES):
             raise ValueError(
                 f"invalid review_cycle {self.review_cycle!r}; "
                 f"must be between 1 and {MAX_REPAIR_CYCLES}"
+            )
+
+
+def validate_repair_within_task_scope(repair: RepairPacket, task: TaskPacket) -> None:
+    """Reject a repair packet whose allowed scope reaches outside the task.
+
+    A repair cycle exists to fix what the review flagged, not to reopen
+    scope the task packet already excluded. `allowed_repair_scope` must be a
+    subset of `task.in_scope_paths`, and must not overlap
+    `task.out_of_scope_paths`. Raises ValueError naming the offending path.
+
+    This is intentionally a standalone check rather than a `RepairPacket`
+    constructor rule: a `RepairPacket` can be constructed and inspected on
+    its own (e.g. while drafting it), but re-review must not accept one that
+    fails this check against the task it repairs.
+    """
+    in_scope = set(task.in_scope_paths)
+    out_of_scope = set(task.out_of_scope_paths)
+    for path in repair.allowed_repair_scope:
+        if path in out_of_scope:
+            raise ValueError(
+                f"RepairPacket.allowed_repair_scope contains {path!r}, which "
+                f"TaskPacket {task.task_id!r} marked out_of_scope_paths"
+            )
+        if in_scope and path not in in_scope:
+            raise ValueError(
+                f"RepairPacket.allowed_repair_scope contains {path!r}, which is "
+                f"not in TaskPacket {task.task_id!r}'s in_scope_paths"
             )
 
 
@@ -248,6 +327,8 @@ class CloseoutPacket:
     packet_version: str = PACKET_VERSION
 
     def __post_init__(self) -> None:
+        _require_nonempty(self.task_id, "task_id", "CloseoutPacket")
+        _require_packet_version(self.packet_version, "CloseoutPacket")
         if self.final_verdict not in REVIEW_VERDICTS:
             raise ValueError(
                 f"invalid final_verdict {self.final_verdict!r}; "

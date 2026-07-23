@@ -41,4 +41,11 @@ def match_protected_path(
     for rule in candidates:
         if fnmatch.fnmatch(normalized, rule.pattern):
             return rule
+        # A "dir/**" rule protects everything under dir/, but fnmatch alone
+        # does not match the bare directory path itself (no trailing
+        # segment for "**" to consume). Treat the directory root as
+        # protected too, so a path that names the directory exactly (as
+        # opposed to a file inside it) still matches.
+        if rule.pattern.endswith("/**") and normalized == rule.pattern[: -len("/**")]:
+            return rule
     return None

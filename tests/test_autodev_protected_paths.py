@@ -77,3 +77,36 @@ def test_cli_top_level_dry_run_still_works():
     proc = _run_cli("--dry-run")
     assert proc.returncode == 0, proc.stderr
     assert "skeleton only" in proc.stdout
+
+
+# ---------------------------------------------------------------------------
+# Repair cycle 1 (Codex review): bare protected-directory paths, and
+# confirming near-miss/empty/malformed inputs stay non-matching.
+# ---------------------------------------------------------------------------
+
+
+def test_match_protected_path_matches_bare_protected_directory_root():
+    from omni.autodev.protected_paths import match_protected_path
+
+    assert match_protected_path("backend/app/sandbox") is not None
+    assert match_protected_path("backend/app/sandbox/") is not None
+    assert match_protected_path("frontend") is not None
+    assert match_protected_path("frontend/") is not None
+    assert match_protected_path("backend/app/mission_graph") is not None
+
+
+def test_match_protected_path_resists_near_miss_prefixes():
+    from omni.autodev.protected_paths import match_protected_path
+
+    assert match_protected_path("backend/app/sandboxed_file.py") is None
+    assert match_protected_path("frontendish/x.py") is None
+    assert match_protected_path("backend/app/ml_helpers/util.py") is None
+
+
+def test_match_protected_path_handles_empty_and_malformed_input():
+    from omni.autodev.protected_paths import match_protected_path
+
+    assert match_protected_path("") is None
+    assert match_protected_path(".") is None
+    assert match_protected_path("///") is None
+    assert match_protected_path("   ") is None
