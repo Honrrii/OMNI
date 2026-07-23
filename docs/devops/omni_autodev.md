@@ -9,10 +9,14 @@ campaigns. This document describes the Phase 11 core skeleton only.
   campaign: `AutoDevCampaign`, `AutoDevTask`, `AutoDevSafetyRule`,
   `AutoDevValidationPlan`, `AutoDevDryRunSummary`. No validation logic yet.
 * `omni/autodev/config.py` — default lists: `DEFAULT_PROTECTED_AREAS`,
-  `DEFAULT_NON_GOALS`, `DEFAULT_VALIDATION_COMMANDS`, and
-  `DEFAULT_REQUIRED_ISSUE_SECTIONS`. Plain data, not enforcement.
+  `DEFAULT_NON_GOALS`, `DEFAULT_VALIDATION_COMMANDS`,
+  `DEFAULT_REQUIRED_ISSUE_SECTIONS`, and `DEFAULT_PROTECTED_PATH_RULES`.
+  Plain data, not enforcement.
 * `omni/autodev/issue_readiness.py` — deterministic heading-text matching
   that checks a local issue body file for the required Auto Dev sections.
+* `omni/autodev/protected_paths.py` — matches a single path string against
+  the protected path patterns. No git diff scanning or changed-file
+  enforcement yet.
 * `scripts/omni_autodev.py` — a CLI with `--help` and `--dry-run`. The
   dry run prints a skeleton-only summary and does not touch the network,
   call a model, or call the GitHub API.
@@ -96,6 +100,27 @@ the missing ones by name. A missing input file is a clear, nonzero-exit CLI
 error, not a `NEEDS_DETAIL` verdict. This checker only reads a local file; it
 never fetches from GitHub, calls a model, or uses the `gh` CLI.
 
+## Protected path policy
+
+Auto Dev defines which paths need dedicated human review before any future
+layer touches them. This is policy data plus a single-path matcher — it does
+not scan a git diff or enforce anything against a real change set yet.
+
+```bash
+python scripts/omni_autodev.py protected-paths
+```
+
+Lists each protected glob pattern and the reason it's protected (sandbox,
+frontend, ML model code, ROS export, Visual Bay, mission graph). To check one
+path in code:
+
+```python
+from omni.autodev.protected_paths import match_protected_path
+
+match_protected_path("backend/app/sandbox/limited_launcher.py")  # -> AutoDevProtectedPathRule(...)
+match_protected_path("omni/autodev/config.py")                   # -> None
+```
+
 ## Planned future layers
 
 Later phases may add, in order:
@@ -103,6 +128,6 @@ Later phases may add, in order:
 1. Campaign YAML loading
 2. Handoff packet generation
 3. Validation result tracking
-4. Protected path checks
+4. Changed-file protected-path enforcement (git diff scanning against this policy)
 
 Each of these is a separate, reviewed change — not part of this skeleton.

@@ -12,6 +12,7 @@ Usage:
     python scripts/omni_autodev.py init-run --issue 60 --title "..." --dry-run
     python scripts/omni_autodev.py init-run --issue 60 --title "..."
     python scripts/omni_autodev.py check-issue --file /tmp/omni_issue_ready.md
+    python scripts/omni_autodev.py protected-paths
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ from omni.autodev.config import (
 )
 from omni.autodev.issue_readiness import check_issue_file
 from omni.autodev.models import AutoDevDryRunSummary, AutoDevIssueReadiness, AutoDevRunState
+from omni.autodev.protected_paths import default_protected_path_rules
 from omni.autodev.run_layout import (
     AutoDevRunConflictError,
     build_run_files,
@@ -42,7 +44,7 @@ PLANNED_FUTURE_LAYERS: list[str] = [
     "campaign YAML loading",
     "handoff packet generation",
     "validation result tracking",
-    "protected path checks",
+    "changed-file protected-path enforcement",
 ]
 
 
@@ -148,6 +150,24 @@ def run_check_issue(args: argparse.Namespace) -> int:
     return 0
 
 
+def render_protected_paths() -> str:
+    lines = [
+        "OMNI Auto Dev protected paths",
+        "",
+        "Policy only — no git diff scanning or changed-file enforcement yet.",
+        "",
+    ]
+    for rule in default_protected_path_rules():
+        lines.append(f"- {rule.pattern}")
+        lines.append(f"    {rule.reason}")
+    return "\n".join(lines)
+
+
+def run_protected_paths(args: argparse.Namespace) -> int:
+    print(render_protected_paths())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -196,6 +216,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Check a local Markdown/text issue body file for required Auto Dev sections.",
     )
     check_issue.add_argument("--file", required=True, help="Path to a local issue body file.")
+
+    subparsers.add_parser(
+        "protected-paths",
+        help="List protected path patterns and why each requires human review.",
+    )
     return parser
 
 
@@ -208,6 +233,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "check-issue":
         return run_check_issue(args)
+
+    if args.command == "protected-paths":
+        return run_protected_paths(args)
 
     if args.dry_run:
         print(render_dry_run_summary(build_dry_run_summary()))

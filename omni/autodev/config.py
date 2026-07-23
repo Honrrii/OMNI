@@ -72,3 +72,37 @@ DEFAULT_REQUIRED_ISSUE_SECTIONS: list[tuple[str, list[str]]] = [
     ("Stop Conditions", ["Stop Conditions"]),
     ("Final Report", ["Final Report"]),
 ]
+
+# Path glob patterns Auto Dev must not touch without dedicated human review,
+# paired with the reason each area is protected. Patterns are matched with
+# fnmatch against repo-relative, forward-slash paths (no git diff scanning
+# or changed-file enforcement here — that is a future layer).
+DEFAULT_PROTECTED_PATH_RULES: list[tuple[str, str]] = [
+    (
+        "backend/app/sandbox/**",
+        "Sandbox implementation — process isolation and resource limits; "
+        "changes need dedicated security review.",
+    ),
+    (
+        "frontend/**",
+        "UI / frontend — outside Auto Dev's backend scope; requires human "
+        "frontend review.",
+    ),
+    (
+        "backend/app/ml/**",
+        "ML model code — model behavior changes need domain review.",
+    ),
+    (
+        "backend/app/ros/**",
+        "ROS export — robotics interop surface; changes need domain review.",
+    ),
+    (
+        "frontend/src/components/VisualBay*",
+        "Visual Bay — visualization surface; outside Auto Dev's scope.",
+    ),
+    (
+        "backend/app/mission_graph/**",
+        "Mission graph — core mission orchestration; changes need "
+        "dedicated review.",
+    ),
+]

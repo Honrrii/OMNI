@@ -77,3 +77,11 @@ class AutoDevIssueReadiness:
     present_sections: list[str] = field(default_factory=list)
     missing_sections: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AutoDevProtectedPathRule:
+    """A single protected path glob pattern and why it requires human review."""
+
+    pattern: str
+    reason: str
