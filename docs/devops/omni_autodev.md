@@ -131,7 +131,16 @@ from omni.autodev.protected_paths import match_protected_path
 
 match_protected_path("backend/app/sandbox/limited_launcher.py")  # -> AutoDevProtectedPathRule(...)
 match_protected_path("omni/autodev/config.py")                   # -> None
+match_protected_path("../escape.py")                             # -> raises ValueError
 ```
+
+`match_protected_path` fails closed on invalid input (empty, `.`, `..`, an
+absolute or drive-qualified path, a UNC path, or anything containing a `..`
+component) — it raises `ValueError` rather than returning an ordinary
+unprotected `None`. See `docs/agentic/packet_contracts.md`'s "one shared
+repository-relative path contract" for the full normalization and matching
+rules, which this module also exposes as `normalize_repo_relative_path` and
+`spec_matches` for reuse elsewhere in Auto Dev.
 
 ## Production packet contracts
 

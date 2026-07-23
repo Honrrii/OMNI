@@ -12,6 +12,17 @@ All packets carry a `packet_version` field (currently `"0.1"`). A future
 version bump is a deliberate, reviewed change to `omni/autodev/packets.py`,
 not something a packet's contents can silently drift into.
 
+**One shared repository-relative path contract.** Both this module and
+`omni/autodev/protected_paths.py`'s protected-path policy use the same two
+primitives (defined in `protected_paths.py`, imported by `packets.py`):
+`normalize_repo_relative_path` (strict — fails closed with `ValueError` on
+empty, malformed, absolute, drive-qualified, UNC, or repository-escaping
+input; used for *concrete* paths) and `spec_matches` (literal, prefix, or
+glob matching against an already-normalized candidate; used for *scope
+specifications*). `match_protected_path` fails closed the same way a repair
+packet's path validation does — an invalid path is a `ValueError`, never an
+ordinary unprotected `None`.
+
 ## Run manifest
 
 Produced once, at the start of a production run. Records the environment
@@ -30,6 +41,20 @@ required evidence, risk notes, and a readiness status. A task packet with a
 `NOT_READY` readiness status does not proceed to implementation. The
 producer is bound to this scope — see `repository_invariants.md`'s "no
 silent scope expansion."
+
+**`in_scope_paths` / `out_of_scope_paths` are scope *specifications*, not
+concrete paths**: each entry may be a literal repository-relative path, a
+repository-relative directory prefix (`omni/autodev` covers everything
+under it), or a glob containing `* ? [ ]` (`omni/autodev/**`). All three
+forms are matched the same way protected-path policy patterns are matched
+(`omni.autodev.protected_paths.spec_matches`) — one shared
+repository-relative matching contract, not two.
+
+**Acceptance-criterion identity for v0.1** is the criterion string itself,
+validated and compared after trimming whitespace: empty or whitespace-only
+criteria are rejected, and two criteria that are identical after trimming
+are rejected as duplicates. There is no separate criterion-ID model in this
+version — a validated, trimmed string is the identity.
 
 ## Implementation handoff
 
@@ -63,20 +88,54 @@ value.
 
 ## Repair packet
 
-Produced when a review packet's verdict is `CHANGES_REQUIRED`. Scopes the
-fix narrowly: a review-cycle number, the required actions, the allowed
-repair scope, explicitly prohibited scope, and the evidence needed before
-re-review. `production_protocol.md` caps this at **two** repair cycles for
-v0.1; a repair packet with `review_cycle` outside `1..2` is invalid.
+Produced when a review packet's verdict is `CHANGES_REQUIRED`. Carries the
+`task_id` of the task it repairs, a review-cycle number, the required
+actions, the allowed repair scope, explicitly prohibited scope, and the
+evidence needed before re-review. `production_protocol.md` caps this at
+**two** repair cycles for v0.1; a repair packet with `review_cycle` outside
+`1..2` is invalid.
+
+**A repair packet is bound to its task.**
+`validate_repair_within_task_scope(repair, task)` checks `repair.task_id`
+against `task.task_id` *before* checking anything about paths — a repair
+packet must never validate against an unrelated task merely because its
+paths happen to fit that other task's scope.
+
+**`allowed_repair_scope` must contain concrete repository-relative paths
+only** — no glob metacharacters, unlike `TaskPacket.in_scope_paths` /
+`out_of_scope_paths`. Each entry is normalized through
+`omni.autodev.protected_paths.normalize_repo_relative_path`, which fails
+closed (raises, does not silently pass through) on empty, malformed,
+absolute, drive-qualified, UNC, or repository-escaping input. This
+deliberately avoids attempting general pattern-to-pattern set containment:
+a repair packet names what it will concretely touch, not another pattern to
+reconcile against the task's patterns.
+
+**Out-of-scope rules take precedence.** For each `allowed_repair_scope`
+path: if it matches any `out_of_scope_paths` specification, it is rejected
+regardless of `in_scope_paths`. If `in_scope_paths` is non-empty, the path
+must additionally match at least one of its specifications. If
+`in_scope_paths` is empty, the task did not enumerate a boundary, and scope
+is intentionally unconstrained (subject still to the out-of-scope check).
 
 ## Closeout packet
 
 Produced at the end of a run, regardless of outcome. Records the final
 verdict, which acceptance criteria were actually completed, final test
 evidence, remaining limitations, commit information, and a recommended PR
-title and body for a human to review. `human_approval_required` is always
-`True` in v0.1 — this packet recommends a PR, it does not create, merge, or
-push one.
+title and body for a human to review.
+
+`human_approval_required` must be exactly `True` (the bool, not a truthy
+value like `1` or `"yes"`) in v0.1 — this packet recommends a PR, it does
+not create, merge, or push one.
+
+**An `APPROVED` closeout requires meaningful completion evidence**: a
+non-empty branch and commit, at least one completed acceptance criterion
+(each a non-empty string), at least one final test evidence entry, no
+`timeout` (or otherwise inconclusive) outcome among that evidence, and a
+non-empty recommended PR title and body. A `CHANGES_REQUIRED` or `BLOCKED`
+closeout only needs to be structurally valid — it is not required to look
+like finished, approved work.
 
 ## Lifecycle summary
 

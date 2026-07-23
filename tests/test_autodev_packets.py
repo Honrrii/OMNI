@@ -1,9 +1,10 @@
 """
 Phase 11+ guard: OMNI Auto Dev structured production-packet contracts
 (omni/autodev/packets.py) validate correctly, serialize round-trip, cap
-repair cycles, and represent timeouts distinctly from pass/fail. No
-network, no LLM calls, no GitHub API, no autonomous execution — these
-tests only exercise plain dataclasses.
+repair cycles, bind repairs to their task, enforce path-scope semantics,
+represent timeouts distinctly from pass/fail, and require meaningful
+evidence for an approved closeout. No network, no LLM calls, no GitHub
+API, no autonomous execution — these tests only exercise plain dataclasses.
 """
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ from omni.autodev.packets import (
     to_json,
     validate_repair_within_task_scope,
 )
+from omni.autodev.protected_paths import spec_matches
 
 
 # ---------------------------------------------------------------------------
@@ -98,10 +100,11 @@ def test_implementation_handoff_and_review_packet_construct():
 
 
 def test_repair_and_closeout_packets_construct():
-    repair = RepairPacket(review_cycle=1, required_actions=["fix X"])
+    repair = RepairPacket(task_id="task-1", review_cycle=1, required_actions=["fix X"])
     assert repair.review_cycle == 1
+    assert repair.task_id == "task-1"
 
-    closeout = CloseoutPacket(task_id="task-1", final_verdict="APPROVED")
+    closeout = CloseoutPacket(task_id="task-1", final_verdict="BLOCKED")
     assert closeout.human_approval_required is True
 
 
@@ -123,6 +126,11 @@ def test_review_packet_rejects_missing_required_fields():
 def test_test_evidence_rejects_missing_required_fields():
     with pytest.raises(TypeError):
         TestEvidence(command="pytest", working_dir="/repo")  # missing outcome
+
+
+def test_repair_packet_rejects_missing_task_id():
+    with pytest.raises(TypeError):
+        RepairPacket(review_cycle=1)  # missing task_id
 
 
 # ---------------------------------------------------------------------------
@@ -190,9 +198,10 @@ def test_review_packet_round_trips_with_nested_types():
 
 
 def test_repair_packet_round_trips_through_dict():
-    repair = RepairPacket(review_cycle=2, required_actions=["address finding 1"])
+    repair = RepairPacket(task_id="task-1", review_cycle=2, required_actions=["address finding 1"])
     restored = repair_packet_from_dict(to_dict(repair))
     assert restored == repair
+    assert restored.task_id == "task-1"
 
 
 def test_closeout_packet_round_trips_with_nested_test_evidence():
@@ -206,6 +215,7 @@ def test_closeout_packet_round_trips_with_nested_test_evidence():
         commit_sha="abc123",
         branch="main",
         recommended_pr_title="Add packet contracts",
+        recommended_pr_body="Implements the structured packet contracts.",
     )
     restored = closeout_packet_from_dict(to_dict(closeout))
     assert restored == closeout
@@ -221,8 +231,8 @@ def test_all_packet_types_default_to_current_packet_version():
     task = TaskPacket(task_id="t", goal="g")
     handoff = ImplementationHandoff(task_id="t")
     review = ReviewPacket(task_id="t", verdict="APPROVED")
-    repair = RepairPacket(review_cycle=1)
-    closeout = CloseoutPacket(task_id="t", final_verdict="APPROVED")
+    repair = RepairPacket(task_id="t", review_cycle=1)
+    closeout = CloseoutPacket(task_id="t", final_verdict="BLOCKED")
     manifest = RunManifest(
         run_id="r", created_at="now", repo_root="/repo", start_commit="c", branch="b",
         requested_operation="op",
@@ -263,17 +273,17 @@ def test_acceptance_criterion_result_rejects_invalid_status():
 
 def test_repair_packet_rejects_zero_review_cycle():
     with pytest.raises(ValueError):
-        RepairPacket(review_cycle=0)
+        RepairPacket(task_id="t", review_cycle=0)
 
 
 def test_repair_packet_rejects_review_cycle_beyond_max():
     with pytest.raises(ValueError):
-        RepairPacket(review_cycle=MAX_REPAIR_CYCLES + 1)
+        RepairPacket(task_id="t", review_cycle=MAX_REPAIR_CYCLES + 1)
 
 
 def test_repair_packet_accepts_every_cycle_up_to_max():
     for cycle in range(1, MAX_REPAIR_CYCLES + 1):
-        RepairPacket(review_cycle=cycle)
+        RepairPacket(task_id="t", review_cycle=cycle)
 
 
 # ---------------------------------------------------------------------------
@@ -331,8 +341,8 @@ def test_list_fields_are_not_shared_between_instances():
     assert handoff_b.files_changed == []
     assert handoff_b.test_results == []
 
-    repair_a = RepairPacket(review_cycle=1)
-    repair_b = RepairPacket(review_cycle=1)
+    repair_a = RepairPacket(task_id="a", review_cycle=1)
+    repair_b = RepairPacket(task_id="b", review_cycle=1)
     repair_a.required_actions.append("only-a")
     assert repair_b.required_actions == []
 
@@ -385,8 +395,8 @@ def test_task_packet_out_of_scope_paths_align_with_protected_path_matcher():
 
 # ---------------------------------------------------------------------------
 # Repair cycle 1 (Codex review): required-string emptiness, packet-version
-# mismatch, duplicate acceptance-criterion identity, and repair-scope
-# containment. See docs/agentic/packet_contracts.md.
+# mismatch, duplicate acceptance-criterion identity. See
+# docs/agentic/packet_contracts.md.
 # ---------------------------------------------------------------------------
 
 
@@ -429,7 +439,7 @@ def test_implementation_handoff_and_review_packet_reject_empty_task_id():
 
 def test_closeout_packet_rejects_empty_task_id():
     with pytest.raises(ValueError):
-        CloseoutPacket(task_id="", final_verdict="APPROVED")
+        CloseoutPacket(task_id="", final_verdict="BLOCKED")
 
 
 def test_task_packet_ready_without_acceptance_criteria_is_rejected():
@@ -455,7 +465,7 @@ def test_packet_version_mismatch_is_rejected_on_every_top_level_packet():
     with pytest.raises(ValueError):
         ReviewPacket(task_id="t", verdict="APPROVED", packet_version="9.9")
     with pytest.raises(ValueError):
-        RepairPacket(review_cycle=1, packet_version="9.9")
+        RepairPacket(task_id="t", review_cycle=1, packet_version="9.9")
     with pytest.raises(ValueError):
         CloseoutPacket(task_id="t", final_verdict="APPROVED", packet_version="9.9")
 
@@ -490,6 +500,175 @@ def test_review_packet_rejects_duplicate_acceptance_criteria():
         )
 
 
+# ---------------------------------------------------------------------------
+# Repair cycle 2 (Codex review), Finding 1: acceptance-criterion identity is
+# a validated, trimmed string — empty, whitespace-only, and duplicate (after
+# trimming) entries are all rejected, for both TaskPacket.acceptance_criteria
+# (plain strings) and AcceptanceCriterionResult.criterion (a result record).
+# ---------------------------------------------------------------------------
+
+
+def test_task_packet_acceptance_criteria_rejects_empty_string_entry():
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="t", goal="g", acceptance_criteria=[""])
+
+
+def test_task_packet_acceptance_criteria_rejects_whitespace_only_entry():
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="t", goal="g", acceptance_criteria=["   "])
+
+
+def test_task_packet_acceptance_criteria_rejects_mixed_valid_and_empty():
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="t", goal="g", acceptance_criteria=["criterion", ""])
+
+
+def test_task_packet_acceptance_criteria_rejects_duplicate_after_trimming():
+    with pytest.raises(ValueError):
+        TaskPacket(task_id="t", goal="g", acceptance_criteria=["criterion", " criterion "])
+
+
+def test_task_packet_acceptance_criteria_accepts_distinct_valid_entries():
+    task = TaskPacket(
+        task_id="t", goal="g", acceptance_criteria=["criterion one", "criterion two"]
+    )
+    assert task.acceptance_criteria == ["criterion one", "criterion two"]
+
+
+def test_acceptance_criterion_result_rejects_empty_criterion_direct_construction():
+    with pytest.raises(ValueError):
+        AcceptanceCriterionResult(criterion="", status="VERIFIED")
+
+
+def test_acceptance_criterion_result_rejects_whitespace_criterion_direct_construction():
+    with pytest.raises(ValueError):
+        AcceptanceCriterionResult(criterion="   ", status="VERIFIED")
+
+
+def test_implementation_handoff_rejects_duplicate_result_criteria_after_trimming():
+    with pytest.raises(ValueError):
+        ImplementationHandoff(
+            task_id="t",
+            acceptance_criterion_results=[
+                AcceptanceCriterionResult(criterion="c1", status="VERIFIED"),
+                AcceptanceCriterionResult(criterion=" c1 ", status="FAILED"),
+            ],
+        )
+
+
+def test_review_packet_rejects_duplicate_result_criteria_after_trimming():
+    with pytest.raises(ValueError):
+        ReviewPacket(
+            task_id="t",
+            verdict="APPROVED",
+            acceptance_criterion_results=[
+                AcceptanceCriterionResult(criterion="c1", status="VERIFIED"),
+                AcceptanceCriterionResult(criterion=" c1 ", status="VERIFIED"),
+            ],
+        )
+
+
+def test_acceptance_criterion_result_validation_applies_through_deserialization():
+    payload = to_dict(
+        ImplementationHandoff(
+            task_id="t",
+            acceptance_criterion_results=[
+                AcceptanceCriterionResult(criterion="c1", status="VERIFIED")
+            ],
+        )
+    )
+    payload["acceptance_criterion_results"][0]["criterion"] = "   "
+    with pytest.raises(ValueError):
+        implementation_handoff_from_dict(payload)
+
+
+# ---------------------------------------------------------------------------
+# Repair cycle 2, Finding 2: path-scope semantics. TaskPacket in/out-of-scope
+# fields are literal/prefix/glob scope specifications; RepairPacket.
+# allowed_repair_scope must be concrete repository-relative paths.
+# ---------------------------------------------------------------------------
+
+
+def test_repair_packet_rejects_glob_in_allowed_repair_scope():
+    with pytest.raises(ValueError):
+        RepairPacket(task_id="t", review_cycle=1, allowed_repair_scope=["omni/autodev/**"])
+
+
+def test_repair_packet_rejects_malformed_path_in_allowed_repair_scope():
+    with pytest.raises(ValueError):
+        RepairPacket(task_id="t", review_cycle=1, allowed_repair_scope=["../escape.py"])
+    with pytest.raises(ValueError):
+        RepairPacket(task_id="t", review_cycle=1, allowed_repair_scope=["/absolute/path.py"])
+
+
+def test_repair_packet_accepts_concrete_windows_separated_path():
+    repair = RepairPacket(
+        task_id="t", review_cycle=1, allowed_repair_scope=["omni\\autodev\\packets.py"]
+    )
+    assert repair.allowed_repair_scope == ["omni\\autodev\\packets.py"]  # preserved verbatim
+
+
+def _scoped_task_and_repair(*, in_scope=(), out_of_scope=(), candidate):
+    task = TaskPacket(
+        task_id="t", goal="g", in_scope_paths=list(in_scope), out_of_scope_paths=list(out_of_scope)
+    )
+    repair = RepairPacket(task_id="t", review_cycle=1, allowed_repair_scope=[candidate])
+    return task, repair
+
+
+def test_scope_glob_in_scope_allows_descendant():
+    task, repair = _scoped_task_and_repair(
+        in_scope=["omni/autodev/**"], candidate="omni/autodev/packets.py"
+    )
+    validate_repair_within_task_scope(repair, task)  # does not raise
+
+
+def test_scope_glob_out_of_scope_rejects_descendant():
+    task, repair = _scoped_task_and_repair(
+        out_of_scope=["frontend/**"], candidate="frontend/src/App.jsx"
+    )
+    with pytest.raises(ValueError):
+        validate_repair_within_task_scope(repair, task)
+
+
+def test_scope_directory_prefix_in_scope_allows_descendant():
+    task, repair = _scoped_task_and_repair(
+        in_scope=["omni/autodev"], candidate="omni/autodev/packets.py"
+    )
+    validate_repair_within_task_scope(repair, task)  # does not raise
+
+
+def test_scope_literal_in_scope_allows_exact_match():
+    task, repair = _scoped_task_and_repair(
+        in_scope=["omni/autodev/packets.py"], candidate="omni/autodev/packets.py"
+    )
+    validate_repair_within_task_scope(repair, task)  # does not raise
+
+
+def test_scope_glob_in_scope_rejects_lookalike_sibling_directory():
+    task, repair = _scoped_task_and_repair(
+        in_scope=["omni/autodev/**"], candidate="omni/autodev_extra/file.py"
+    )
+    with pytest.raises(ValueError):
+        validate_repair_within_task_scope(repair, task)
+
+
+def test_scope_glob_out_of_scope_allows_lookalike_sibling_directory():
+    task, repair = _scoped_task_and_repair(
+        out_of_scope=["frontend/**"], candidate="frontendish/file.py"
+    )
+    validate_repair_within_task_scope(repair, task)  # does not raise
+
+
+def test_spec_matches_directly_for_the_same_six_scenarios():
+    assert spec_matches("omni/autodev/**", "omni/autodev/packets.py") is True
+    assert spec_matches("frontend/**", "frontend/src/App.jsx") is True
+    assert spec_matches("omni/autodev", "omni/autodev/packets.py") is True
+    assert spec_matches("omni/autodev/packets.py", "omni/autodev/packets.py") is True
+    assert spec_matches("omni/autodev/**", "omni/autodev_extra/file.py") is False
+    assert spec_matches("frontend/**", "frontendish/file.py") is False
+
+
 def test_validate_repair_within_task_scope_accepts_subset_of_in_scope_paths():
     task = TaskPacket(
         task_id="t",
@@ -497,25 +676,197 @@ def test_validate_repair_within_task_scope_accepts_subset_of_in_scope_paths():
         in_scope_paths=["a.py", "b.py"],
         out_of_scope_paths=["c.py"],
     )
-    repair = RepairPacket(review_cycle=1, allowed_repair_scope=["a.py"])
+    repair = RepairPacket(task_id="t", review_cycle=1, allowed_repair_scope=["a.py"])
     validate_repair_within_task_scope(repair, task)  # does not raise
 
 
 def test_validate_repair_within_task_scope_rejects_path_outside_in_scope():
     task = TaskPacket(task_id="t", goal="g", in_scope_paths=["a.py"])
-    repair = RepairPacket(review_cycle=1, allowed_repair_scope=["z.py"])
+    repair = RepairPacket(task_id="t", review_cycle=1, allowed_repair_scope=["z.py"])
     with pytest.raises(ValueError):
         validate_repair_within_task_scope(repair, task)
 
 
 def test_validate_repair_within_task_scope_rejects_out_of_scope_path():
     task = TaskPacket(task_id="t", goal="g", out_of_scope_paths=["backend/app/sandbox/**"])
-    repair = RepairPacket(review_cycle=1, allowed_repair_scope=["backend/app/sandbox/**"])
+    repair = RepairPacket(
+        task_id="t", review_cycle=1, allowed_repair_scope=["backend/app/sandbox/file.py"]
+    )
     with pytest.raises(ValueError):
         validate_repair_within_task_scope(repair, task)
 
 
 def test_validate_repair_within_task_scope_allows_any_path_when_in_scope_unspecified():
     task = TaskPacket(task_id="t", goal="g")
-    repair = RepairPacket(review_cycle=1, allowed_repair_scope=["anything.py"])
+    repair = RepairPacket(task_id="t", review_cycle=1, allowed_repair_scope=["anything.py"])
     validate_repair_within_task_scope(repair, task)  # does not raise: unconstrained task
+
+
+# ---------------------------------------------------------------------------
+# Repair cycle 2, Finding 3: a repair packet is bound to its task by task_id.
+# ---------------------------------------------------------------------------
+
+
+def test_repair_packet_rejects_empty_task_id():
+    with pytest.raises(ValueError):
+        RepairPacket(task_id="", review_cycle=1)
+
+
+def test_repair_packet_rejects_whitespace_task_id():
+    with pytest.raises(ValueError):
+        RepairPacket(task_id="   ", review_cycle=1)
+
+
+def test_validate_repair_within_task_scope_accepts_matching_task_id():
+    task = TaskPacket(task_id="task-1", goal="g")
+    repair = RepairPacket(task_id="task-1", review_cycle=1)
+    validate_repair_within_task_scope(repair, task)  # does not raise
+
+
+def test_validate_repair_within_task_scope_rejects_different_task_id():
+    task = TaskPacket(task_id="task-1", goal="g")
+    repair = RepairPacket(task_id="task-2", review_cycle=1)
+    with pytest.raises(ValueError):
+        validate_repair_within_task_scope(repair, task)
+
+
+def test_validate_repair_within_task_scope_checks_identity_before_path_containment():
+    # Paths would satisfy containment (in_scope_paths permits it), but the
+    # task_id mismatch must still be what's reported: identity is checked
+    # first, so this must raise on the task_id mismatch, not silently pass
+    # on paths.
+    task = TaskPacket(task_id="task-1", goal="g", in_scope_paths=["a.py"])
+    repair = RepairPacket(task_id="task-2", review_cycle=1, allowed_repair_scope=["a.py"])
+    with pytest.raises(ValueError, match="task_id"):
+        validate_repair_within_task_scope(repair, task)
+
+
+def test_repair_packet_task_id_round_trips_through_dict():
+    repair = RepairPacket(task_id="task-1", review_cycle=1, allowed_repair_scope=["a.py"])
+    restored = repair_packet_from_dict(to_dict(repair))
+    assert restored.task_id == "task-1"
+    assert restored == repair
+
+
+def test_repair_packet_from_dict_validates_task_id():
+    payload = to_dict(RepairPacket(task_id="task-1", review_cycle=1))
+    payload["task_id"] = ""
+    with pytest.raises(ValueError):
+        repair_packet_from_dict(payload)
+
+
+# ---------------------------------------------------------------------------
+# Repair cycle 2, Finding 5: an APPROVED closeout requires meaningful
+# completion evidence; human_approval_required must be exactly True.
+# ---------------------------------------------------------------------------
+
+
+def _minimal_approved_closeout(**overrides) -> CloseoutPacket:
+    kwargs = dict(
+        task_id="t",
+        final_verdict="APPROVED",
+        completed_acceptance_criteria=["criterion one"],
+        final_test_evidence=[
+            TestEvidence(command="pytest", working_dir="/repo", outcome="passed", exit_code=0)
+        ],
+        commit_sha="abc123",
+        branch="main",
+        recommended_pr_title="Title",
+        recommended_pr_body="Body",
+    )
+    kwargs.update(overrides)
+    return CloseoutPacket(**kwargs)
+
+
+def test_closeout_packet_minimal_valid_approved():
+    closeout = _minimal_approved_closeout()
+    assert closeout.final_verdict == "APPROVED"
+
+
+def test_closeout_packet_approved_rejects_empty_branch():
+    with pytest.raises(ValueError):
+        _minimal_approved_closeout(branch="")
+
+
+def test_closeout_packet_approved_rejects_empty_commit_sha():
+    with pytest.raises(ValueError):
+        _minimal_approved_closeout(commit_sha="")
+
+
+def test_closeout_packet_approved_rejects_empty_completed_criteria():
+    with pytest.raises(ValueError):
+        _minimal_approved_closeout(completed_acceptance_criteria=[])
+
+
+def test_closeout_packet_approved_rejects_whitespace_criterion():
+    with pytest.raises(ValueError):
+        _minimal_approved_closeout(completed_acceptance_criteria=["   "])
+
+
+def test_closeout_packet_approved_rejects_empty_final_test_evidence():
+    with pytest.raises(ValueError):
+        _minimal_approved_closeout(final_test_evidence=[])
+
+
+def test_closeout_packet_approved_rejects_timeout_evidence():
+    with pytest.raises(ValueError):
+        _minimal_approved_closeout(
+            final_test_evidence=[
+                TestEvidence(
+                    command="pytest", working_dir="/repo", outcome="timeout",
+                    output_summary="hung",
+                )
+            ]
+        )
+
+
+def test_closeout_packet_approved_rejects_empty_pr_title():
+    with pytest.raises(ValueError):
+        _minimal_approved_closeout(recommended_pr_title="")
+
+
+def test_closeout_packet_approved_rejects_empty_pr_body():
+    with pytest.raises(ValueError):
+        _minimal_approved_closeout(recommended_pr_body="")
+
+
+def test_closeout_packet_rejects_human_approval_required_false():
+    with pytest.raises(ValueError):
+        CloseoutPacket(task_id="t", final_verdict="BLOCKED", human_approval_required=False)
+
+
+def test_closeout_packet_rejects_human_approval_required_truthy_int():
+    with pytest.raises(ValueError):
+        CloseoutPacket(task_id="t", final_verdict="BLOCKED", human_approval_required=1)
+
+
+def test_closeout_packet_rejects_human_approval_required_truthy_string():
+    with pytest.raises(ValueError):
+        CloseoutPacket(task_id="t", final_verdict="BLOCKED", human_approval_required="yes")
+
+
+def test_closeout_packet_accepts_human_approval_required_true():
+    closeout = CloseoutPacket(task_id="t", final_verdict="BLOCKED", human_approval_required=True)
+    assert closeout.human_approval_required is True
+
+
+def test_closeout_packet_non_approved_does_not_require_completion_evidence():
+    for verdict in ("CHANGES_REQUIRED", "BLOCKED"):
+        closeout = CloseoutPacket(task_id="t", final_verdict=verdict)
+        assert closeout.branch == ""
+        assert closeout.commit_sha == ""
+        assert closeout.completed_acceptance_criteria == []
+        assert closeout.final_test_evidence == []
+
+
+def test_closeout_packet_approved_evidence_requirements_apply_through_deserialization():
+    payload = to_dict(_minimal_approved_closeout())
+    payload["branch"] = ""
+    with pytest.raises(ValueError):
+        closeout_packet_from_dict(payload)
+
+
+def test_closeout_packet_approved_round_trips_with_full_evidence():
+    closeout = _minimal_approved_closeout()
+    restored = closeout_packet_from_dict(to_dict(closeout))
+    assert restored == closeout

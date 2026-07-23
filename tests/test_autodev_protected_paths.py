@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "omni_autodev.py"
 
@@ -81,7 +83,7 @@ def test_cli_top_level_dry_run_still_works():
 
 # ---------------------------------------------------------------------------
 # Repair cycle 1 (Codex review): bare protected-directory paths, and
-# confirming near-miss/empty/malformed inputs stay non-matching.
+# confirming near-miss inputs stay non-matching.
 # ---------------------------------------------------------------------------
 
 
@@ -103,10 +105,70 @@ def test_match_protected_path_resists_near_miss_prefixes():
     assert match_protected_path("backend/app/ml_helpers/util.py") is None
 
 
-def test_match_protected_path_handles_empty_and_malformed_input():
+# ---------------------------------------------------------------------------
+# Repair cycle 2 (Codex review), Finding 4: fail closed on malformed input.
+# A malformed/absolute/drive-qualified/UNC/repository-escaping path must
+# raise ValueError, not return an ordinary unprotected None — supersedes
+# repair cycle 1's "returns None for malformed input" behavior.
+# ---------------------------------------------------------------------------
+
+
+def test_match_protected_path_matches_documented_valid_examples():
     from omni.autodev.protected_paths import match_protected_path
 
-    assert match_protected_path("") is None
-    assert match_protected_path(".") is None
-    assert match_protected_path("///") is None
-    assert match_protected_path("   ") is None
+    for path in (
+        "backend/app/sandbox",
+        "backend/app/sandbox/",
+        "backend/app/sandbox/file.py",
+        "frontend",
+        "frontend/",
+        "frontend/src/App.jsx",
+    ):
+        assert match_protected_path(path) is not None, path
+
+
+def test_match_protected_path_accepts_windows_separated_repo_relative_path():
+    from omni.autodev.protected_paths import match_protected_path
+
+    rule = match_protected_path("frontend\\src\\App.jsx")
+    assert rule is not None
+
+
+@pytest.mark.parametrize(
+    "invalid_path",
+    [
+        "",
+        "   ",
+        ".",
+        "..",
+        "///",
+        "/frontend/src/App.jsx",
+        "../frontend/src/App.jsx",
+        "../../backend/app/sandbox/file.py",
+        "C:\\frontend\\src\\App.jsx",
+        "\\\\server\\share\\frontend\\App.jsx",
+    ],
+)
+def test_match_protected_path_fails_closed_on_invalid_input(invalid_path):
+    from omni.autodev.protected_paths import match_protected_path
+
+    with pytest.raises(ValueError):
+        match_protected_path(invalid_path)
+
+
+def test_normalize_repo_relative_path_rejects_dot_dot_component_even_when_it_would_not_escape():
+    from omni.autodev.protected_paths import normalize_repo_relative_path
+
+    # "a/b/../c" normalizes to "a/c" (does not escape the repo root), but a
+    # literal ".." component is rejected outright per the fail-closed
+    # contract, not only when it would net-escape after normalization.
+    with pytest.raises(ValueError):
+        normalize_repo_relative_path("a/b/../c")
+
+
+def test_normalize_repo_relative_path_normalizes_valid_input():
+    from omni.autodev.protected_paths import normalize_repo_relative_path
+
+    assert normalize_repo_relative_path("./omni/autodev/packets.py") == "omni/autodev/packets.py"
+    assert normalize_repo_relative_path("omni\\autodev\\packets.py") == "omni/autodev/packets.py"
+    assert normalize_repo_relative_path("omni//autodev//packets.py") == "omni/autodev/packets.py"
