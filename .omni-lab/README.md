@@ -63,12 +63,23 @@ Tests: `tests/test_frontier_protocol.py`, `tests/test_frontier_experiments.py`,
 `tests/test_frontier_safety.py`, `tests/test_frontier_schemas.py` (the last
 one checks the Python contracts and the JSON schemas haven't drifted apart).
 
-## The Claude Code skill
+## The two research roles
 
-`.claude/skills/omni-frontier-architect/SKILL.md` defines the research role
-that uses this infrastructure: what it looks for, how it scores a
-hypothesis, and what it must never do. Read it before starting a research
-session, not this file alone.
+Two complementary skills use this infrastructure — same protocol, same
+schemas, different bias:
+
+```text
+Claude Code:  .claude/skills/omni-frontier-architect/SKILL.md
+Codex:        .agents/skills/omni-frontier-experimentalist/SKILL.md
+```
+
+`omni-frontier-architect` generates hypotheses (synthesis, architectural
+leverage, cross-system reasoning). `omni-frontier-experimentalist`
+falsifies them (adversarial testing, independent reproduction, counter-
+hypotheses). Read the relevant one before starting a research session, not
+this file alone. As of Phase 2A, only the skill definitions exist — there
+is still no automatic Claude<->Codex exchange; see
+`protocols/SAFETY_RULES.md`'s Phase 1 boundaries, which still apply.
 
 ## Core research loop
 
