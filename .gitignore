@@ -29,6 +29,11 @@ knowledge/cad_sources/
 memory/project_memory.json
 artifacts/autodev/runs/
 
+# Frontier Research Lab Phase 2B — ephemeral per-shift orchestration state
+# (state.json/mailbox.jsonl/events.jsonl). Not research memory — that lives
+# in the tracked .omni-lab/experiments/ archive instead.
+.omni-lab/runtime/
+
 # ROS2 generated build artifacts
 **/build/
 **/install/

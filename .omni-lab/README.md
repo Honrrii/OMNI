@@ -13,10 +13,10 @@ evidence and reduce uncertainty about what OMNI can become, not to ship
 features. A frontier finding that turns out to matter gets *proposed* into
 Auto Dev as a normal task packet — it does not merge itself.
 
-## Phase 1 — what exists right now
+## Phase 1 — contracts, safety, archive foundations
 
 This is architecture, protocol, schema, documentation, and tests only.
-Explicitly **not** built yet, and not to be described as built:
+Explicitly **not** built in Phase 1, and not to be described as built:
 
 - no autonomous daemon or continuously running agent loop;
 - no automatic invocation of Codex;
@@ -24,10 +24,50 @@ Explicitly **not** built yet, and not to be described as built:
 - no automated pushing or merging into trusted branches;
 - no orchestrator that drains a queue of experiments on its own.
 
-Every research thread today is a human-directed session that happens to
-produce structured records (`omni/frontier/protocol.py`,
+Every research thread in Phase 1 is a human-directed session that happens
+to produce structured records (`omni/frontier/protocol.py`,
 `omni/frontier/experiments.py`) in this shape. See
 `protocols/SAFETY_RULES.md` for the full boundary list.
+
+## Phase 2A — complementary Claude/Codex research roles
+
+Two skills (`.claude/skills/omni-frontier-architect/SKILL.md` and
+`.agents/skills/omni-frontier-experimentalist/SKILL.md`) define the
+synthesis-biased and falsification-biased sides of a research exchange
+using the Phase 1 contracts. Phase 2A still does not wire an automatic
+exchange between the two — a human runs each side.
+
+## Phase 2B — deterministic mock orchestration
+
+`omni/frontier/{config,state,events,mailbox,agents,orchestrator}.py` and
+`scripts/omni_frontier_lab.py` add a deterministic **local** orchestrator
+("nervous system") that proves OMNI can coordinate a full research shift —
+experiment creation, state transitions, message routing, turn-taking,
+event logging, bounded debate, evidence recording, conclusion handling,
+archiving, and safety stopping — without depending on either real model.
+
+**Every agent in Phase 2B is a deterministic MOCK.**
+`omni.frontier.agents.MockClaudeAdapter`/`MockCodexAdapter` are pure
+Python functions of their input context; nothing in
+`omni/frontier/orchestrator.py` or `scripts/omni_frontier_lab.py` launches
+a real Claude Code or Codex process, calls a model API, opens a network
+connection, touches git, or schedules itself. **Real model execution
+remains unavailable** — a `ClaudeCodeAdapter`/`CodexAdapter` implementing
+the same `ResearchAgent` protocol is explicitly future work (see that
+module's docstring), not something Phase 2B's infrastructure grows into on
+its own.
+
+Run it locally:
+
+```bash
+python3 scripts/omni_frontier_lab.py run-mock-shift          # writes under .omni-lab/
+python3 scripts/omni_frontier_lab.py run-mock-shift --dry-run  # writes to a discarded temp dir
+python3 scripts/omni_frontier_lab.py show-state --thread-id OMNI-FRONTIER-0001
+```
+
+Tests: `tests/test_frontier_state.py`, `tests/test_frontier_mailbox.py`,
+`tests/test_frontier_events.py`, `tests/test_frontier_agents.py`,
+`tests/test_frontier_orchestrator.py`, `tests/test_frontier_lab_cli.py`.
 
 ## Layout
 
@@ -39,13 +79,23 @@ produce structured records (`omni/frontier/protocol.py`,
 │   ├── EXPERIMENT_LIFECYCLE.md        — lifecycle, scoring, conclusion states, "search the shadows"
 │   └── SAFETY_RULES.md                — isolation model, hard rules, Phase 1 boundaries
 ├── experiments/
-│   └── README.md                      — per-experiment archive convention
+│   └── OMNI-FRONTIER-XXXX/            — durable research archive (tracked; see experiments/README.md)
 ├── conversations/
 │   └── README.md                      — raw thread message logs
+├── runtime/
+│   └── OMNI-FRONTIER-XXXX/            — Phase 2B per-shift scratch state (gitignored; see below)
 └── schemas/
     ├── frontier_message.schema.json   — wire schema for FrontierMessage
     └── frontier_experiment.schema.json — wire schema for FrontierExperiment
 ```
+
+`runtime/<thread-id>/` (`state.json`, `mailbox.jsonl`, `events.jsonl`) is
+Phase 2B's serializable orchestration snapshot for one shift — ephemeral,
+gitignored, and distinct from the durable `experiments/<thread-id>/`
+archive. It exists so a future resume/recovery layer (Phase 3+) has
+somewhere to read current state, current turn, and current debate round
+from without redesigning the shape then; Phase 2B itself does not
+implement crash recovery.
 
 ## Where enforcement actually lives
 
