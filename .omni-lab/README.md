@@ -49,13 +49,11 @@ archiving, and safety stopping — without depending on either real model.
 **Every agent in Phase 2B is a deterministic MOCK.**
 `omni.frontier.agents.MockClaudeAdapter`/`MockCodexAdapter` are pure
 Python functions of their input context; nothing in
-`omni/frontier/orchestrator.py` or `scripts/omni_frontier_lab.py` launches
-a real Claude Code or Codex process, calls a model API, opens a network
-connection, touches git, or schedules itself. **Real model execution
-remains unavailable** — a `ClaudeCodeAdapter`/`CodexAdapter` implementing
-the same `ResearchAgent` protocol is explicitly future work (see that
-module's docstring), not something Phase 2B's infrastructure grows into on
-its own.
+`omni/frontier/orchestrator.py` or `run-mock-shift` launches a real Claude
+Code or Codex process, calls a model API, opens a network connection,
+touches git, or schedules itself. Phase 2B's own infrastructure never
+grows into invoking a real model on its own — that is Phase 3 below, a
+separate, explicit command.
 
 Run it locally:
 
@@ -68,6 +66,46 @@ python3 scripts/omni_frontier_lab.py show-state --thread-id OMNI-FRONTIER-0001
 Tests: `tests/test_frontier_state.py`, `tests/test_frontier_mailbox.py`,
 `tests/test_frontier_events.py`, `tests/test_frontier_agents.py`,
 `tests/test_frontier_orchestrator.py`, `tests/test_frontier_lab_cli.py`.
+
+## Phase 3 — one real provider, read-only
+
+`omni/frontier/claude_provider.py` adds `ClaudeCodeAdapter`, a real
+`ResearchAgent` implementation behind the same interface
+`MockClaudeAdapter` implements — `ShiftOrchestrator` did not change to
+accept it. **Codex stays `MockCodexAdapter`.** `run-claude-shift` is the
+only command that can invoke a real model; `run-mock-shift` still never
+does.
+
+**Read-only, bounded, single-provider only.** Every `claude` invocation
+this adapter builds excludes `Edit`/`Write`/`NotebookEdit` and every
+mutating git/shell pattern via an explicit `--tools`/`--allowedTools`/
+`--disallowedTools` boundary (never `--dangerously-skip-permissions`); it
+creates no git branch or worktree, invokes no other AI CLI, and never
+pushes or merges. Claude may inspect the repository with its own
+read-only tools and produce research content (`claim`, `mechanism`,
+`evidence`, `uncertainties`, `requested_action`, `confidence`) via a
+`--json-schema`-constrained structured response; it never supplies
+thread/sequence/state/routing — those stay orchestrator-owned, filled in
+from `ResearchTurnContext` regardless of what the provider returns. A
+provider failure (missing executable, timeout, non-zero exit, malformed
+JSON, schema-invalid output, canonical `FrontierMessage`/
+`ResearchTurnResult` validation failure) is always a bounded
+`ResearchTurnResult(ok=False, failure_kind=...)`, never a crash — the
+existing `max_consecutive_agent_failures`/`max_experiment_retries` budgets
+turn it into `BLOCKED`/`FAILED_INFRASTRUCTURE`, archived like any other
+stopped Phase 2B shift.
+
+Run it locally (invokes a real, billed Claude Code process; requires
+`claude` installed and authenticated):
+
+```bash
+python3 scripts/omni_frontier_lab.py run-claude-shift
+python3 scripts/omni_frontier_lab.py run-claude-shift --dry-run
+```
+
+Tests: `tests/test_frontier_claude_provider.py` — all fake-runner based; no
+test in the normal suite requires a real `claude` install or
+authentication (see `docs/agentic/test_matrix.md`).
 
 ## Layout
 

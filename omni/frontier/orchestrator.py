@@ -12,12 +12,17 @@ mutable reference to this orchestrator's state, its event log, its
 mailbox, or its `FrontierExperiment` record, so there is no code path by
 which an agent turn could change orchestration boundaries.
 
-This module runs **only** `MockClaudeAdapter`/`MockCodexAdapter` in Phase
-2B. It does not import a provider SDK, does not launch a subprocess, does
-not open a network connection, and does not call a model API — every
-`ResearchTurnResult` this module ever consumes was produced by a pure
-Python function of its input (`omni/frontier/agents.py`). `ShiftReport.
-provider_calls` is always `0` for exactly that reason.
+This module itself still runs no model and calls no API — it does not
+import a provider SDK, does not launch a subprocess, and does not open a
+network connection. Phase 2B wires it to `MockClaudeAdapter`/
+`MockCodexAdapter` only (`ShiftReport.provider_calls` is always `0` then).
+Phase 3 (`scripts/omni_frontier_lab.py run-claude-shift`) wires the same
+orchestrator, unchanged, to a real `omni.frontier.claude_provider.
+ClaudeCodeAdapter` for Claude while Codex stays
+`MockCodexAdapter` — the orchestrator does not know or care which kind of
+`ResearchAgent` it was given; see `_count_provider_calls` and the optional
+`preflight=` constructor argument for the only two Claude-Live-aware
+(but still provider-neutral) additions this class gained in Phase 3.
 """
 from __future__ import annotations
 
@@ -33,6 +38,10 @@ from omni.frontier import state
 from omni.frontier.agents import (
     CONVERGENCE_MESSAGE_TYPES,
     ESCALATE_TO_HUMAN,
+    FAILURE_KIND_INFRASTRUCTURE,
+    FAILURE_KIND_MALFORMED_OUTPUT,
+    FAILURE_KIND_TIMEOUT,
+    FAILURE_KIND_VALIDATION_FAILED,
     STAGE_CHALLENGE,
     STAGE_CONCLUDE,
     STAGE_EXPERIMENT_REPORT,
@@ -70,6 +79,34 @@ SAFETY_TRIGGER_PHRASES: tuple[str, ...] = (
     "rewrite history",
     "bypass protections",
 )
+
+# Maps ResearchTurnResult.failure_kind -> the specific event logged in
+# addition to the generic AGENT_TURN_COMPLETED failure entry every failed
+# turn already gets. Provider-neutral: this is keyed on the small enum in
+# omni.frontier.agents, not on any adapter class, so a future real Codex
+# adapter reporting a TIMEOUT gets the same PROVIDER_TIMEOUT event a real
+# Claude adapter does.
+_FAILURE_KIND_EVENTS: dict[str, str] = {
+    FAILURE_KIND_TIMEOUT: "PROVIDER_TIMEOUT",
+    FAILURE_KIND_MALFORMED_OUTPUT: "PROVIDER_OUTPUT_REJECTED",
+    FAILURE_KIND_VALIDATION_FAILED: "PROVIDER_OUTPUT_REJECTED",
+    FAILURE_KIND_INFRASTRUCTURE: "PROVIDER_FAILURE",
+}
+
+
+@dataclass(frozen=True)
+class PreflightResult:
+    """Whether a provider is ready to run a live turn, checked once before a
+    shift starts. Provider-neutral: `ShiftOrchestrator` only knows it got a
+    `ready` bool and a short `status` code back from whatever callable was
+    passed as `preflight=`. See `omni.frontier.claude_provider.
+    check_claude_availability` for the concrete Claude Code implementation.
+    """
+
+    ready: bool
+    status: str
+    detail: str = ""
+    provider_version: str = ""
 
 
 def _real_utc_clock() -> str:
@@ -176,7 +213,14 @@ def finalize_experiment_conclusion(
 
 @dataclass
 class ShiftReport:
-    """Summary of one completed (or stopped) mock research shift."""
+    """Summary of one completed (or stopped) research shift.
+
+    `mock` is `True` when the orchestrator was constructed with no
+    `preflight=` (Phase 2B's `run-mock-shift`), `False` when it was (Phase
+    3's `run-claude-shift`, whether or not the preflight actually passed).
+    `provider_calls` sums each configured agent's own `provider_calls`
+    attribute, if it has one — see `_count_provider_calls`.
+    """
 
     thread_id: str
     final_state: str
@@ -202,10 +246,12 @@ class ShiftOrchestrator:
     (`omni.frontier.state`), the mailbox (`omni.frontier.mailbox.Mailbox`),
     the append-only event log (`omni.frontier.events.EventLog`), and every
     budget in `FrontierLabConfig`. `claude`/`codex` are `ResearchAgent`
-    implementations — Phase 2B always constructs this with
-    `MockClaudeAdapter`/`MockCodexAdapter` (see
-    `scripts/omni_frontier_lab.py`); nothing in this class assumes that,
-    but nothing in this class launches a real one either.
+    implementations — `scripts/omni_frontier_lab.py`'s `run-mock-shift`
+    constructs this with `MockClaudeAdapter`/`MockCodexAdapter`, and its
+    `run-claude-shift` constructs it with a real
+    `omni.frontier.claude_provider.ClaudeCodeAdapter` for `claude` and
+    `MockCodexAdapter` (still) for `codex`. This class never imports either
+    module — nothing in it assumes which kind of agent it was given.
     """
 
     def __init__(
@@ -216,12 +262,14 @@ class ShiftOrchestrator:
         codex: ResearchAgent,
         lab_root: Path,
         clock: Callable[[], str] | None = None,
+        preflight: Callable[[], PreflightResult] | None = None,
     ):
         self.config = config
         self.claude = claude
         self.codex = codex
         self.lab_root = Path(lab_root)
         self._clock = clock or _real_utc_clock
+        self._preflight = preflight
 
         self.state: str = state.IDLE
         self.thread_id: str | None = None
@@ -336,6 +384,9 @@ class ShiftOrchestrator:
 
             if not result.ok:
                 self._log("AGENT_TURN_COMPLETED", actor=agent.agent_id, detail=f"failed: {result.error}")
+                failure_event = _FAILURE_KIND_EVENTS.get(result.failure_kind)
+                if failure_event:
+                    self._log(failure_event, actor=agent.agent_id, detail=result.error)
                 if stage in (STAGE_EXPERIMENT_REPORT, STAGE_EXPERIMENT_REVIEW):
                     self.experiment_retries += 1
                     if self.experiment_retries >= self.config.max_experiment_retries:
@@ -468,19 +519,39 @@ class ShiftOrchestrator:
     # -- main entry point ---------------------------------------------------
 
     def run_mock_shift(self, thread_id: str | None = None) -> ShiftReport:
-        """Run one complete deterministic mock research shift end to end.
-
-        Only `MockClaudeAdapter`/`MockCodexAdapter`-shaped agents are
-        expected in Phase 2B (see class docstring). Always returns a
-        `ShiftReport` — a shift that hits a budget, a safety trigger, or an
-        agent failure still completes by reaching `ARCHIVED`, per
+        """Run one complete research shift end to end, with whichever
+        `ResearchAgent` implementations this instance was constructed with
+        (see class docstring). Always returns a `ShiftReport` — a shift
+        that hits a budget, a safety trigger, a failed provider preflight,
+        or an agent failure still completes by reaching `ARCHIVED`, per
         `.omni-lab/protocols/EXPERIMENT_LIFECYCLE.md`'s "negative,
         inconclusive, and escalated results are legitimate archives."
+
+        The name predates Phase 3 (`ShiftOrchestrator` was mock-only when
+        this method was written) and is kept for API stability — nothing
+        about this method is actually mock-specific.
         """
         self.thread_id = validate_thread_id(thread_id or allocate_thread_id(self.lab_root))
 
         self._log("SHIFT_STARTED", actor="orchestrator", detail=f"lab_root={self.lab_root}")
         self._transition(state.SHIFT_STARTING)
+
+        if self._preflight is not None:
+            self._log("PROVIDER_PREFLIGHT_STARTED", actor="orchestrator")
+            result = self._preflight()
+            self._log(
+                "PROVIDER_PREFLIGHT_COMPLETED",
+                actor="orchestrator",
+                detail=f"{result.status}: {result.detail}" if result.detail else result.status,
+                context={"ready": result.ready, "provider_version": result.provider_version},
+            )
+            if not result.ready:
+                self._stop(
+                    state.FAILED_INFRASTRUCTURE,
+                    f"provider preflight failed ({result.status}): {result.detail or 'no detail'}",
+                )
+                return self._finalize()
+
         self._log("THREAD_CREATED", actor="orchestrator", context={"thread_id": self.thread_id})
         self._transition(state.RESEARCH_TRIAGE)
         self._transition(state.CLAUDE_INVESTIGATING)
@@ -612,7 +683,21 @@ class ShiftOrchestrator:
             mailbox_items=self.mailbox.items,
             archive_dir=archive_dir,
             runtime_dir=runtime_dir,
+            provider_calls=self._count_provider_calls(),
+            mock=self._preflight is None,
         )
+
+    def _count_provider_calls(self) -> int:
+        """Sum of `provider_calls` on each configured agent, if it has one.
+
+        Duck-typed and optional on purpose: `MockClaudeAdapter`/
+        `MockCodexAdapter` never gain this attribute, so this reads `0` for
+        every Phase 2B shift without either mock module changing. A real
+        adapter (`omni.frontier.claude_provider.ClaudeCodeAdapter`) exposes
+        it as a plain int counter it increments itself — the orchestrator
+        never has to know what "Claude" is to report it accurately.
+        """
+        return getattr(self.claude, "provider_calls", 0) + getattr(self.codex, "provider_calls", 0)
 
     def _write_disk_state(self) -> tuple[Path, Path]:
         archive_dir = self.lab_root / "experiments" / self.thread_id
@@ -632,7 +717,7 @@ class ShiftOrchestrator:
             (archive_dir / "results.json").write_text(experiment_to_json(self.experiment), encoding="utf-8")
             if self.experiment.evidence:
                 evidence_text = "\n".join(f"- {item}" for item in self.experiment.evidence) + "\n"
-                (archive_dir / "evidence" / "mock_evidence.txt").write_text(evidence_text, encoding="utf-8")
+                (archive_dir / "evidence" / "evidence.txt").write_text(evidence_text, encoding="utf-8")
 
         return archive_dir, runtime_dir
 
@@ -647,7 +732,7 @@ class ShiftOrchestrator:
             "experiment_retries": self.experiment_retries,
             "stopped_early": self._stopped,
             "stop_reason": self._stop_reason,
-            "mock": True,
+            "mock": self._preflight is None,
         }
         (runtime_dir / "state.json").write_text(json.dumps(state_payload, indent=2) + "\n", encoding="utf-8")
 
@@ -714,10 +799,18 @@ class ShiftOrchestrator:
         else:
             lines.append("No experiment record was ever created for this thread.")
         lines.append("")
-        lines.append(
-            "This is a Phase 2B MOCK shift — no real Claude Code or Codex process "
-            "was invoked, and no real repository experiment was executed."
-        )
+        if self._preflight is None:
+            lines.append(
+                "This is a MOCK shift — no real Claude Code or Codex process was "
+                "invoked, and no real repository experiment was executed."
+            )
+        else:
+            lines.append(
+                f"This shift used a real Claude Code process for Claude's turns "
+                f"({self._count_provider_calls()} provider call(s)) behind a "
+                f"read-only, no-git-write tool boundary; Codex remained a "
+                f"deterministic MOCK. No real repository experiment was executed."
+            )
         return "\n".join(lines) + "\n"
 
 

@@ -38,6 +38,19 @@ EVENT_TYPES: tuple[str, ...] = (
     "HUMAN_ESCALATION",
     "ARCHIVE_WRITTEN",
     "SHIFT_COMPLETED",
+    # Phase 3: provider-specific bookkeeping for a real ResearchAgent (e.g.
+    # omni.frontier.claude_provider.ClaudeCodeAdapter). PROVIDER_TURN_STARTED/
+    # COMPLETED are deliberately not added here — they would duplicate the
+    # already-generic AGENT_TURN_STARTED/AGENT_TURN_COMPLETED pair on a 1:1
+    # basis for every turn in the current design (no adapter does internal
+    # sub-retries yet), and the event log should not carry two names for the
+    # same fact — see docs/agentic/repository_invariants.md's "deterministic
+    # enforcement... not overloaded."
+    "PROVIDER_PREFLIGHT_STARTED",
+    "PROVIDER_PREFLIGHT_COMPLETED",
+    "PROVIDER_TIMEOUT",
+    "PROVIDER_OUTPUT_REJECTED",
+    "PROVIDER_FAILURE",
 )
 
 

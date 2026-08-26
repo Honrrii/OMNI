@@ -88,3 +88,55 @@ class FrontierLabConfig:
 
 
 DEFAULT_LAB_CONFIG = FrontierLabConfig()
+
+
+# --- Phase 3: real Claude Code provider configuration -----------------------
+#
+# Distinct from FrontierLabConfig on purpose: FrontierLabConfig is
+# orchestrator-owned authority (budgets, participants) that must stay
+# provider-neutral. ClaudeProviderConfig is adapter-owned settings — how to
+# launch a real `claude` process — that the orchestrator never reads. See
+# `omni/frontier/claude_provider.py`'s module docstring.
+
+PROVIDER_MODE_MOCK = "mock"
+PROVIDER_MODE_CLAUDE_LIVE = "claude-live"
+PROVIDER_MODES: tuple[str, ...] = (PROVIDER_MODE_MOCK, PROVIDER_MODE_CLAUDE_LIVE)
+
+
+@dataclass(frozen=True)
+class ClaudeProviderConfig:
+    """Settings for launching the real Claude Code CLI as a research agent.
+
+    `provider_mode` defaults to `"mock"` — this is the critical default
+    behavior guarantee from the Phase 3 mission: constructing this config
+    with no arguments must never imply a real model call. Only
+    `scripts/omni_frontier_lab.py run-claude-shift` explicitly builds one
+    with `provider_mode="claude-live"`.
+    """
+
+    provider_mode: str = PROVIDER_MODE_MOCK
+    claude_executable: str = "claude"
+    claude_timeout_seconds: int = 180
+    claude_max_output_bytes: int = 400_000
+
+    def __post_init__(self) -> None:
+        if self.provider_mode not in PROVIDER_MODES:
+            raise ValueError(
+                f"ClaudeProviderConfig.provider_mode must be one of {PROVIDER_MODES}; "
+                f"got {self.provider_mode!r}"
+            )
+        if not self.claude_executable or not self.claude_executable.strip():
+            raise ValueError("ClaudeProviderConfig.claude_executable must be a non-empty string")
+        if self.claude_timeout_seconds < 1:
+            raise ValueError(
+                f"ClaudeProviderConfig.claude_timeout_seconds must be >= 1; "
+                f"got {self.claude_timeout_seconds!r}"
+            )
+        if self.claude_max_output_bytes < 1:
+            raise ValueError(
+                f"ClaudeProviderConfig.claude_max_output_bytes must be >= 1; "
+                f"got {self.claude_max_output_bytes!r}"
+            )
+
+
+DEFAULT_CLAUDE_PROVIDER_CONFIG = ClaudeProviderConfig()

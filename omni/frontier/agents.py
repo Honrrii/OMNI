@@ -57,6 +57,27 @@ CONVERGENCE_MESSAGE_TYPES: frozenset[str] = frozenset({"REVIEW_FINDING"})
 ESCALATE_TO_HUMAN = "ESCALATE_TO_HUMAN"
 ALLOWED_CONTROL_REQUESTS: frozenset[str] = frozenset({ESCALATE_TO_HUMAN})
 
+# Provider-neutral classification of *why* a failed turn failed, so the
+# orchestrator can log a specific PROVIDER_* event (see
+# omni.frontier.orchestrator._FAILURE_KIND_EVENTS) instead of only the
+# generic AGENT_TURN_COMPLETED failure it already logs for every failure.
+# Optional and unused by MockClaudeAdapter/MockCodexAdapter — Phase 3's
+# ClaudeCodeAdapter (omni/frontier/claude_provider.py) is the first real
+# producer of this field; any future real adapter (Codex included) can use
+# the same small enum without the orchestrator changing.
+FAILURE_KIND_TIMEOUT = "TIMEOUT"
+FAILURE_KIND_MALFORMED_OUTPUT = "MALFORMED_OUTPUT"
+FAILURE_KIND_VALIDATION_FAILED = "VALIDATION_FAILED"
+FAILURE_KIND_INFRASTRUCTURE = "INFRASTRUCTURE"
+FAILURE_KINDS: frozenset[str] = frozenset(
+    {
+        FAILURE_KIND_TIMEOUT,
+        FAILURE_KIND_MALFORMED_OUTPUT,
+        FAILURE_KIND_VALIDATION_FAILED,
+        FAILURE_KIND_INFRASTRUCTURE,
+    }
+)
+
 
 @dataclass(frozen=True)
 class ResearchTurnContext:
@@ -105,6 +126,7 @@ class ResearchTurnResult:
     message: FrontierMessage | None = None
     error: str = ""
     requested_control: str | None = None
+    failure_kind: str | None = None
 
     def __post_init__(self) -> None:
         if self.ok and self.message is None:
@@ -117,6 +139,13 @@ class ResearchTurnResult:
                 f"(turn/round limits, safety stops, state transitions) are never "
                 f"agent-controlled, see omni/frontier/config.py"
             )
+        if self.failure_kind is not None and self.failure_kind not in FAILURE_KINDS:
+            raise ValueError(
+                f"unsupported ResearchTurnResult.failure_kind {self.failure_kind!r}; "
+                f"must be one of {sorted(FAILURE_KINDS)!r} or None"
+            )
+        if self.failure_kind is not None and self.ok:
+            raise ValueError("ResearchTurnResult.failure_kind requires ok=False")
 
 
 class ResearchAgent(Protocol):
