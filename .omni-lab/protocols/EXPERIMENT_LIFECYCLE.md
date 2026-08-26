@@ -1,0 +1,171 @@
+# Frontier Experiment Lifecycle (v0.1)
+
+How a hypothesis becomes an archived experiment. The enforced field-level
+contract lives in `omni/frontier/experiments.py` (`FrontierExperiment`,
+`FrontierResearchScore`); the provider-neutral wire schema is
+`../schemas/frontier_experiment.schema.json`. If this document and the code
+disagree, the code is authoritative for what is actually validated today.
+
+## Core research loop
+
+Every cycle starts with:
+
+> What valuable thing about OMNI do we currently not know?
+
+then:
+
+> What is the safest and cheapest experiment capable of reducing that
+> uncertainty?
+
+Prefer learning something important over merely producing code. A failed
+hypothesis that generates real evidence is a successful experiment.
+
+## Lifecycle
+
+```text
+PROPOSED → IN_PROGRESS → COMPLETE (conclusion_state set)
+```
+
+- **PROPOSED** — a hypothesis, mechanism, and experiment plan exist;
+  nothing has been run yet.
+- **IN_PROGRESS** — the experiment is being carried out.
+- **COMPLETE** — the experiment is done and a `conclusion_state` has been
+  recorded. `FrontierExperiment` enforces that `COMPLETE` never exists
+  without one (see "Required conclusion states" below), and that a
+  concluded experiment always carries `experiment_plan`, `limitations`,
+  `remaining_uncertainty`, and `recommended_next_action` — a completed
+  experiment that cannot say what it did, what's missing, or what's next
+  is not actually complete.
+
+`status` and `conclusion_state` are deliberately separate: `status` is
+where-are-we-in-the-process, `conclusion_state` is what-did-we-learn.
+
+## Novelty rule
+
+An unconventional hypothesis is appropriate research, not speculation, when
+all of the following hold:
+
+1. it materially relates to OMNI's long-term engineering capability;
+2. there is a plausible mechanism explaining why it could matter;
+3. some observable evidence could eventually support or weaken it;
+4. failure would still produce useful knowledge;
+5. the experiment can remain inside approved safety and repository
+   boundaries (`SAFETY_RULES.md`).
+
+Speculation without a path toward evidence should not be promoted as
+research — it stays a note, not a `FrontierExperiment`.
+
+## Required scoring model
+
+`FrontierResearchScore` — eight dimensions, each an integer `0..5`:
+
+| Dimension | Question it answers |
+| --- | --- |
+| `omni_alignment` | How directly does this relate to OMNI's north star pipeline? |
+| `potential_impact` | If confirmed, how much would this change what OMNI can do? |
+| `information_gain` | How much uncertainty does this experiment actually reduce? |
+| `generalizability` | Does the result generalize beyond one narrow case? |
+| `novelty` | Is this an underexplored angle, not a restatement of known work? |
+| `experimentalability` | How cleanly can this be tested with a distinguishing experiment? |
+| `risk` | How much could this experiment disrupt, if something goes wrong? |
+| `implementation_cost` | How much effort does the experiment itself take? |
+
+This score is **not authoritative**. It exists to help prioritize research
+effort and prevent low-value novelty chasing — `FrontierResearchScore.total()`
+is a plain convenience sum for rough backlog sorting, not a weighted or
+validated formula. A high `risk` or `implementation_cost` score should
+argue against prioritizing an experiment, not for it; `total()` does not
+encode that judgment.
+
+## Required conclusion states
+
+Research is not forced into binary success/failure. `conclusion_state` is
+one of:
+
+| State | Meaning |
+| --- | --- |
+| `CONFIRMED` | The hypothesis held up under the experiment performed. |
+| `REFUTED` | The hypothesis did not hold up; the mechanism was wrong or absent. |
+| `SUPPORTED` | Evidence favors the hypothesis but doesn't fully confirm it. |
+| `PROMISING_UNPROVEN` | Worth pursuing further; current evidence is suggestive, not conclusive. |
+| `INCONCLUSIVE` | The experiment ran but produced no usable signal either way. |
+| `BLOCKED_BY_REQUIRED_EVIDENCE` | The evidence needed to conclude anything could not be obtained. |
+
+Every conclusion must preserve: the original hypothesis, competing
+hypotheses (if any were identified — an empty list is a legitimate answer,
+not a missing field), the experiment actually performed, the evidence
+obtained, counterevidence (if any), limitations, remaining uncertainty, and
+a recommended next action. `evidence` must be non-empty for every state
+*except* `BLOCKED_BY_REQUIRED_EVIDENCE`, where an empty evidence list is
+the point.
+
+## Search the shadows
+
+Areas traditional development workflows tend to skip past — look here
+before writing a new hypothesis from scratch:
+
+- failed historical experiments (`.omni-lab/experiments/` preserves these —
+  read them before re-proposing something already tried);
+- flaky tests, and tests that suspiciously never fail;
+- modules with little or no test coverage;
+- redundant information independently generated by more than one agent or
+  subsystem;
+- disagreement between solvers, validators, or calculators that should
+  agree;
+- information discarded between pipeline stages (a field one stage
+  computes that the next stage never reads);
+- assumptions that exist only inside prompts or documentation, never
+  enforced in code, a test, or a schema;
+- comments describing a limitation that no schema or validator actually
+  represents;
+- generated artifacts that are never consumed downstream;
+- edge cases excluded from current benchmarks or test fixtures;
+- parameters whose sensitivity has never actually been measured;
+- successful behavior whose underlying mechanism is unexplained ("it
+  works, but nobody has verified why");
+- fixes that may address a symptom rather than a root cause;
+- correlated failures where independently built validators could still
+  agree on the same wrong result because they share an assumption;
+- semantic misunderstandings that propagate consistently through several
+  agents because each one trusted the previous one's framing.
+
+## The critical research question
+
+Periodically, and especially before closing a thread with a comfortable
+`CONFIRMED`, ask:
+
+> What experiment could demonstrate that OMNI is less capable, less
+> reliable, or less independently verified than we currently believe?
+
+This is not pessimism — it is how correlated failures, hidden assumptions,
+and false confidence actually get found. Concretely, watch for:
+
+- several validators agreeing because they share the same incorrect
+  assumption, not because the thing they're validating is actually
+  correct;
+- a semantic requirement misunderstood once, then propagated consistently
+  through several agents because each trusted the last;
+- independently valid subsystem designs that combine into an invalid
+  integrated system;
+- generated artifacts that pass schema validation while violating the
+  actual engineering intent the schema was meant to capture;
+- simulations or checks that agree only because they share common inputs
+  or a common modeling error.
+
+## Research archive
+
+Every completed (and every abandoned) experiment gets an archive:
+
+```text
+.omni-lab/experiments/OMNI-FRONTIER-XXXX/
+├── hypothesis.md
+├── messages.jsonl
+├── experiment_plan.md
+├── evidence/
+├── results.json
+└── conclusion.md
+```
+
+See `../experiments/README.md`. Negative and inconclusive results are part
+of OMNI's research memory — an experiment archive is never deleted merely
+because the hypothesis was rejected.

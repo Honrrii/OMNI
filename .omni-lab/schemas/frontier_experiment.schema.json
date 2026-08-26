@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://omni.local/schemas/frontier_experiment.schema.json",
+  "title": "OMNI Frontier Research Experiment",
+  "description": "One frontier research experiment record. See .omni-lab/protocols/EXPERIMENT_LIFECYCLE.md for lifecycle and conclusion-state semantics. Field names match omni/frontier/experiments.py's FrontierExperiment dataclass, which is the Python-side validated contract this schema mirrors as a provider-neutral wire format. Keep the two in sync (tests/test_frontier_schemas.py checks for drift).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "experiment_id",
+    "title",
+    "hypothesis",
+    "scoring",
+    "created_at",
+    "status",
+    "protocol_version"
+  ],
+  "properties": {
+    "experiment_id": {
+      "type": "string",
+      "pattern": "^OMNI-FRONTIER-\\d{4,}$"
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "hypothesis": { "type": "string", "minLength": 1 },
+    "mechanism": {
+      "type": "string",
+      "description": "Plausible mechanism explaining why the hypothesis could matter."
+    },
+    "competing_hypotheses": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "May legitimately be empty — no fabricated strawman required."
+    },
+    "predicted_evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Observable evidence that could eventually support or weaken the hypothesis."
+    },
+    "scoring": {
+      "type": "object",
+      "description": "Lightweight, non-authoritative prioritization score — see EXPERIMENT_LIFECYCLE.md. Not a formula; do not treat as absolute truth.",
+      "additionalProperties": false,
+      "required": [
+        "omni_alignment",
+        "potential_impact",
+        "information_gain",
+        "generalizability",
+        "novelty",
+        "experimentalability",
+        "risk",
+        "implementation_cost"
+      ],
+      "properties": {
+        "omni_alignment": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "potential_impact": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "information_gain": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "generalizability": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "novelty": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "experimentalability": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "risk": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "implementation_cost": { "type": "integer", "minimum": 0, "maximum": 5 }
+      }
+    },
+    "experiment_plan": {
+      "type": "string",
+      "description": "The safest and cheapest experiment capable of reducing the targeted uncertainty."
+    },
+    "safety_notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "participants": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["PROPOSED", "IN_PROGRESS", "COMPLETE"]
+    },
+    "conclusion_state": {
+      "type": ["string", "null"],
+      "enum": [
+        "CONFIRMED",
+        "REFUTED",
+        "SUPPORTED",
+        "PROMISING_UNPROVEN",
+        "INCONCLUSIVE",
+        "BLOCKED_BY_REQUIRED_EVIDENCE",
+        null
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "counterevidence": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "remaining_uncertainty": { "type": "string" },
+    "recommended_next_action": { "type": "string" },
+    "created_at": { "type": "string", "minLength": 1 },
+    "protocol_version": { "type": "string", "const": "0.1" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["status"],
+        "properties": { "status": { "const": "COMPLETE" } }
+      },
+      "then": {
+        "required": [
+          "conclusion_state",
+          "experiment_plan",
+          "limitations",
+          "remaining_uncertainty",
+          "recommended_next_action"
+        ],
+        "properties": {
+          "conclusion_state": { "type": "string" },
+          "experiment_plan": { "type": "string", "minLength": 1 },
+          "limitations": { "type": "array", "minItems": 1 },
+          "remaining_uncertainty": { "type": "string", "minLength": 1 },
+          "recommended_next_action": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["conclusion_state"],
+        "properties": {
+          "conclusion_state": {
+            "enum": [
+              "CONFIRMED",
+              "REFUTED",
+              "SUPPORTED",
+              "PROMISING_UNPROVEN",
+              "INCONCLUSIVE"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evidence": { "type": "array", "minItems": 1 }
+        }
+      }
+    }
+  ]
+}
