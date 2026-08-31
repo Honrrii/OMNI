@@ -20,10 +20,15 @@ import pytest
 from omni.frontier import agents as agents_module
 from omni.frontier import orchestrator as orchestrator_module
 from omni.frontier import state
-from omni.frontier.agents import MockClaudeAdapter, MockCodexAdapter, ResearchTurnResult
-from omni.frontier.config import FrontierLabConfig
+from omni.frontier.agents import STAGE_CONCLUDE, MockClaudeAdapter, MockCodexAdapter, ResearchTurnResult
+from omni.frontier.config import CLAUDE_AGENT_ID, CODEX_AGENT_ID, FrontierLabConfig
 from omni.frontier.events import EVENT_TYPES
-from omni.frontier.experiments import FrontierExperiment, FrontierResearchScore, frontier_experiment_from_dict
+from omni.frontier.experiments import (
+    CONCLUSION_STATES,
+    FrontierExperiment,
+    FrontierResearchScore,
+    frontier_experiment_from_dict,
+)
 from omni.frontier.mailbox import MailboxRejectionError
 from omni.frontier.orchestrator import (
     ShiftOrchestrator,
@@ -424,3 +429,130 @@ def test_all_event_types_used_by_a_full_shift_are_declared(tmp_path):
     assert "SHIFT_STARTED" in seen_types
     assert "ARCHIVE_WRITTEN" in seen_types
     assert "SHIFT_COMPLETED" in seen_types
+
+
+# ---------------------------------------------------------------------------
+# Conclusion-state propagation (Frontier orchestration correctness repair)
+#
+# `_record_conclusion` used to hardcode conclusion_state="PROMISING_UNPROVEN"
+# regardless of what the CONCLUDE-turn message actually concluded. It now
+# extracts the CONCLUSION_STATES word the message's claim names (see
+# omni.frontier.orchestrator._extract_conclusion_state) and fails closed
+# (BLOCKED -> archived as BLOCKED_BY_REQUIRED_EVIDENCE) if the claim names
+# none of them.
+# ---------------------------------------------------------------------------
+
+
+class _ConcludeClaimClaude:
+    """`MockClaudeAdapter` for every stage except STAGE_CONCLUDE, where it
+    returns a single CONCLUSION message with a caller-supplied `claim` — lets
+    a test control exactly what the CONCLUDE turn concludes without
+    reimplementing the rest of MockClaudeAdapter's scripted behavior.
+    """
+
+    agent_id = CLAUDE_AGENT_ID
+
+    def __init__(self, claim: str):
+        self._claim = claim
+        self._delegate = MockClaudeAdapter()
+
+    def run_turn(self, context):
+        if context.stage != STAGE_CONCLUDE:
+            return self._delegate.run_turn(context)
+        message = FrontierMessage(
+            thread_id=context.thread_id,
+            sequence=context.next_sequence,
+            from_agent=self.agent_id,
+            to_agent=CODEX_AGENT_ID,
+            message_type="CONCLUSION",
+            claim=self._claim,
+            created_at=context.created_at,
+        )
+        return ResearchTurnResult(ok=True, message=message)
+
+
+def test_promising_unproven_conclusion_still_records_correctly(tmp_path):
+    """MockClaudeAdapter's real CONCLUDE claim mentions PROMISING_UNPROVEN
+    first and CONFIRMED/REFUTED only contrastively later -- the extractor
+    must still resolve this to PROMISING_UNPROVEN, matching pre-fix output
+    for this exact fixture (Phase 2B/Phase 3 compatibility)."""
+    orch = _orchestrator(tmp_path)
+    report = orch.run_mock_shift()
+    assert report.stopped_early is False
+    assert report.experiment.conclusion_state == "PROMISING_UNPROVEN"
+
+
+@pytest.mark.parametrize("conclusion_state", [s for s in CONCLUSION_STATES if s != "BLOCKED_BY_REQUIRED_EVIDENCE"])
+def test_non_default_conclusion_state_is_preserved_not_collapsed(tmp_path, conclusion_state):
+    """A CONCLUDE claim naming any canonical state other than
+    PROMISING_UNPROVEN must be recorded as that state, not silently
+    replaced by the old hardcoded default."""
+    orch = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=_ConcludeClaimClaude(f"{conclusion_state}: final verdict for this thread."),
+        codex=MockCodexAdapter(),
+        lab_root=tmp_path / ".omni-lab",
+    )
+    report = orch.run_mock_shift()
+    assert report.stopped_early is False
+    assert report.experiment.conclusion_state == conclusion_state
+
+
+def test_archived_conclusion_state_matches_authoritative_result(tmp_path):
+    orch = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=_ConcludeClaimClaude("SUPPORTED: final verdict for this thread."),
+        codex=MockCodexAdapter(),
+        lab_root=tmp_path / ".omni-lab",
+    )
+    report = orch.run_mock_shift()
+    assert report.experiment.conclusion_state == "SUPPORTED"
+    archived = frontier_experiment_from_dict(json.loads((report.archive_dir / "results.json").read_text()))
+    assert archived.conclusion_state == "SUPPORTED"
+    assert "Conclusion state: `SUPPORTED`" in (report.archive_dir / "conclusion.md").read_text()
+
+
+def test_conclusion_reached_event_context_agrees_with_the_archive(tmp_path):
+    orch = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=_ConcludeClaimClaude("INCONCLUSIVE: no usable signal either way."),
+        codex=MockCodexAdapter(),
+        lab_root=tmp_path / ".omni-lab",
+    )
+    report = orch.run_mock_shift()
+    conclusion_events = [e for e in report.events if e.event_type == "CONCLUSION_REACHED"]
+    assert len(conclusion_events) == 1
+    assert conclusion_events[0].context == {"conclusion_state": "INCONCLUSIVE"}
+    assert conclusion_events[0].context["conclusion_state"] == report.experiment.conclusion_state
+
+
+def test_conclude_claim_naming_no_conclusion_state_fails_closed(tmp_path):
+    """A CONCLUDE claim that names none of CONCLUSION_STATES must not be
+    silently coerced to a default -- it fails closed via the same BLOCKED ->
+    archived-as-BLOCKED_BY_REQUIRED_EVIDENCE path other early stops use."""
+    orch = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=_ConcludeClaimClaude("Everything looks fine, ship it."),
+        codex=MockCodexAdapter(),
+        lab_root=tmp_path / ".omni-lab",
+    )
+    report = orch.run_mock_shift()
+    assert report.final_state == state.ARCHIVED
+    assert report.stopped_early is True
+    assert report.experiment.conclusion_state == "BLOCKED_BY_REQUIRED_EVIDENCE"
+    assert not [e for e in report.events if e.event_type == "CONCLUSION_REACHED"]
+
+
+def test_malformed_conclusion_claim_does_not_raise_from_finalize_experiment_conclusion(tmp_path):
+    """A message_type=CONCLUSION claim naming an unsupported (non-canonical)
+    "state" word must fail closed the same way an empty claim does, not
+    raise out of FrontierExperiment validation."""
+    orch = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=_ConcludeClaimClaude("VERDICT_UNKNOWN: not a real conclusion state."),
+        codex=MockCodexAdapter(),
+        lab_root=tmp_path / ".omni-lab",
+    )
+    report = orch.run_mock_shift()
+    assert report.experiment.conclusion_state == "BLOCKED_BY_REQUIRED_EVIDENCE"
+    assert report.stopped_early is True

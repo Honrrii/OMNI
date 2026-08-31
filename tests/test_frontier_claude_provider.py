@@ -532,9 +532,16 @@ class _StageAwareFakeRunner:
             for line in system_prompt.splitlines()
             if line.strip().startswith("- stage:")
         )
+        claim = f"Real-adapter-shaped content for stage {stage}."
+        if stage == "CONCLUDE":
+            # A real CONCLUSION message must name a canonical
+            # omni.frontier.experiments.CONCLUSION_STATES word in its claim
+            # -- see ShiftOrchestrator._extract_conclusion_state -- or the
+            # orchestrator correctly fails closed rather than guessing.
+            claim = f"PROMISING_UNPROVEN: {claim}"
         structured = {
             "message_type": self._STAGE_MESSAGE_TYPE[stage],
-            "claim": f"Real-adapter-shaped content for stage {stage}.",
+            "claim": claim,
         }
         if stage == "EXPERIMENT_REPORT":
             structured["evidence"] = ["fake-runner-shaped evidence entry"]

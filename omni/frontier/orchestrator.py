@@ -55,7 +55,7 @@ from omni.frontier.agents import (
 )
 from omni.frontier.config import FrontierLabConfig, MOCK_SHIFT_SCORE
 from omni.frontier.events import EventLog, FrontierEvent
-from omni.frontier.experiments import FrontierExperiment, to_json as experiment_to_json
+from omni.frontier.experiments import CONCLUSION_STATES, FrontierExperiment, to_json as experiment_to_json
 from omni.frontier.mailbox import Mailbox, MailboxItem, MailboxRejectionError
 from omni.frontier.protocol import FrontierMessage, to_dict as message_to_dict, validate_thread_id
 
@@ -79,6 +79,35 @@ SAFETY_TRIGGER_PHRASES: tuple[str, ...] = (
     "rewrite history",
     "bypass protections",
 )
+
+# A CONCLUDE-turn FrontierMessage has no dedicated conclusion-state field
+# (see omni.frontier.protocol.FrontierMessage / frontier_message.schema.json)
+# -- the claim's prose is the only place a CONCLUDE turn records its
+# verdict, and naming one of the canonical
+# omni.frontier.experiments.CONCLUSION_STATES words there is the documented
+# convention (see tests/test_frontier_role_exchange_demo.py's
+# test_conclusion_message_uses_an_existing_conclusion_state_vocabulary_word).
+# Matched as whole words so e.g. "SUPPORTED" cannot match inside a longer
+# token; alternation order does not affect which match wins because
+# re.search always returns the leftmost match position.
+_CONCLUSION_STATE_TOKEN_PATTERN = re.compile(
+    r"\b(?:" + "|".join(re.escape(value) for value in CONCLUSION_STATES) + r")\b"
+)
+
+
+def _extract_conclusion_state(message: FrontierMessage) -> str | None:
+    """Return the first CONCLUSION_STATES word named in `message.claim`, or
+    `None` if the claim names none of them.
+
+    "First" means leftmost in reading order: a CONCLUDE claim states its
+    verdict up front and may mention other states only contrastively later
+    (e.g. "remains PROMISING_UNPROVEN ... not yet CONFIRMED or REFUTED").
+    Returning `None` lets the caller fail closed instead of guessing or
+    falling back to a default.
+    """
+    match = _CONCLUSION_STATE_TOKEN_PATTERN.search(message.claim)
+    return match.group(0) if match else None
+
 
 # Maps ResearchTurnResult.failure_kind -> the specific event logged in
 # addition to the generic AGENT_TURN_COMPLETED failure entry every failed
@@ -499,9 +528,18 @@ class ShiftOrchestrator:
         return None  # procedural only in Phase 2B — see module docstring
 
     def _record_conclusion(self, message: FrontierMessage) -> None:
+        conclusion_state = _extract_conclusion_state(message)
+        if conclusion_state is None:
+            self._stop(
+                state.BLOCKED,
+                "CONCLUDE-turn message names no CONCLUSION_STATES vocabulary "
+                f"word in its claim: {message.claim[:120]!r}",
+            )
+            return
+
         self.experiment = finalize_experiment_conclusion(
             self.experiment,
-            conclusion_state="PROMISING_UNPROVEN",
+            conclusion_state=conclusion_state,
             experiment_plan=self.experiment.experiment_plan or message.claim,
             limitations=[
                 "MOCK: Phase 2B does not execute a real repository experiment; "
@@ -514,7 +552,12 @@ class ShiftOrchestrator:
             ),
             evidence=self.experiment.evidence,
         )
-        self._log("CONCLUSION_REACHED", actor=message.from_agent, message_ref=message.sequence)
+        self._log(
+            "CONCLUSION_REACHED",
+            actor=message.from_agent,
+            message_ref=message.sequence,
+            context={"conclusion_state": conclusion_state},
+        )
 
     # -- main entry point ---------------------------------------------------
 
