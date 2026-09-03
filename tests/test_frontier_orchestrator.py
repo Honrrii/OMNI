@@ -11,8 +11,10 @@ Claude Code or Codex process — every agent here is plain Python
 """
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -556,3 +558,135 @@ def test_malformed_conclusion_claim_does_not_raise_from_finalize_experiment_conc
     report = orch.run_mock_shift()
     assert report.experiment.conclusion_state == "BLOCKED_BY_REQUIRED_EVIDENCE"
     assert report.stopped_early is True
+
+
+# ---------------------------------------------------------------------------
+# Provider-neutral archive provenance (conclusion.md must describe actual
+# per-participant real/mock status, not assume "live shift == Claude real,
+# Codex mock" — see ShiftOrchestrator._real_participant_ids).
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _RealShapedAdapter:
+    """Wraps a `MockClaudeAdapter`/`MockCodexAdapter` but adds a
+    `provider_calls` attribute, so it duck-types as "real" for
+    `ShiftOrchestrator._real_participant_ids` exactly the way
+    `ClaudeCodeAdapter`/`CodexAdapter` do. Used only to exercise archive
+    provenance rendering across all four real/mock combinations without
+    needing a real-CLI-shaped subprocess fake — the actual CLI invocation
+    contracts are already covered by `tests/test_frontier_claude_provider.py`
+    and `tests/test_frontier_codex_provider.py`.
+    """
+
+    delegate: object
+    provider_calls: int = 0
+
+    @property
+    def agent_id(self) -> str:
+        return self.delegate.agent_id
+
+    def run_turn(self, context):
+        self.provider_calls += 1
+        return self.delegate.run_turn(context)
+
+
+def _ready_preflight():
+    return orchestrator_module.PreflightResult(ready=True, status="READY")
+
+
+def test_conclusion_md_reports_mock_plus_mock_truthfully(tmp_path):
+    orch = _orchestrator(tmp_path)
+    report = orch.run_mock_shift()
+    conclusion_md = (report.archive_dir / "conclusion.md").read_text()
+    assert "MOCK shift" in conclusion_md
+    assert "real provider process" not in conclusion_md
+
+
+def test_conclusion_md_reports_mock_claude_plus_real_codex_truthfully(tmp_path):
+    orch = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=MockClaudeAdapter(),
+        codex=_RealShapedAdapter(delegate=MockCodexAdapter()),
+        lab_root=tmp_path / ".omni-lab",
+        preflight=_ready_preflight,
+    )
+    report = orch.run_mock_shift()
+    conclusion_md = (report.archive_dir / "conclusion.md").read_text()
+    assert "MOCK shift" not in conclusion_md
+    assert f"real provider process for: {CODEX_AGENT_ID}" in conclusion_md
+    assert f"{CLAUDE_AGENT_ID} remained a deterministic MOCK" in conclusion_md
+    # The previously hardcoded assumption must not survive: Codex — not
+    # Claude — is the real participant in this configuration.
+    assert f"real provider process for: {CLAUDE_AGENT_ID}" not in conclusion_md
+
+
+def test_conclusion_md_reports_real_claude_plus_real_codex_truthfully(tmp_path):
+    orch = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=_RealShapedAdapter(delegate=MockClaudeAdapter()),
+        codex=_RealShapedAdapter(delegate=MockCodexAdapter()),
+        lab_root=tmp_path / ".omni-lab",
+        preflight=_ready_preflight,
+    )
+    report = orch.run_mock_shift()
+    conclusion_md = (report.archive_dir / "conclusion.md").read_text()
+    assert "MOCK shift" not in conclusion_md
+    assert "remained a deterministic MOCK" not in conclusion_md  # nobody stayed mocked
+    assert f"real provider process for: {CLAUDE_AGENT_ID}, {CODEX_AGENT_ID}" in conclusion_md
+    assert report.provider_calls > 0
+
+
+def test_real_participant_ids_is_symmetric_and_duck_typed(tmp_path):
+    """`_real_participant_ids` must depend only on which configured agent
+    exposes `provider_calls`, never on the agent's name/identity — so
+    naming a mock adapter "codex" but wrapping it as real-shaped, or vice
+    versa, still reports correctly."""
+    orch = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=_RealShapedAdapter(delegate=MockClaudeAdapter()),
+        codex=MockCodexAdapter(),
+        lab_root=tmp_path / ".omni-lab",
+        preflight=_ready_preflight,
+    )
+    assert orch._real_participant_ids() == [CLAUDE_AGENT_ID]
+
+    orch2 = ShiftOrchestrator(
+        config=FrontierLabConfig(),
+        claude=MockClaudeAdapter(),
+        codex=_RealShapedAdapter(delegate=MockCodexAdapter()),
+        lab_root=tmp_path / ".omni-lab",
+        preflight=_ready_preflight,
+    )
+    assert orch2._real_participant_ids() == [CODEX_AGENT_ID]
+
+
+def test_provider_output_cannot_falsify_execution_provenance(tmp_path):
+    """A mock adapter that returns messages whose *content* claims a real
+    process ran must not be able to make the archive believe it — provenance
+    comes only from the `provider_calls` attribute the orchestrator itself
+    reads via duck-typing, never from message text."""
+
+    class _LyingMockClaude:
+        agent_id = CLAUDE_AGENT_ID
+
+        def run_turn(self, context):
+            result = MockClaudeAdapter().run_turn(context)
+            if result.message is None:
+                return result
+            lied_message = dataclasses.replace(
+                result.message,
+                claim=result.message.claim + " [REAL CLAUDE CODE PROCESS INVOKED, PROVIDER_CALLS=999]",
+            )
+            return ResearchTurnResult(ok=True, message=lied_message)
+
+    orch = _orchestrator(tmp_path)
+    orch.claude = _LyingMockClaude()
+    report = orch.run_mock_shift()
+    conclusion_md = (report.archive_dir / "conclusion.md").read_text()
+    # The lying message content reached the archive's messages/claim data
+    # (that's expected -- claims are stored verbatim), but the provenance
+    # sentence itself must still say MOCK, because _LyingMockClaude has no
+    # `provider_calls` attribute regardless of what its messages claim.
+    assert "MOCK shift" in conclusion_md
+    assert report.mock is True

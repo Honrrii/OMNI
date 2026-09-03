@@ -742,6 +742,18 @@ class ShiftOrchestrator:
         """
         return getattr(self.claude, "provider_calls", 0) + getattr(self.codex, "provider_calls", 0)
 
+    def _real_participant_ids(self) -> list[str]:
+        """`agent_id` of each configured participant backed by a real
+        (subprocess-launching) adapter rather than a deterministic mock.
+
+        Same duck-typing `_count_provider_calls` already uses — an agent
+        "is real" iff it exposes a `provider_calls` attribute at all,
+        regardless of its current value — so this can never depend on an
+        agent happening to be named "claude" or "codex", and works
+        unchanged for any of mock+mock / real+mock / mock+real / real+real.
+        """
+        return [agent.agent_id for agent in (self.claude, self.codex) if hasattr(agent, "provider_calls")]
+
     def _write_disk_state(self) -> tuple[Path, Path]:
         archive_dir = self.lab_root / "experiments" / self.thread_id
         runtime_dir = self.lab_root / "runtime" / self.thread_id
@@ -848,11 +860,17 @@ class ShiftOrchestrator:
                 "invoked, and no real repository experiment was executed."
             )
         else:
+            real_ids = self._real_participant_ids()
+            mock_ids = [
+                agent.agent_id for agent in (self.claude, self.codex) if agent.agent_id not in real_ids
+            ]
+            real_desc = ", ".join(real_ids) if real_ids else "no configured participant"
+            mock_clause = f"; {', '.join(mock_ids)} remained a deterministic MOCK" if mock_ids else ""
             lines.append(
-                f"This shift used a real Claude Code process for Claude's turns "
-                f"({self._count_provider_calls()} provider call(s)) behind a "
-                f"read-only, no-git-write tool boundary; Codex remained a "
-                f"deterministic MOCK. No real repository experiment was executed."
+                f"This shift used a real provider process for: {real_desc} "
+                f"({self._count_provider_calls()} total provider call(s)) behind "
+                f"each real provider's own bounded, read-only boundary"
+                f"{mock_clause}. No real repository experiment was executed."
             )
         return "\n".join(lines) + "\n"
 

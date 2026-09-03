@@ -581,12 +581,16 @@ def test_claude_live_shift_leaves_codex_mocked_and_counts_provider_calls(tmp_pat
     assert codex_messages  # Codex still participated, deterministically, unmodified
 
     # The archive must not claim this was a MOCK shift when a real (even if
-    # fake-backed-in-this-test) provider was actually wired in.
+    # fake-backed-in-this-test) provider was actually wired in, and must
+    # truthfully name Claude as the real participant and Codex as the mock
+    # one — not a hardcoded "Claude real / Codex mock" assumption (see
+    # ShiftOrchestrator._real_participant_ids).
     runtime_state = json.loads((report.runtime_dir / "state.json").read_text())
     assert runtime_state["mock"] is False
     conclusion_md = (report.archive_dir / "conclusion.md").read_text()
     assert "MOCK shift" not in conclusion_md
-    assert "real Claude Code process" in conclusion_md
+    assert f"real provider process for: {CLAUDE_AGENT_ID}" in conclusion_md
+    assert f"{CODEX_AGENT_ID} remained a deterministic MOCK" in conclusion_md
 
 
 # ---------------------------------------------------------------------------
