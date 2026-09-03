@@ -140,3 +140,52 @@ class ClaudeProviderConfig:
 
 
 DEFAULT_CLAUDE_PROVIDER_CONFIG = ClaudeProviderConfig()
+
+
+# --- Phase 4B: real Codex provider configuration ----------------------------
+#
+# Mirrors ClaudeProviderConfig's shape and the same reasoning: adapter-owned
+# settings the orchestrator never reads, kept separate from
+# FrontierLabConfig's provider-neutral authority. See
+# `omni/frontier/codex_provider.py`'s module docstring for what "codex-live"
+# actually launches and how it is bounded to read-only access.
+
+PROVIDER_MODE_CODEX_LIVE = "codex-live"
+CODEX_PROVIDER_MODES: tuple[str, ...] = (PROVIDER_MODE_MOCK, PROVIDER_MODE_CODEX_LIVE)
+
+
+@dataclass(frozen=True)
+class CodexProviderConfig:
+    """Settings for launching the real Codex CLI as a research agent.
+
+    `provider_mode` defaults to `"mock"` for the same reason
+    `ClaudeProviderConfig.provider_mode` does: constructing this config with
+    no arguments must never imply a real model call.
+    """
+
+    provider_mode: str = PROVIDER_MODE_MOCK
+    codex_executable: str = "codex"
+    codex_timeout_seconds: int = 180
+    codex_max_output_bytes: int = 400_000
+
+    def __post_init__(self) -> None:
+        if self.provider_mode not in CODEX_PROVIDER_MODES:
+            raise ValueError(
+                f"CodexProviderConfig.provider_mode must be one of {CODEX_PROVIDER_MODES}; "
+                f"got {self.provider_mode!r}"
+            )
+        if not self.codex_executable or not self.codex_executable.strip():
+            raise ValueError("CodexProviderConfig.codex_executable must be a non-empty string")
+        if self.codex_timeout_seconds < 1:
+            raise ValueError(
+                f"CodexProviderConfig.codex_timeout_seconds must be >= 1; "
+                f"got {self.codex_timeout_seconds!r}"
+            )
+        if self.codex_max_output_bytes < 1:
+            raise ValueError(
+                f"CodexProviderConfig.codex_max_output_bytes must be >= 1; "
+                f"got {self.codex_max_output_bytes!r}"
+            )
+
+
+DEFAULT_CODEX_PROVIDER_CONFIG = CodexProviderConfig()
