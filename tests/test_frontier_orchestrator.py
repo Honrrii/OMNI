@@ -60,7 +60,15 @@ def _orchestrator(tmp_path, **config_overrides) -> ShiftOrchestrator:
 
 def test_end_to_end_mock_shift(tmp_path):
     orch = _orchestrator(tmp_path)
-    report = orch.run_mock_shift()
+    # Explicit thread ID rather than default allocation: this test's
+    # leak-check below (the real repo's .omni-lab/ must never gain this
+    # thread's directory) must hold regardless of which real experiment IDs
+    # the actual tracked .omni-lab/experiments/ archive already contains
+    # (e.g. OMNI-FRONTIER-0001 is a genuine archived Phase 5 real-provider
+    # experiment, not a leak from this mock test) — see
+    # docs/agentic/repository_map.md's ".omni-lab/experiments/ is the
+    # tracked archive."
+    report = orch.run_mock_shift(thread_id="OMNI-FRONTIER-9500")
 
     # Terminal state and boundedness.
     assert report.final_state == state.ARCHIVED
