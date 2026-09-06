@@ -172,3 +172,18 @@ def test_normalize_repo_relative_path_normalizes_valid_input():
     assert normalize_repo_relative_path("./omni/autodev/packets.py") == "omni/autodev/packets.py"
     assert normalize_repo_relative_path("omni\\autodev\\packets.py") == "omni/autodev/packets.py"
     assert normalize_repo_relative_path("omni//autodev//packets.py") == "omni/autodev/packets.py"
+
+
+def test_scope_matching_is_case_sensitive_independent_of_host(monkeypatch):
+    import fnmatch
+
+    from omni.autodev.protected_paths import spec_matches
+
+    # Simulate a host whose native path matcher folds case. Repository paths
+    # retain POSIX semantics, including glob matches used by TestCube.
+    with monkeypatch.context() as patch:
+        patch.setattr(fnmatch.os.path, "normcase", lambda value: value.lower())
+        assert spec_matches("src/**", "src/Fix.py") is True
+        assert spec_matches("src/**", "SRC/Fix.py") is False
+        assert spec_matches("src", "SRC/Fix.py") is False
+        assert spec_matches("src/Fix.py", "src/fix.py") is False

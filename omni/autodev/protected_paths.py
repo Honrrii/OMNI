@@ -102,7 +102,7 @@ def spec_matches(spec: str, candidate: str) -> bool:
     - a repository-relative directory prefix — matches that path and
       everything under it (`omni/autodev` matches `omni/autodev/x.py` but
       not `omni/autodev_extra/x.py`)
-    - a glob specification containing `* ? [ ]` — matched with `fnmatch`.
+    - a glob specification containing `* ? [ ]` — matched with `fnmatchcase`.
       A glob ending in `/**` also matches its own bare directory root
       (`frontend/**` matches `frontend` and `frontend/`, not just files
       under it), since `fnmatch` alone has no trailing segment for `**`
@@ -113,10 +113,14 @@ def spec_matches(spec: str, candidate: str) -> bool:
     `normalize_repo_relative_path` — a specification is allowed to be a
     prefix or contain glob metacharacters, which that strict contract
     exists specifically to reject for concrete paths.
+
+    Matching is case-sensitive on every host: these are repository-relative
+    POSIX names, not native filesystem lookups. Host case normalization must
+    not change a deterministic scope verdict.
     """
     normalized_spec = posixpath.normpath(spec.strip().replace("\\", "/"))
     if _is_glob_spec(normalized_spec):
-        if fnmatch.fnmatch(candidate, normalized_spec):
+        if fnmatch.fnmatchcase(candidate, normalized_spec):
             return True
         if normalized_spec.endswith("/**") and candidate == normalized_spec[: -len("/**")]:
             return True
