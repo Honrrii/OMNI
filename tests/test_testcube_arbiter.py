@@ -558,7 +558,9 @@ def test_arbiter_import_boundary_excludes_providers_and_execution_layers():
     allowed = {"__future__", "json", "math", "re", "dataclasses", "decimal",
                "omni.autodev.packets", "omni.autodev.protected_paths",
                "omni.testcube.arbiter", "omni.testcube.models"}
-    for path in sorted(source.glob("*.py")):
+    # Collection is a separate I/O boundary. These original arbiter modules
+    # must remain pure even as new collector modules are added alongside them.
+    for path in (source / name for name in ("__init__.py", "arbiter.py", "models.py")):
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):

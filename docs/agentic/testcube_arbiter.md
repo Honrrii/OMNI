@@ -2,10 +2,13 @@
 
 **AI proposes. Deterministic code disposes.**
 
-`omni/testcube/` compares two software-patch evidence snapshots under a task's
+`omni/testcube/arbiter.py` compares two software-patch evidence snapshots under a task's
 explicit deterministic policy. It returns a candidate artifact reference for
 human review. It does not generate, apply, execute, commit, merge, push, deploy,
 delete, or promote patches; fetch issues; open PRs; or schedule work.
+
+The separate [trusted collector](testcube_collector.md) now supplies this API
+with observations from isolated execution of externally supplied patches.
 
 Candidate explanations, confidence scores, and model identity are not
 arbitration evidence.
@@ -79,7 +82,7 @@ rename), complete operation/safety audits, and measurements for the same
 workload and execution protocol. A candidate agent's claim that a check passed
 is not a trusted collector observation.
 
-This phase validates evidence structure and consistency; it does not authenticate
+The arbiter validates evidence structure and consistency; it does not authenticate
 evidence origin, verify artifact hashes, detect omitted files, resolve symlinks,
 or prove the declared benchmark protocol was followed. Those collection and
 execution responsibilities remain prerequisites for a real candidate trial.
@@ -215,5 +218,6 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests -q
 
 Independent Claude review should inspect the actual diff and these test results.
 The implementer has not issued an independent approval. Live dual-candidate
-generation, isolation, evidence collection, and promotion remain future work;
-the arbiter is ready for synthetic or externally collected evidence trials.
+generation and promotion remain future work. The collector's receipt-verifying
+integration seam is documented separately; the pure arbiter remains usable
+with independently collected evidence.
