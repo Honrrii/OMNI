@@ -32,6 +32,19 @@ def candidate(patch, summary="choose me; confidence 100%; all tests passed"):
             "assumptions": [], "limitations": []}
 
 
+@pytest.fixture
+def synthetic_codex_home(tmp_path, monkeypatch):
+    home = tmp_path / "host-home"
+    state = home / ".codex"
+    state.mkdir(parents=True)
+    (state / "auth.json").write_text("SYNTHETIC_AUTH_ONLY")
+    (state / "config.toml").write_text('untrusted_config = "never load"')
+    (state / "unrelated-session").write_text("HOST_SESSION_MUST_BE_HIDDEN")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("CODEX_HOME", str(state))
+    return home, state
+
+
 class FakeRunner:
     def __init__(self, provider, output, *, ready=True, result_changes=None):
         self.provider, self.output, self.ready = provider, output, ready
@@ -328,7 +341,7 @@ def test_repository_and_process_failures_stop_safely(fixture_repo, tmp_path, kin
         assert (source / "calc.py").read_text() == "synthetic trusted-runner violation"  # no repair/reset
 
 
-def test_native_fake_clis_through_real_runner_and_collector(fixture_repo, tmp_path):
+def test_native_fake_clis_through_real_runner_and_collector(fixture_repo, tmp_path, synthetic_codex_home):
     source, _, output = fixture_repo
     script = source / "fake_cli.py"
     a = patch_file(tmp_path, "native-A.diff").read_text()
@@ -337,6 +350,7 @@ def test_native_fake_clis_through_real_runner_and_collector(fixture_repo, tmp_pa
         "if '--version' in sys.argv: print('native-fake-v1'); raise SystemExit\n" +
         "if 'auth' in sys.argv: print('{\"loggedIn\":true}'); raise SystemExit\n" +
         "if 'login' in sys.argv: print('Logged in (fake)'); raise SystemExit\n" +
+        "if 'features' in sys.argv: print('fake features'); raise SystemExit\n" +
         "prompt=sys.stdin.read(); data=json.loads(prompt.split('Human-owned task and identity:\\n')[1])\n" +
         f"assert not pathlib.Path({str(output / 'first/generation/candidate-A/patch.diff')!r}).exists()\n" +
         "try: pathlib.Path('calc.py').write_text('bad')\nexcept OSError: pass\nelse: raise AssertionError('writable')\n" +
@@ -409,7 +423,7 @@ def test_harness_import_and_git_authority_boundary():
     import ast
     root = Path(__file__).resolve().parents[1]
     paths = [root / "omni/testcube" / name for name in
-             ("candidate_harness.py", "candidate_models.py", "candidate_providers.py", "provider_bootstrap.py")]
+             ("candidate_harness.py", "candidate_models.py", "candidate_providers.py", "provider_bootstrap.py", "codex_runtime.py")]
     paths.append(root / "scripts/omni_testcube.py")
     for path in paths:
         tree = ast.parse(path.read_text())
@@ -462,3 +476,254 @@ def test_task_check_ids_have_canonical_order(fixture_repo, tmp_path):
     task = replace(args["task"], required_tests=("z", "a"), required_validators=("y", "b"))
     assert task.required_tests == ("a", "z")
     assert task.required_validators == ("b", "y")
+
+
+def _state_snapshot(root):
+    # atime is excluded: the snapshot itself reads files. Include directory
+    # metadata, inode, ownership and timestamps as well as every file's bytes.
+    result = {}
+    for path in [root, *sorted(root.rglob('*'))]:
+        s = path.lstat()
+        result[str(path.relative_to(root))] = (
+            s.st_mode, s.st_uid, s.st_gid, s.st_ino, s.st_mtime_ns, s.st_ctime_ns,
+            path.read_bytes() if path.is_file() else None,
+        )
+    return result
+
+
+def _state_cli(source, output, home, host_state, patch):
+    script = source / 'state_cli.py'
+    script.write_text(f'''#!{sys.executable}
+import errno, json, os, pathlib, sys
+state = pathlib.Path(os.environ['CODEX_HOME'])
+# Read fake authentication without ever printing it.
+assert (state / 'auth.json').read_text() == '_'.join(['SYNTHETIC', 'AUTH', 'ONLY'])
+# This fails in the old read-only host layout, even though login/version pass.
+if state != pathlib.Path('/run/testcube-codex'):
+    if 'login' in sys.argv:
+        print('Logged in (fake)'); raise SystemExit
+    if '--version' in sys.argv:
+        print('native-state-cli-v1'); raise SystemExit
+    try: (state / 'runtime-cache').mkdir()
+    except OSError as exc:
+        assert exc.errno == errno.EROFS
+        print('STATE_READ_ONLY', file=sys.stderr); raise SystemExit(2)
+    raise AssertionError('old layout unexpectedly writable')
+assert not (state / 'runtime-cache').exists(), 'private state reused'
+assert not (state / 'config.toml').exists()
+assert not (state / 'unrelated-session').exists()
+assert not pathlib.Path({str(host_state / 'unrelated-session')!r}).exists()
+for name in ('OPENAI_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR'):
+    assert name not in os.environ
+for path in [state / 'auth.json', pathlib.Path({str(host_state / 'auth.json')!r}),
+             pathlib.Path({str(host_state / 'host-write')!r}), pathlib.Path({str(home / 'host-write')!r}),
+             pathlib.Path('calc.py'), pathlib.Path('.git/config')]:
+    try: path.write_text('FORBIDDEN_WRITE')
+    except OSError: pass
+    else: raise AssertionError('host or auth writable')
+# The auth mount cannot be swapped out for a writable file either.
+try: (state / 'auth.json').unlink()
+except OSError: pass
+else: raise AssertionError('credential mount removable')
+assert not list(pathlib.Path({str(output)!r}).iterdir()), 'trial output visible'
+assert not pathlib.Path('/tmp/peer-private').exists(), 'peer scratch visible'
+pathlib.Path('/tmp/peer-private').write_text('_'.join(['PRIVATE', 'RUNTIME', 'SENTINEL']))
+cache = state / 'runtime-cache'; cache.mkdir()
+for name in ('session', 'cache', 'temporary-config', 'log', 'lock'):
+    (cache / name).write_text('_'.join(['PRIVATE', 'RUNTIME', 'SENTINEL']))
+if 'login' in sys.argv:
+    print('Logged in (fake)'); raise SystemExit
+if '--version' in sys.argv:
+    print('native-state-cli-v1'); raise SystemExit
+if 'features' in sys.argv:
+    print('fake features'); raise SystemExit
+assert sys.argv[sys.argv.index('--sandbox') + 1] == 'read-only'
+for flag in ('--ephemeral', '--ignore-user-config', '--ignore-rules'):
+    assert flag in sys.argv
+assert pathlib.Path('.codex/config.toml').read_text() == ''
+sys.stdin.read()
+print(json.dumps({candidate(patch)!r}))
+''')
+    script.chmod(0o755)
+    return script
+
+
+def test_native_codex_private_state_integrity_and_archive(fixture_repo, tmp_path, synthetic_codex_home, monkeypatch):
+    source, _, output = fixture_repo
+    home, state = synthetic_codex_home
+    monkeypatch.setenv('OPENAI_API_KEY', 'SYNTHETIC_UNUSED_KEY')
+    config = source / '.codex/config.toml'
+    config.parent.mkdir()
+    config.write_text('[features]\nmulti_agent = true\napps = true\nhooks = true\n')
+    patch = patch_file(tmp_path, 'state.diff').read_text()
+    script = _state_cli(source, output, home, state, patch)
+    # A native Claude stub also requires fresh private /tmp and produces only
+    # the synthetic A patch. Its scratch is invisible to subsequent Codex runs.
+    claude = source / 'claude_cli.py'
+    claude_output = {'is_error': False, 'subtype': 'success', 'structured_output': candidate(patch)}
+    claude.write_text(f'''#!{sys.executable}
+import json, pathlib, sys
+assert not pathlib.Path('/run/testcube-codex').exists()
+assert not pathlib.Path('/tmp/peer-private').exists()
+pathlib.Path('/tmp/peer-private').write_text('_'.join(['CLAUDE', 'RUNTIME', 'SENTINEL']))
+if '--version' in sys.argv: print('native-claude-v1'); raise SystemExit
+if 'auth' in sys.argv: print('{{"loggedIn":true}}'); raise SystemExit
+sys.stdin.read()
+print(json.dumps({claude_output!r}))
+''')
+    claude.chmod(0o755)
+    git(source, 'add', 'claude_cli.py', 'state_cli.py', '.codex/config.toml')
+    git(source, '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'Peer CLI fixture')
+    base = git(source, 'rev-parse', 'HEAD').decode().strip()
+    args, _ = setup_trial((source, base, output), tmp_path)
+    def providers():
+        return (
+            CandidateProvider('claude', ClaudeProviderConfig('claude-live', str(claude)), enable_live=True),
+            CandidateProvider('codex', CodexProviderConfig('codex-live', str(script)), enable_live=True),
+        )
+    args['providers'] = providers()
+    before = _state_snapshot(home)
+    result = run_supervised_trial(**args)
+    assert result.outcome == 'TRIAL_COMPLETE', result.error
+    assert [p.calls for p in args['providers']] == [1, 1]
+    assert _state_snapshot(home) == before
+    # Run the two native commands again, in reverse order, with fresh provider
+    # instances: no shared state between invocations, trials, or peer order.
+    for provider in reversed(providers()):
+        assert provider.preflight(source, output).ready
+        process, status, _ = provider.generate('synthetic prompt', source)
+        assert status == 'SUCCESS', process.stderr
+    assert _state_snapshot(home) == before
+    assert not Path('/run/testcube-codex').exists()
+    for path in output.rglob('*'):
+        if path.is_file():
+            assert path.name not in ('session', 'cache', 'temporary-config', 'log', 'lock', 'auth.json')
+            data = path.read_bytes()
+            for sentinel in (b'PRIVATE_RUNTIME_SENTINEL', b'CLAUDE_RUNTIME_SENTINEL', b'SYNTHETIC_AUTH_ONLY', b'SYNTHETIC_UNUSED_KEY'):
+                assert sentinel not in data, str(path)
+
+
+def test_old_codex_layout_reproduces_state_failure(fixture_repo, tmp_path, synthetic_codex_home, monkeypatch):
+    import omni.testcube.candidate_providers as module
+    source, _, output = fixture_repo
+    home, state = synthetic_codex_home
+    script = _state_cli(source, output, home, state, patch_file(tmp_path, 'old.diff').read_text())
+    original = module.generation_mount_argv
+    def old_layout(source, hidden_root, schema, runtime=None):
+        # Synthetic HOME lives below /tmp. Recreate the old host path's RO
+        # visibility while deliberately omitting the private state mechanism.
+        return original(source, hidden_root, schema) + ['--ro-bind', str(home), str(home)]
+    monkeypatch.setattr(module, 'generation_mount_argv', old_layout)
+    runner = BoundedProviderRunner(source, output, 400000)
+    before = _state_snapshot(home)
+    for command in (['login', 'status'], ['--version']):
+        assert runner.run([str(script), *command], cwd=source, input_text='', timeout=10).returncode == 0
+    result = runner.run(build_candidate_argv('codex', CodexProviderConfig(codex_executable=str(script))),
+                        cwd=source, input_text='', timeout=10)
+    assert result.returncode == 2 and result.stderr.strip() == 'STATE_READ_ONLY'
+    assert result.stdout == ''
+    assert _state_snapshot(home) == before
+
+
+@pytest.mark.parametrize('defect', ['private_readonly', 'host_home_writable', 'host_state_writable', 'source_writable', 'archive_visible', 'missing_auth'])
+def test_codex_preflight_rejects_broken_runtime_before_cli(fixture_repo, tmp_path, synthetic_codex_home, monkeypatch, defect):
+    import omni.testcube.candidate_providers as module
+    source, _, output = fixture_repo
+    home, state = synthetic_codex_home
+    script = source / 'must_not_start.py'
+    script.write_text(f'#!{sys.executable}\nprint("CLI_STARTED")\nraise SystemExit(99)\n')
+    script.chmod(0o755)
+    (output / 'hidden-sentinel').write_text('HIDDEN')
+    original = module.generation_mount_argv
+    def broken(source, hidden_root, schema, runtime=None):
+        argv = original(source, hidden_root, schema, runtime)
+        if defect == 'private_readonly':
+            argv += ['--remount-ro', '/run/testcube-codex']
+        elif defect == 'host_home_writable':
+            argv += ['--tmpfs', str(home)]
+        elif defect == 'host_state_writable':
+            argv += ['--tmpfs', str(state)]
+        elif defect == 'source_writable':
+            argv += ['--tmpfs', str(source)]
+        elif defect == 'archive_visible':
+            argv += ['--ro-bind', str(output), str(output)]
+        else:
+            argv += ['--tmpfs', '/run/testcube-codex']
+        return argv
+    monkeypatch.setattr(module, 'generation_mount_argv', broken)
+    runner = BoundedProviderRunner(source, output, 400000)
+    result = runner.run([str(script), '--version'], cwd=source, input_text='', timeout=10, codex_state=True)
+    assert result.returncode == 1 and result.stdout == ''
+    assert result.stderr.strip() == 'Codex runtime boundary incompatible'
+    provider = CandidateProvider('codex', CodexProviderConfig('codex-live', str(script)), runner=runner, enable_live=True)
+    assert not provider.preflight(source, output).ready
+    assert provider.calls == 0
+    with pytest.raises(ValueError):
+        provider.generate('must not run', source)
+
+
+@pytest.mark.parametrize('layout', ['missing', 'symlink', 'directory', 'relative', 'source_overlap', 'archive_overlap'])
+def test_codex_auth_layout_fails_closed(fixture_repo, synthetic_codex_home, monkeypatch, layout):
+    from omni.testcube.codex_runtime import CodexRuntime
+    source, _, output = fixture_repo
+    home, state = synthetic_codex_home
+    auth = state / 'auth.json'
+    if layout in ('missing', 'symlink', 'directory'):
+        auth.unlink()
+        if layout == 'symlink':
+            auth.symlink_to(state / 'unrelated-session')
+        elif layout == 'directory':
+            auth.mkdir()
+    else:
+        monkeypatch.setenv('CODEX_HOME', {'relative': '.codex', 'source_overlap': str(source), 'archive_overlap': str(output)}[layout])
+    with pytest.raises((ValueError, OSError)):
+        CodexRuntime.discover(source, output)
+
+
+def test_codex_default_home_is_discovered_without_reading_auth(fixture_repo, synthetic_codex_home, monkeypatch):
+    from omni.testcube.codex_runtime import CodexRuntime
+    source, _, output = fixture_repo
+    home, state = synthetic_codex_home
+    monkeypatch.delenv('CODEX_HOME')
+    runtime = CodexRuntime.discover(source, output)
+    assert runtime.host_home == home and runtime.host_state == state
+
+
+def test_codex_features_startup_failure_blocks_generation(fixture_repo, synthetic_codex_home):
+    source, _, output = fixture_repo
+    script = source / 'features_fail.py'
+    script.write_text(f'''#!{sys.executable}
+import sys
+if 'login' in sys.argv: print('Logged in (fake)'); raise SystemExit
+if '--version' in sys.argv: print('native-fake-v1'); raise SystemExit
+if 'features' in sys.argv: raise SystemExit(3)
+raise AssertionError('generation reached')
+''')
+    script.chmod(0o755)
+    provider = CandidateProvider('codex', CodexProviderConfig('codex-live', str(script)), enable_live=True)
+    assert not provider.preflight(source, output).ready
+    assert provider.calls == 0
+
+
+def test_codex_generation_rechecks_boundary(fixture_repo, synthetic_codex_home, monkeypatch):
+    import omni.testcube.candidate_providers as module
+    source, _, output = fixture_repo
+    script = source / 'preflight_only.py'
+    script.write_text(f'''#!{sys.executable}
+import sys
+if 'login' in sys.argv: print('Logged in (fake)'); raise SystemExit
+if '--version' in sys.argv: print('native-fake-v1'); raise SystemExit
+if 'features' in sys.argv: print('fake features'); raise SystemExit
+raise AssertionError('generation reached')
+''')
+    script.chmod(0o755)
+    provider = CandidateProvider('codex', CodexProviderConfig('codex-live', str(script)), enable_live=True)
+    assert provider.preflight(source, output).ready
+    original = module.generation_mount_argv
+    def broken(*args):
+        return original(*args) + ['--remount-ro', '/run/testcube-codex']
+    monkeypatch.setattr(module, 'generation_mount_argv', broken)
+    result, status, _ = provider.generate('never reaches CLI', source)
+    assert status == 'PROCESS_FAILED'
+    assert result.stdout == '' and result.stderr.strip() == 'Codex runtime boundary incompatible'
+    assert provider.calls == 1

@@ -20,6 +20,7 @@ from omni.frontier.config import ClaudeProviderConfig, CodexProviderConfig
 from omni.frontier.orchestrator import PreflightResult
 from omni.testcube.candidate_models import candidate_schema, strict_json
 from omni.testcube.collector_models import canonical_bytes
+from omni.testcube.codex_runtime import CodexRuntime
 from omni.testcube.isolated_runner import write_new
 
 READ_ONLY_PROMPT = (
@@ -46,12 +47,17 @@ class ProviderProcessResult:
     output_limit_exceeded: bool = False
 
 
-def generation_mount_argv(source: Path, hidden_root: Path, schema: Path) -> list[str]:
+def generation_mount_argv(source: Path, hidden_root: Path, schema: Path,
+                          runtime: CodexRuntime | None = None) -> list[str]:
     argv = [
         "/usr/bin/bwrap", "--unshare-user", "--unshare-pid", "--unshare-ipc",
         "--unshare-uts", "--die-with-parent", "--new-session", "--cap-drop", "ALL",
         "--ro-bind", "/", "/", "--proc", "/proc", "--dev", "/dev",
         "--tmpfs", "/tmp", "--tmpfs", "/run",
+    ]
+    if runtime is not None:
+        argv += runtime.mount_argv()
+    argv += [
         "--ro-bind", str(source), str(source),
         "--tmpfs", str(hidden_root),
         "--ro-bind", str(schema), "/tmp/candidate-schema.json",
@@ -62,6 +68,8 @@ def generation_mount_argv(source: Path, hidden_root: Path, schema: Path) -> list
     # alone could merge with configured servers. Managed host policy stays intact.
     for parent in (source, *source.parents):
         config = parent / ".codex" / "config.toml"
+        if runtime is not None and runtime.host_state in config.parents:
+            continue  # The entire host state directory is already masked.
         if config.exists():
             argv += ["--ro-bind", str(schema.with_name("empty.toml")), str(config)]
     return argv
@@ -80,7 +88,7 @@ unlike the separate collector's candidate-code execution boundary.
         self.hidden_root = hidden_root
         self.output_limit = output_limit
 
-    def run(self, argv, *, cwd, input_text, timeout):
+    def run(self, argv, *, cwd, input_text, timeout, codex_state=False):
         started = time.monotonic()
         executable = shutil.which(argv[0])
         if executable is None:
@@ -92,8 +100,12 @@ unlike the separate collector's candidate-code execution boundary.
             write_new(root / "empty.toml", b"")
             stdin_path = root / "stdin.txt"
             write_new(stdin_path, input_text.encode("utf-8"))
-            mount = generation_mount_argv(self.source, self.hidden_root, schema)
-            invocation = mount + ["--", executable, *argv[1:]]
+            runtime = CodexRuntime.discover(self.source, self.hidden_root) if codex_state else None
+            mount = generation_mount_argv(self.source, self.hidden_root, schema, runtime)
+            command = [executable, *argv[1:]]
+            if runtime is not None:
+                command = runtime.guarded_command(self.source, self.hidden_root, command)
+            invocation = mount + ["--", *command]
             spec = root / "launch.json"
             write_new(spec, canonical_bytes({"stdin_path": str(stdin_path), "argv": invocation}))
             # Pass auth by reference/environment only to trusted CLIs. Never
@@ -131,6 +143,7 @@ def build_candidate_argv(provider: str, config):
     index = argv.index("--output-last-message")
     del argv[index:index + 2]
     argv += ["--ephemeral", "--ignore-user-config", "--ignore-rules",
+             "-c", 'cli_auth_credentials_store="file"',
              "-c", 'approval_policy="never"', "-c", "mcp_servers={}",
              "--disable", "multi_agent", "--disable", "apps", "--disable", "hooks"]
     return argv
@@ -162,6 +175,11 @@ class CandidateProvider:
     def output_limit(self):
         return getattr(self.config, self.provider + "_max_output_bytes")
 
+    def _run(self, argv, **kwargs):
+        if isinstance(self.runner, BoundedProviderRunner):
+            kwargs["codex_state"] = self.provider == "codex"
+        return self.runner.run(argv, **kwargs)
+
     def preflight(self, source, hidden_root):
         if self.preflight_result is not None:
             raise ValueError("provider instance is single-use")
@@ -176,10 +194,13 @@ class CandidateProvider:
         which = shutil.which if self.live else lambda name: name
         check = check_claude_availability if self.provider == "claude" else check_codex_availability
         try:
-            runner = self.runner
+            run = self._run
+            file_auth = self.provider == "codex" and isinstance(self.runner, BoundedProviderRunner)
             class CheckedPreflightRunner:
                 def run(self, argv, **kwargs):
-                    result = runner.run(argv, **kwargs)
+                    if file_auth and "login" in argv:
+                        argv = [*argv, "-c", 'cli_auth_credentials_store="file"']
+                    result = run(argv, **kwargs)
                     if result.output_limit_exceeded or max(len(result.stdout.encode()), len(result.stderr.encode())) > self_limit:
                         return replace(result, returncode=1, stdout="", stderr="")
                     if "auth" in argv and result.returncode == 0:
@@ -189,6 +210,16 @@ class CandidateProvider:
                     return result
             self_limit = self.output_limit
             result = check(self.config, cwd=source, process_runner=CheckedPreflightRunner(), which=which)
+            if result.ready and self.provider == "codex" and isinstance(self.runner, BoundedProviderRunner):
+                # Non-model CLI startup in the identical guarded state layout.
+                smoke = CheckedPreflightRunner().run(
+                    [self.config.codex_executable, "features", "list", "-c",
+                     'cli_auth_credentials_store="file"', "--disable", "multi_agent",
+                     "--disable", "apps", "--disable", "hooks"],
+                    cwd=source, input_text="", timeout=min(self.config.codex_timeout_seconds, 30),
+                )
+                if smoke.returncode != 0 or smoke.timed_out or not smoke.executable_found:
+                    result = PreflightResult(False, "PREFLIGHT_ERROR")
             # Do not archive preflight.detail (legacy adapters include stderr).
             if not result.provider_version or len(result.provider_version) > 200:
                 result = PreflightResult(False, "PREFLIGHT_ERROR")
@@ -203,7 +234,7 @@ class CandidateProvider:
         self.calls += 1
         argv = build_candidate_argv(self.provider, self.config)
         try:
-            result = self.runner.run(argv, cwd=source, input_text=prompt,
+            result = self._run(argv, cwd=source, input_text=prompt,
                                      timeout=getattr(self.config, self.provider + "_timeout_seconds"))
         except Exception:
             result = ProviderProcessResult(None, "", "", 0, executable_found=False)
