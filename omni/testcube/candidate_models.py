@@ -3,12 +3,18 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import math
 
 from omni.autodev.protected_paths import match_protected_path, spec_matches
 from omni.testcube.collector_models import CollectorPolicy, canonical_bytes, digest
 from omni.testcube.models import _identifier, _paths, _text, _tuple, _unique
 
 CANDIDATE_SCHEMA = "omni.testcube.candidate.v1"
+EDIT_SCHEMA = "omni.testcube.candidate-edit.v1"
+MAX_PROPOSAL_BYTES = 128 * 1024
+MAX_EDITS = 16
+MAX_EDIT_TEXT_BYTES = 16 * 1024
+MAX_TOTAL_EDIT_BYTES = 64 * 1024
 TRIAL_SCHEMA = "omni.testcube.trial.v1"
 TRIAL_OUTCOMES = ("GENERATION_FAILED", "COLLECTION_FAILED", "TRIAL_COMPLETE")
 HIGH_RISK_CATEGORIES = (
@@ -40,7 +46,13 @@ def strict_json(raw: bytes | str):
     def constant(_):
         raise ValueError("nonfinite JSON value")
 
-    return json.loads(raw, object_pairs_hook=pairs, parse_constant=constant)
+    def finite_float(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("nonfinite JSON value")
+        return number
+
+    return json.loads(raw, object_pairs_hook=pairs, parse_constant=constant, parse_float=finite_float)
 
 
 @dataclass(frozen=True)
@@ -128,15 +140,71 @@ def task_from_dict(data):
     return CandidateTaskSpec(**data)
 
 
-def candidate_schema():
+def candidate_schema(transport=CANDIDATE_SCHEMA):
     properties = {
         "schema_version": {"type": "string", "enum": [CANDIDATE_SCHEMA]},
         "summary": {"type": "string"}, "patch": {"type": "string", "minLength": 1},
         "assumptions": {"type": "array", "items": {"type": "string"}},
         "limitations": {"type": "array", "items": {"type": "string"}},
     }
+    if transport == EDIT_SCHEMA:
+        properties["schema_version"]["enum"] = [EDIT_SCHEMA]
+        del properties["patch"]
+        properties["edits"] = {
+            "type": "array", "minItems": 1, "maxItems": MAX_EDITS,
+            "items": {"type": "object", "additionalProperties": False,
+                      "required": ["path", "before", "after"],
+                      "properties": {"path": {"type": "string", "minLength": 1},
+                                     "before": {"type": "string", "minLength": 1, "maxLength": MAX_EDIT_TEXT_BYTES},
+                                     "after": {"type": "string", "maxLength": MAX_EDIT_TEXT_BYTES}}},
+        }
+    elif transport != CANDIDATE_SCHEMA:
+        raise ValueError("unknown candidate transport")
     return {"type": "object", "additionalProperties": False,
             "properties": properties, "required": list(properties)}
+
+
+def validate_edit_proposal(data) -> bytes:
+    """Validate exactly one version; return the canonical audit proposal.
+
+    Path authority and original-base matching are independently enforced by
+    the renderer. JSON whitespace/envelope size is bounded before decoding.
+    """
+    if type(data) is not dict or set(data) != set(candidate_schema(EDIT_SCHEMA)["properties"]):
+        raise ValueError("proposal fields do not match strict schema")
+    if data["schema_version"] != EDIT_SCHEMA or type(data["summary"]) is not str:
+        raise ValueError("invalid proposal schema/version")
+    for name in ("assumptions", "limitations"):
+        if type(data[name]) is not list or any(type(item) is not str for item in data[name]):
+            raise ValueError("invalid proposal audit context")
+    for text in [data["summary"], *data["assumptions"], *data["limitations"]]:
+        text.encode("utf-8", errors="strict")
+        if "\0" in text:
+            raise ValueError("NUL-containing proposal context")
+    edits = data["edits"]
+    if type(edits) is not list or not 1 <= len(edits) <= MAX_EDITS:
+        raise ValueError("edit count exceeds bounds")
+    seen, totals = set(), [0, 0]
+    for edit in edits:
+        if (type(edit) is not dict or set(edit) != {"path", "before", "after"} or
+            any(type(value) is not str or "\0" in value for value in edit.values())):
+            raise ValueError("invalid edit fields/types or NUL")
+        edit["path"].encode("utf-8", errors="strict")
+        if not edit["path"] or not edit["before"]:
+            raise ValueError("empty path or before text")
+        key = (edit["path"], edit["before"], edit["after"])
+        if key in seen:
+            raise ValueError("duplicate edit")
+        seen.add(key)
+        for index, name in enumerate(("before", "after")):
+            size = len(edit[name].encode("utf-8", errors="strict"))
+            totals[index] += size
+            if size > MAX_EDIT_TEXT_BYTES or totals[index] > MAX_TOTAL_EDIT_BYTES:
+                raise ValueError("edit text exceeds byte bounds")
+    proposal = canonical_bytes(data | {"edits": sorted(edits, key=lambda e: (e["path"], e["before"], e["after"]))})
+    if len(proposal) > MAX_PROPOSAL_BYTES:
+        raise ValueError("oversized proposal")
+    return proposal
 
 
 def validate_candidate(data, max_patch_bytes: int) -> bytes:

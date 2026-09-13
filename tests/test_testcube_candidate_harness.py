@@ -10,7 +10,7 @@ import pytest
 from test_testcube_collector import fixture_repo, git, patch_file, snapshot
 from omni.frontier.config import ClaudeProviderConfig, CodexProviderConfig
 from omni.testcube.candidate_models import (
-    CandidateTaskSpec, CANDIDATE_SCHEMA, HIGH_RISK_CATEGORIES, candidate_schema,
+    CandidateTaskSpec, CANDIDATE_SCHEMA, EDIT_SCHEMA, HIGH_RISK_CATEGORIES, candidate_schema,
     strict_json, task_from_dict, validate_candidate,
     TrialResult,
 )
@@ -78,7 +78,9 @@ def setup_trial(fixture_repo, tmp_path, *, a_good=True, b_good=False):
                FakeRunner("codex", json.dumps(b)))
     providers = (CandidateProvider("claude", ClaudeProviderConfig(), runner=runners[0]),
                  CandidateProvider("codex", CodexProviderConfig(), runner=runners[1]))
-    return dict(task=task, policy=policy, source_repo=source, output_root=output, providers=providers), runners
+    # Explicit legacy fixtures remain covered during the versioned transition.
+    return dict(task=task, policy=policy, source_repo=source, output_root=output,
+                providers=providers, candidate_transport=CANDIDATE_SCHEMA), runners
 
 
 @pytest.mark.parametrize("a,b,verdict", [(True, False, "CANDIDATE_A_PREFERRED"),
@@ -341,20 +343,29 @@ def test_repository_and_process_failures_stop_safely(fixture_repo, tmp_path, kin
         assert (source / "calc.py").read_text() == "synthetic trusted-runner violation"  # no repair/reset
 
 
-def test_native_fake_clis_through_real_runner_and_collector(fixture_repo, tmp_path, synthetic_codex_home):
+@pytest.mark.parametrize("transport", [CANDIDATE_SCHEMA, EDIT_SCHEMA])
+def test_native_fake_clis_through_real_runner_and_collector(fixture_repo, tmp_path, synthetic_codex_home, transport):
     source, _, output = fixture_repo
     script = source / "fake_cli.py"
     a = patch_file(tmp_path, "native-A.diff").read_text()
     b = patch_file(tmp_path, "native-B.diff", new="a * b").read_text()
+    outputs = [candidate(a), candidate(b)]
+    if transport == EDIT_SCHEMA:
+        outputs = [dict(schema_version=EDIT_SCHEMA, summary="synthetic", assumptions=[], limitations=[],
+                        edits=[dict(path="calc.py", before="a - b", after=after)])
+                   for after in ("a + b", "a * b")]
     script.write_text(f"#!{sys.executable}\n" + "import sys,json,pathlib\n" +
         "if '--version' in sys.argv: print('native-fake-v1'); raise SystemExit\n" +
         "if 'auth' in sys.argv: print('{\"loggedIn\":true}'); raise SystemExit\n" +
         "if 'login' in sys.argv: print('Logged in (fake)'); raise SystemExit\n" +
         "if 'features' in sys.argv: print('fake features'); raise SystemExit\n" +
+        "schema=json.loads(pathlib.Path('/tmp/candidate-schema.json').read_text())\n" +
+        f"assert schema['properties']['schema_version']['enum']==[{transport!r}]\n" +
+        "if '--json-schema' in sys.argv: assert json.loads(sys.argv[sys.argv.index('--json-schema')+1]) == schema\n" +
         "prompt=sys.stdin.read(); data=json.loads(prompt.split('Human-owned task and identity:\\n')[1])\n" +
         f"assert not pathlib.Path({str(output / 'first/generation/candidate-A/patch.diff')!r}).exists()\n" +
         "try: pathlib.Path('calc.py').write_text('bad')\nexcept OSError: pass\nelse: raise AssertionError('writable')\n" +
-        f"a={candidate(a)!r}; b={candidate(b)!r}\n" +
+        f"a={outputs[0]!r}; b={outputs[1]!r}\n" +
         "if data['candidate_id']=='A':\n assert 'Read,Grep,Glob' in sys.argv\n print(json.dumps({'is_error':False,'subtype':'success','structured_output':a}))\n" +
         "else:\n assert sys.argv[sys.argv.index('--sandbox')+1]=='read-only'\n print(json.dumps(b))\n")
     script.chmod(0o755)
@@ -362,6 +373,7 @@ def test_native_fake_clis_through_real_runner_and_collector(fixture_repo, tmp_pa
     git(source, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "Fake CLI fixture")
     base = git(source, "rev-parse", "HEAD").decode().strip()
     args, _ = setup_trial((source, base, output), tmp_path)
+    args["candidate_transport"] = transport
     args["providers"] = (
         CandidateProvider("claude", ClaudeProviderConfig("claude-live", claude_executable=str(script)), runner=BoundedProviderRunner(source, output, 400000), enable_live=True),
         CandidateProvider("codex", CodexProviderConfig("codex-live", codex_executable=str(script)), runner=BoundedProviderRunner(source, output, 400000), enable_live=True),
@@ -394,6 +406,7 @@ def test_fake_cli_pathway_uses_real_collector(fixture_repo, tmp_path, capsys):
     a.write_text(runners[0].output)
     b.write_text(runners[1].output)
     assert main(["fake-dual-candidate", "--task", str(task), "--commands", str(commands),
+                 "--candidate-transport", CANDIDATE_SCHEMA,
                  "--repo", str(args["source_repo"]), "--output-root", str(args["output_root"]),
                  "--claude-output", str(a), "--codex-output", str(b)]) == 0
     report = json.loads(capsys.readouterr().out)

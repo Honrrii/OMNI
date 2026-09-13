@@ -11,9 +11,11 @@ from datetime import datetime, timezone
 import os
 
 from omni.testcube.candidate_models import (
-    CandidateTaskSpec, TRIAL_SCHEMA, TrialReceipt, TrialResult, validate_candidate,
+    CandidateTaskSpec, CANDIDATE_SCHEMA, EDIT_SCHEMA, MAX_PROPOSAL_BYTES,
+    TRIAL_SCHEMA, TrialReceipt, TrialResult, candidate_schema, validate_candidate, validate_edit_proposal,
 )
-from omni.testcube.candidate_providers import CandidateProvider, READ_ONLY_PROMPT
+from omni.testcube.candidate_providers import CandidateProvider, transport_prompt
+from omni.testcube.edit_renderer import RendererFailure, render_edits
 from omni.testcube.collector import (
     _Git, _FULL_SHA, _read_regular, _safe_artifact, _source_snapshot, _tree_modes,
     collect_and_evaluate, arbitrate_collected,
@@ -22,10 +24,22 @@ from omni.testcube.collector_models import CollectionReceipt, canonical_bytes, d
 from omni.testcube.isolated_runner import write_new
 
 
-def candidate_prompt(task: CandidateTaskSpec, base: str, slot: str) -> str:
-    return READ_ONLY_PROMPT + "\nHuman-owned task and identity:\n" + canonical_bytes({
+def candidate_prompt(task: CandidateTaskSpec, base: str, slot: str, transport=EDIT_SCHEMA) -> str:
+    return transport_prompt(transport) + "\nHuman-owned task and identity:\n" + canonical_bytes({
         "task": asdict(task), "base_commit": base, "candidate_id": slot,
     }).decode()
+
+
+def _verify_generation_files(root, generations):
+    for slot, record in zip(("A", "B"), generations):
+        if record["candidate_id"] != slot or record["provider"] != {"A": "claude", "B": "codex"}[slot]:
+            raise ValueError("generation identity changed")
+        for name, suffix in (("proposal", "json"), ("patch", "diff")):
+            if record.get(name + "_sha256") is None:
+                continue
+            raw = _read_regular(_safe_artifact(root, f"generation/candidate-{slot}/{name}.{suffix}"), 128 * 1024)
+            if digest(raw) != record[name + "_sha256"] or len(raw) != record[name + "_size"]:
+                raise ValueError("generation artifact disagrees with binding")
 
 
 def verify_trial(receipt: TrialReceipt, policy):
@@ -50,6 +64,7 @@ def verify_trial(receipt: TrialReceipt, policy):
         raise ValueError("invalid trial manifest")
     if manifest["outcome"] != "TRIAL_COMPLETE":
         return None
+    _verify_generation_files(root, manifest["generations"])
     collected = dict(manifest["collector_receipt"])
     collected["patch_sha256"] = tuple(collected["patch_sha256"])
     collector_receipt = CollectionReceipt(**collected)
@@ -64,7 +79,8 @@ def verify_trial(receipt: TrialReceipt, policy):
 
 
 def run_supervised_trial(*, task: CandidateTaskSpec, source_repo: Path, output_root: Path,
-                         policy, providers: tuple[CandidateProvider, CandidateProvider]) -> TrialResult:
+                         policy, providers: tuple[CandidateProvider, CandidateProvider],
+                         candidate_transport=EDIT_SCHEMA) -> TrialResult:
     root = None
     git = None
     before = None
@@ -75,6 +91,7 @@ def run_supervised_trial(*, task: CandidateTaskSpec, source_repo: Path, output_r
     outcome = "GENERATION_FAILED"
     error = ""
     try:
+        candidate_schema(candidate_transport)
         task.validate_policy(policy)
         if (type(providers) is not tuple or len(providers) != 2 or
             any(type(p) is not CandidateProvider for p in providers) or
@@ -136,16 +153,18 @@ def run_supervised_trial(*, task: CandidateTaskSpec, source_repo: Path, output_r
             if _source_snapshot(source, git) != before:
                 raise ValueError("trusted source changed before provider invocation")
             generation = root / "generation" / f"candidate-{slot}"
-            prompt = candidate_prompt(task, base, slot)
+            prompt = candidate_prompt(task, base, slot, candidate_transport)
             write_new(generation / "prompt.txt", prompt.encode())
             started = datetime.now(timezone.utc).isoformat()
-            result, classification, argv = provider.generate(prompt, source)
+            result, classification, argv = provider.generate(prompt, source, transport=candidate_transport)
             record = {"candidate_id": slot, "provider": provider.provider,
                       "provider_version": provider.preflight_result.provider_version,
                       "task_id": task.task_id, "task_sha256": task.sha256, "base_commit": base,
                       "call_number": provider.calls, "started_at": started,
                       "duration_seconds": result.duration_seconds, "exit_code": result.returncode, "cwd": str(source),
                       "classification": classification, "argv": argv,
+                      "candidate_transport": candidate_transport,
+                      "proposal_sha256": None, "proposal_size": None,
                       "prompt_sha256": digest(prompt.encode()), "patch_sha256": None, "patch_size": None}
             # Bounded stdout is audit data only. Do not archive stderr/auth output.
             raw = result.stdout.encode()[:provider.output_limit]
@@ -153,24 +172,37 @@ def run_supervised_trial(*, task: CandidateTaskSpec, source_repo: Path, output_r
             patch = None
             if classification == "SUCCESS":
                 try:
-                    patch = validate_candidate(provider.decode(raw), policy.max_patch_bytes)
+                    if candidate_transport == EDIT_SCHEMA:
+                        if len(raw) > MAX_PROPOSAL_BYTES:
+                            raise ValueError("structured output exceeds proposal byte limit")
+                        proposal = validate_edit_proposal(provider.decode(raw))
+                        write_new(generation / "proposal.json", proposal)
+                        record.update(proposal_sha256=digest(proposal), proposal_size=len(proposal))
+                        patch = render_edits(proposal=proposal, task=task, policy=policy,
+                            source=source, base=base, source_snapshot=before, git=git, scratch_parent=output)
+                    else:
+                        patch = validate_candidate(provider.decode(raw), policy.max_patch_bytes)
                     record.update(patch_sha256=digest(patch), patch_size=len(patch))
+                except RendererFailure:
+                    record["classification"] = "RENDERER_FAILURE"
                 except (ValueError, TypeError, UnicodeError):
                     record["classification"] = "INVALID_OUTPUT"
             if patch is not None:
                 write_new(generation / "patch.diff", patch)
                 # Syntax-only Git parsing: --numstat disables patch application.
                 # Applicability, scope and correctness remain collector gates.
-                syntax = git.run(source, "apply", "--numstat", "-z", "--",
-                                 str(generation / "patch.diff"), required=False)[0]
-                if syntax.returncode != 0:
-                    record["classification"] = "INVALID_OUTPUT"
+                if candidate_transport == CANDIDATE_SCHEMA:
+                    syntax = git.run(source, "apply", "--numstat", "-z", "--",
+                                     str(generation / "patch.diff"), required=False)[0]
+                    if syntax.returncode != 0:
+                        record["classification"] = "INVALID_OUTPUT"
             write_new(generation / "generation.json", canonical_bytes(record))
             generations.append(record)
             if _source_snapshot(source, git) != before:
                 raise ValueError("trusted source changed during generation")
         if any(item["classification"] != "SUCCESS" for item in generations):
             raise ValueError("candidate generation failed; no collector invocation")
+        _verify_generation_files(root, generations)
         patches = [root / "generation" / f"candidate-{slot}" / "patch.diff" for slot in ("A", "B")]
         hashes = tuple(item["patch_sha256"] for item in generations)
         if tuple(digest(_read_regular(path, policy.max_patch_bytes)) for path in patches) != hashes:
@@ -225,6 +257,7 @@ def run_supervised_trial(*, task: CandidateTaskSpec, source_repo: Path, output_r
                     finally:
                         os.close(fd)
             manifest = {"schema_version": TRIAL_SCHEMA, "trial_id": task.task_id,
+                        "candidate_transport": candidate_transport,
                         "task_sha256": task.sha256, "base_commit": base,
                         "providers": provider_metadata, "generations": generations,
                         "collector_receipt": asdict(collection.receipt) if collection and collection.receipt else None,

@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 
 from omni.frontier.config import ClaudeProviderConfig, CodexProviderConfig
 from omni.testcube.candidate_harness import run_supervised_trial
-from omni.testcube.candidate_models import strict_json, task_from_dict
+from omni.testcube.candidate_models import CANDIDATE_SCHEMA, EDIT_SCHEMA, strict_json, task_from_dict
 from omni.testcube.candidate_providers import CandidateProvider, ProviderProcessResult
 from omni.testcube.collector import _read_regular
 from omni.testcube.collector_models import CollectorPolicy, CommandSpec, canonical_bytes
@@ -78,6 +78,8 @@ def build_parser():
         p.add_argument("--repo", type=Path, required=True)
         p.add_argument("--output-root", type=Path, required=True, help="Existing external root, outside repository/runtime")
         if command == "fake-dual-candidate":
+            p.add_argument("--candidate-transport", choices=(EDIT_SCHEMA, CANDIDATE_SCHEMA), default=EDIT_SCHEMA,
+                           help="Explicit version; legacy patch transport is for compatibility fixtures")
             p.add_argument("--claude-output", type=Path, required=True, help="Fake Claude JSON success envelope")
             p.add_argument("--codex-output", type=Path, required=True, help="Fake Codex candidate JSON")
         else:
@@ -107,7 +109,8 @@ def main(argv=None):
                 CandidateProvider("codex", CodexProviderConfig("codex-live", args.codex_executable, args.timeout_seconds, args.output_limit_bytes), enable_live=True),
             )
         result = run_supervised_trial(task=task, source_repo=args.repo, output_root=args.output_root,
-                                      policy=policy, providers=providers)
+                                      policy=policy, providers=providers,
+                                      candidate_transport=getattr(args, "candidate_transport", EDIT_SCHEMA))
         print(canonical_bytes(asdict(result)).decode(), end="")
         return 0 if result.outcome == "TRIAL_COMPLETE" else 1
     except (OSError, ValueError, TypeError, UnicodeError) as exc:

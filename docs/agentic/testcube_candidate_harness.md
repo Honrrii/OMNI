@@ -12,9 +12,10 @@ not permission to modify trusted OMNI.
 
 The human supplies a frozen `CandidateTaskSpec`, a `CollectorPolicy`, provider
 configuration, a clean trusted repository, and an existing external output
-root. Models supply one JSON result each. Only its `patch` string enters the
-collector. Summary, assumptions, limitations, confidence-like prose and
-recommendations cannot become `CandidateEvidence` or choose a winner.
+root. Models supply one strict structured-edit JSON result each. Trusted code
+validates exact replacements against the pinned base and Git renders the patch
+that enters the collector. Summary, assumptions, limitations, confidence-like
+prose and recommendations cannot become `CandidateEvidence` or choose a winner.
 
 `candidate_providers.py` reuses the existing Frontier Claude/Codex configuration,
 availability/authentication functions, `PreflightResult`, and read-only argv
@@ -121,9 +122,9 @@ Each provider must return exactly this shape, with no extra/duplicate keys:
 
 ```json
 {
-  "schema_version": "omni.testcube.candidate.v1",
+  "schema_version": "omni.testcube.candidate-edit.v1",
   "summary": "Non-authoritative explanation",
-  "patch": "diff --git a/calc.py b/calc.py\n...",
+  "edits": [{"path": "calc.py", "before": "a - b", "after": "a + b"}],
   "assumptions": [],
   "limitations": []
 }
@@ -131,10 +132,32 @@ Each provider must return exactly this shape, with no extra/duplicate keys:
 
 Claude's CLI success envelope must contain this object as `structured_output`;
 Codex's final stdout must be this object directly. Invalid JSON, duplicate
-keys, nonfinite JSON, incorrect types, extra control fields, empty/non-Git
-patches, NUL bytes, oversize output and malformed Git patch syntax fail
-generation. Git `apply --numstat` performs syntax-only parsing without applying
-anything; applicability/scope/correctness stay with the collector.
+keys, nonfinite JSON (including exponent overflow), incorrect types, extra
+control fields, empty before strings, NUL bytes, oversize output, ambiguous
+matches and overlapping source ranges fail generation. No prose scraping,
+omitted-field inference or output repair is performed.
+
+The default library and supervised CLI transport is explicitly versioned
+`omni.testcube.candidate-edit.v1`. A human library caller may explicitly select
+`candidate_transport="omni.testcube.candidate.v1"` for legacy compatibility;
+the fake CLI exposes the same choice with `--candidate-transport`. The live CLI
+selects only the new version. Every invocation gets exactly one schema and
+validator, never an ambiguous either-format parser. Existing legacy fake and
+native CLI fixture tests explicitly select their old transport.
+
+The [structured transport contract](testcube_structured_edit_transport.md)
+details the trusted renderer. It supports existing UTF-8, LF-only regular
+Python files without BOM or Git attributes on edited paths. It bounds proposals
+(including the raw success envelope) and canonical audit JSON to 128 KiB,
+16 edits, 16 KiB per before/after, and 64 KiB total per side. Source files are
+bounded to 1 MiB. The rendered patch still obeys `max_patch_bytes` and the
+human-owned file/line limits. All replacements resolve against original base
+bytes. Git computes headers, blob hashes and hunk counts in disposable copies;
+a fresh copy must accept `git apply --index --binary` and reproduce the exact
+expected bytes and modes. A trusted rendering inconsistency is classified
+`RENDERER_FAILURE`, never provider `INVALID_OUTPUT`. The trial remains
+`GENERATION_FAILED` and collection is not reached. The collector independently
+derives scope, applicability and correctness afterward.
 
 Both providers must pass authentication/version preflight before either
 generation call starts (`DUAL_READY`). Truncated, oversized, malformed or
@@ -158,20 +181,27 @@ collector runtime. Each task/trial ID is single-use:
   providers.json, source-integrity.json
   git/command-NNNN.json
   generation/candidate-A/                 # same for B
-    prompt.txt, raw-output.json, patch.diff, generation.json
+    prompt.txt, raw-output.json, proposal.json, patch.diff, generation.json
   collection/<task-id>/                   # unchanged collector layout
   manifest.json
 ```
 
 Files are exclusively created, fsynced, and bound into the trial manifest.
 Generation records include provider/version, trusted slot, task digest, base,
-argv, prompt digest, call number/start/duration/exit classification, and patch
-SHA-256/size. Raw stdout is bounded audit data, including malformed responses;
-it is never interpreted as evidence. Authentication payloads and stderr are
-not saved.
+argv, prompt digest, call number/start/duration/exit classification, transport
+version, and proposal/patch SHA-256/size. Proposal edits are canonically ordered
+independently of provider array ordering; the retained raw stdout preserves the
+original response. Raw stdout is bounded audit data, including malformed
+responses; it is never interpreted as evidence. Authentication preflight
+payloads and stderr are not saved. The known raw-output limitation remains:
+a model can deliberately
+echo readable credentials into generation stdout. Structured transport is not
+a secret scrubber. The new code does not read credential files, serialize the
+environment, or copy provider stderr; accepted model text remains untrusted
+audit context and proposed code.
 
-The harness checks generated patch digests immediately before handoff, then
-checks the collector receipt's hashes and base against the generation records,
+The harness checks proposal and rendered patch digests immediately before
+handoff, then checks the collector receipt's hashes and base against generation records,
 and checks the published patches again. A change between publication and
 collector snapshot fails the trial; no mismatched recommendation is returned.
 Only the collector creates `CandidateEvidence`; only the arbiter determines
@@ -237,7 +267,7 @@ Automated tests use only injected responses or native fake CLI scripts,
 disposable repositories and harmless real namespace commands. No real provider
 generation or authentication calls are needed to test this milestone.
 
-Independent Claude review is required before the first billed patch trial.
+Independent Claude review of structured transport is required before Trial 0003.
 Autonomous GitHub issue ingestion/readiness decisions, scheduling, retries,
 roadmap selection, PR creation, issue closure, deployment and automatic
 promotion remain outside this harness.
