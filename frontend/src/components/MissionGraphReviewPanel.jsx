@@ -61,7 +61,7 @@ function CoverageMetric({ label, value, denominator }) {
           </div>
         )}
         <span className="gr-metric-value">
-          {denominator !== undefined ? `${v} / ${denominator}` : v}
+          {denominator !== undefined ? `${v} / ${denominator}` : v}
         </span>
       </div>
     </div>
@@ -135,12 +135,7 @@ export default function MissionGraphReviewPanel({ exportResult }) {
   if (!gr || gr.status !== "reviewed") {
     return (
       <div className="graph-review-panel gr-empty-state">
-        <div className="gr-hud-bar">
-          <div className="gr-hud-status">
-            <span className="gr-hud-dot gr-hud-dot-offline" />
-            <span className="gr-hud-label">GRAPH REVIEW OFFLINE</span>
-          </div>
-        </div>
+        <h2>Mission graph review</h2>
         <p className="gr-empty-message">
           No mission graph review available yet. Export a mission to generate one.
         </p>
@@ -175,10 +170,6 @@ export default function MissionGraphReviewPanel({ exportResult }) {
 
       {/* HUD status bar */}
       <div className="gr-hud-bar">
-        <div className="gr-hud-status">
-          <span className="gr-hud-dot" />
-          <span className="gr-hud-label">GRAPH REVIEW ONLINE</span>
-        </div>
         <div className="gr-hud-chips">
           {gr.platform_normalized && (
             <span className="gr-platform-chip">{gr.platform_normalized}</span>

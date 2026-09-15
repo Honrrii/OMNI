@@ -185,9 +185,8 @@ export default function VisualBayPanel({ exportResult, missionResult }) {
   const previewOnly     = summary?.preview_only    ?? manifest?.preview_only    ?? true;
   const hasCad          = summary?.has_cad         ?? manifest?.cad_preview?.has_cad ?? false;
   const hasRos2         = summary?.has_ros2        ?? manifest?.ros2_preview?.detected ?? false;
-  const hasSimAssets    = summary?.has_simulation_assets ?? (manifest?.simulation?.status !== "not_available") ?? false;
+  const hasSimAssets    = summary?.has_simulation_assets ?? Boolean(manifest?.simulation?.status && manifest.simulation.status !== "not_available");
   const browserReady    = summary?.browser_preview_ready ?? manifest?.cad_preview?.browser_preview_ready ?? false;
-  const safeToLaunch    = false; // always false per spec
 
   const fusion360   = manifest?.fusion360    || null;
   const cadquery    = manifest?.cadquery     || null;

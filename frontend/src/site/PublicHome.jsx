@@ -330,8 +330,9 @@ function SiteFooter() {
 export default function PublicHome() {
   return (
     <div className="site">
+      <a className="site-skip" href="#overview-content">Skip to overview</a>
       <SiteHeader />
-      <main>
+      <main id="overview-content" tabIndex={-1}>
         <Hero />
         <About />
         <Capabilities />

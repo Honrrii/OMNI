@@ -1,4 +1,13 @@
-# OMNITorch — ML Inference Subsystem
+# OMNITorch — local ML subsystem
+
+OMNITorch v0.2 adds preserved image intake, immutable dataset snapshots, explicit
+CPU training, separate evaluation, a local checkpoint registry and inference.
+See [the v0.2 architecture and API contract](../../../docs/OMNITORCH_V02.md).
+
+The sections below document the retained **v0.1 demo inference path**. Statements
+about its limitations apply to that bundled classifier, not the v0.2 workflow.
+
+## Legacy inference subsystem
 
 OMNITorch is OMNI's PyTorch-powered image inference layer.
 
