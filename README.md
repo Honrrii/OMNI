@@ -69,6 +69,8 @@ The system depends on keeping two kinds of work separate:
 - **Not an autonomous fabrication system.** It writes files. It does not run printers, tools, or robots.
 - **Not a finished product.** It is a research codebase, and its parts are at different stages of maturity, as labeled on this page.
 
+**yet...**
+
 ## How a mission moves through OMNI
 
 Every mission follows the same ordered pipeline. The pipeline is implemented in [`agents/supervisor.py`](agents/supervisor.py), and the dossier is written by [`backend/app/export/export_manager.py`](backend/app/export/export_manager.py).
@@ -503,7 +505,7 @@ The environment variable stops globally installed pytest plugins, such as ROS 2'
 - OMNI produces engineering starting points and experimental artifacts. They are not finished or certified designs.
 - A qualified person must review every output (code, CAD, electronics plans, calculations, and gate results) before it informs any hardware work.
 - The Pluto safety gate and the reliability gates are deterministic, advisory aids. They do not certify safety.
-- OMNI does not control fabrication equipment, robots, or workshop hardware. Every physical action requires explicit human authority.
+- OMNI does not control fabrication equipment, robots, or workshop hardware (that will be in the future engineering labratory era). Every physical action requires explicit human authority.
 - Model-backed stages send mission text to third-party model providers. Don't submit information you aren't permitted to share.
 
 ## Project status and contributing
@@ -518,5 +520,5 @@ The repository does not include a license file yet.
 
 <p align="center">
   <img src="frontend/public/brand/omni-snail-mark.svg" alt="" width="40" /><br />
-  <sub>No mission dies as output. Every mission becomes provenance.</sub>
+  <sub>Have fun.</sub>
 </p>
