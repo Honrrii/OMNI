@@ -1,6 +1,8 @@
 /* =========================================================
-   OMNI Design System — Phase 18E Foundation
-   Token namespace:  --omni-ds-*
+   OMNI Design System
+   Token namespace:  --omni-ds-*  (component tokens)
+                     --omni-silver-*, --omni-graphite-*,
+                     --omni-font-*   (brand palette)
    Class prefix:     omni-ds-
 
    Additive only. App.css loads after this file and wins
@@ -8,51 +10,83 @@
    ========================================================= */
 
 /* =========================================================
+   0. Brand Palette
+   Silver, white, graphite, black. Shared by the public
+   overview (omni-public-site.css) and the mission console.
+   ========================================================= */
+
+:root {
+  --omni-silver-0:     #ffffff;
+  --omni-silver-50:    #f7f8f9;
+  --omni-silver-100:   #eef0f2;
+  --omni-silver-200:   #e1e4e8;
+  --omni-silver-300:   #cdd1d7;
+  --omni-silver-400:   #aeb4bc;
+  --omni-silver-500:   #8b919a;
+  --omni-silver-600:   #6b7079;
+  --omni-graphite-700: #3a3e45;
+  --omni-graphite-800: #1d1f24;
+  --omni-graphite-900: #121317;
+  --omni-graphite-950: #0b0c0f;
+
+  --omni-metal-gradient: linear-gradient(135deg, #ffffff 0%, #dfe2e6 42%, #b4b9c1 100%);
+
+  --omni-font-sans:
+    "Inter", "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui,
+    -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --omni-font-display:
+    "Inter Display", "Inter", "SF Pro Display", "Segoe UI Variable Display",
+    "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --omni-font-mono:
+    "SF Mono", "JetBrains Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+}
+
+/* =========================================================
    1. Design Tokens
    ========================================================= */
 
 :root {
   /* Surface / background */
-  --omni-ds-bg-root:           #01030a;
-  --omni-ds-bg-canvas:         #030818;
-  --omni-ds-bg-panel:          rgba(6, 12, 28, 0.72);
-  --omni-ds-bg-panel-elevated: rgba(10, 18, 42, 0.80);
-  --omni-ds-bg-inset:          rgba(2, 5, 14, 0.60);
-  --omni-ds-bg-overlay:        rgba(0, 3, 12, 0.88);
+  --omni-ds-bg-root:           var(--omni-graphite-950);
+  --omni-ds-bg-canvas:         #0f1014;
+  --omni-ds-bg-panel:          rgba(24, 25, 29, 0.72);
+  --omni-ds-bg-panel-elevated: rgba(30, 32, 37, 0.82);
+  --omni-ds-bg-inset:          rgba(0, 0, 0, 0.24);
+  --omni-ds-bg-overlay:        rgba(6, 7, 9, 0.9);
 
   /* Border / divider */
-  --omni-ds-border-soft:   rgba(80, 160, 255, 0.08);
-  --omni-ds-border-medium: rgba(80, 160, 255, 0.14);
-  --omni-ds-border-strong: rgba(80, 160, 255, 0.24);
-  --omni-ds-divider:       rgba(80, 160, 255, 0.10);
+  --omni-ds-border-soft:   rgba(255, 255, 255, 0.06);
+  --omni-ds-border-medium: rgba(255, 255, 255, 0.1);
+  --omni-ds-border-strong: rgba(255, 255, 255, 0.16);
+  --omni-ds-divider:       rgba(255, 255, 255, 0.08);
 
   /* Text */
-  --omni-ds-text-primary:   #f0f6ff;
-  --omni-ds-text-secondary: #c6d2e4;
-  --omni-ds-text-muted:     #8898aa;
-  --omni-ds-text-faint:     #566070;
-  --omni-ds-text-code:      #bff4ff;
+  --omni-ds-text-primary:   #f2f3f5;
+  --omni-ds-text-secondary: #c5c9d0;
+  --omni-ds-text-muted:     #8d939c;
+  --omni-ds-text-faint:     #5e636b;
+  --omni-ds-text-code:      #dfe3e8;
 
-  /* Accents */
-  --omni-ds-accent-cyan:   #49e6ff;
-  --omni-ds-accent-blue:   #4da3ff;
-  --omni-ds-accent-orange: #ff8c42;
-  --omni-ds-accent-green:  #7cffc8;
-  --omni-ds-accent-amber:  #ffbf4a;
-  --omni-ds-accent-red:    #ff4d5e;
-  --omni-ds-accent-purple: #9b6cff;
+  /* Accents — silver carries emphasis; color is reserved for status */
+  --omni-ds-accent-cyan:   var(--omni-silver-300);
+  --omni-ds-accent-blue:   var(--omni-silver-400);
+  --omni-ds-accent-orange: #d9c3a0;
+  --omni-ds-accent-green:  #9fd9bd;
+  --omni-ds-accent-amber:  #e2c68a;
+  --omni-ds-accent-red:    #e5868f;
+  --omni-ds-accent-purple: #b9b4c9;
 
   /* Themed accent values — referenced by theme modifier classes */
-  --omni-ds-theme-henry:       #ff8c42;
-  --omni-ds-theme-dossier:     #9d7aff;
-  --omni-ds-theme-visual-bay:  #4aaa6e;
-  --omni-ds-theme-aeroforge:   #4a90d9;
-  --omni-ds-theme-engineering: #7cffc8;
+  --omni-ds-theme-henry:       #dcd6cc;
+  --omni-ds-theme-dossier:     #cfd0d8;
+  --omni-ds-theme-visual-bay:  #cdd4d0;
+  --omni-ds-theme-aeroforge:   #c7cdd5;
+  --omni-ds-theme-engineering: #d3d8d5;
 
   /* Active theme defaults — overridden by .omni-ds-theme-* modifiers */
   --omni-ds-active-accent:      var(--omni-ds-accent-cyan);
-  --omni-ds-active-accent-glow: rgba(73, 230, 255, 0.16);
-  --omni-ds-active-border:      rgba(73, 230, 255, 0.18);
+  --omni-ds-active-accent-glow: rgba(205, 209, 215, 0.1);
+  --omni-ds-active-border:      rgba(205, 209, 215, 0.16);
 
   /* Spacing */
   --omni-ds-space-2xs: 4px;
@@ -65,24 +99,24 @@
   /* Radius */
   --omni-ds-radius-xs: 4px;
   --omni-ds-radius-sm: 8px;
-  --omni-ds-radius-md: 14px;
-  --omni-ds-radius-lg: 20px;
-  --omni-ds-radius-xl: 28px;
+  --omni-ds-radius-md: 12px;
+  --omni-ds-radius-lg: 16px;
+  --omni-ds-radius-xl: 24px;
 
   /* Typography */
-  --omni-ds-font-display: "Rajdhani", "Barlow", Inter, ui-sans-serif, system-ui, sans-serif;
-  --omni-ds-font-body:    "Barlow", Inter, ui-sans-serif, system-ui, sans-serif;
-  --omni-ds-font-mono:    "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  --omni-ds-font-display: var(--omni-font-display);
+  --omni-ds-font-body:    var(--omni-font-sans);
+  --omni-ds-font-mono:    var(--omni-font-mono);
   --omni-ds-letter-tight: -0.03em;
   --omni-ds-letter-label: 0.12em;
-  --omni-ds-letter-wide:  0.20em;
+  --omni-ds-letter-wide:  0.18em;
 
   /* Glow / shadow / blur */
-  --omni-ds-glow-soft:   0 0 14px rgba(73, 230, 255, 0.12);
-  --omni-ds-glow-medium: 0 0 28px rgba(73, 230, 255, 0.20);
-  --omni-ds-glow-strong: 0 0 48px rgba(73, 230, 255, 0.32);
+  --omni-ds-glow-soft:   0 0 14px rgba(255, 255, 255, 0.04);
+  --omni-ds-glow-medium: 0 0 24px rgba(255, 255, 255, 0.06);
+  --omni-ds-glow-strong: 0 0 40px rgba(255, 255, 255, 0.08);
   --omni-ds-shadow-panel:
-    0 16px 48px rgba(0, 0, 0, 0.36),
+    0 16px 44px rgba(0, 0, 0, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --omni-ds-blur-panel: blur(14px);
 
@@ -90,7 +124,7 @@
   --omni-ds-duration-fast:   120ms;
   --omni-ds-duration-normal: 200ms;
   --omni-ds-duration-slow:   360ms;
-  --omni-ds-ease-standard:   cubic-bezier(0.22, 0.68, 0, 1.2);
+  --omni-ds-ease-standard:   cubic-bezier(0.2, 0, 0, 1);
 
   /* Z-index */
   --omni-ds-z-overlay: 30;
@@ -106,38 +140,38 @@
 
 .omni-ds-theme-cinematic {
   --omni-ds-active-accent:      var(--omni-ds-theme-henry);
-  --omni-ds-active-accent-glow: rgba(255, 140, 66, 0.18);
-  --omni-ds-active-border:      rgba(255, 140, 66, 0.18);
+  --omni-ds-active-accent-glow: rgba(220, 214, 204, 0.1);
+  --omni-ds-active-border:      rgba(220, 214, 204, 0.16);
 }
 
 .omni-ds-theme-dossier {
   --omni-ds-active-accent:      var(--omni-ds-theme-dossier);
-  --omni-ds-active-accent-glow: rgba(157, 122, 255, 0.16);
-  --omni-ds-active-border:      rgba(157, 122, 255, 0.18);
+  --omni-ds-active-accent-glow: rgba(207, 208, 216, 0.1);
+  --omni-ds-active-border:      rgba(207, 208, 216, 0.16);
 }
 
 .omni-ds-theme-visual-bay {
   --omni-ds-active-accent:      var(--omni-ds-theme-visual-bay);
-  --omni-ds-active-accent-glow: rgba(74, 170, 110, 0.16);
-  --omni-ds-active-border:      rgba(74, 170, 110, 0.18);
+  --omni-ds-active-accent-glow: rgba(205, 212, 208, 0.1);
+  --omni-ds-active-border:      rgba(205, 212, 208, 0.16);
 }
 
 .omni-ds-theme-aeroforge {
   --omni-ds-active-accent:      var(--omni-ds-theme-aeroforge);
-  --omni-ds-active-accent-glow: rgba(74, 144, 217, 0.16);
-  --omni-ds-active-border:      rgba(74, 144, 217, 0.18);
+  --omni-ds-active-accent-glow: rgba(199, 205, 213, 0.1);
+  --omni-ds-active-border:      rgba(199, 205, 213, 0.16);
 }
 
 .omni-ds-theme-engineering {
   --omni-ds-active-accent:      var(--omni-ds-theme-engineering);
-  --omni-ds-active-accent-glow: rgba(124, 255, 200, 0.16);
-  --omni-ds-active-border:      rgba(124, 255, 200, 0.18);
+  --omni-ds-active-accent-glow: rgba(211, 216, 213, 0.1);
+  --omni-ds-active-border:      rgba(211, 216, 213, 0.16);
 }
 
 .omni-ds-theme-system {
   --omni-ds-active-accent:      var(--omni-ds-accent-blue);
-  --omni-ds-active-accent-glow: rgba(77, 163, 255, 0.16);
-  --omni-ds-active-border:      rgba(77, 163, 255, 0.18);
+  --omni-ds-active-accent-glow: rgba(174, 180, 188, 0.1);
+  --omni-ds-active-border:      rgba(174, 180, 188, 0.16);
 }
 
 /* =========================================================
@@ -160,7 +194,7 @@
 
 @supports not (backdrop-filter: blur(1px)) {
   .omni-ds-panel {
-    background: rgba(5, 12, 28, 0.93);
+    background: rgba(20, 21, 25, 0.95);
   }
 }
 
@@ -177,7 +211,7 @@
 .omni-ds-panel-title {
   margin: 0;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--omni-ds-letter-label);
   text-transform: uppercase;
   color: var(--omni-ds-active-accent, var(--omni-ds-accent-cyan));
@@ -203,10 +237,10 @@
   display: block;
   margin-bottom: var(--omni-ds-space-xs);
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--omni-ds-letter-wide);
   text-transform: uppercase;
-  color: rgba(200, 220, 255, 0.45);
+  color: rgba(225, 228, 232, 0.45);
 }
 
 /* =========================================================
@@ -220,7 +254,7 @@
   align-items: center;
   padding: 3px 10px;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   border-radius: 999px;
@@ -232,34 +266,34 @@
 }
 
 .omni-ds-chip-info {
-  color: #a8d4ff;
-  background: rgba(77, 163, 255, 0.08);
-  border-color: rgba(77, 163, 255, 0.22);
+  color: #dfe2e6;
+  background: rgba(223, 226, 230, 0.06);
+  border-color: rgba(223, 226, 230, 0.18);
 }
 
 .omni-ds-chip-success {
-  color: #b3ffe2;
-  background: rgba(124, 255, 200, 0.08);
-  border-color: rgba(124, 255, 200, 0.22);
+  color: #bfe6d3;
+  background: rgba(159, 217, 189, 0.07);
+  border-color: rgba(159, 217, 189, 0.2);
 }
 
 .omni-ds-chip-warning {
-  color: #ffe0a0;
-  background: rgba(255, 191, 74, 0.08);
-  border-color: rgba(255, 191, 74, 0.22);
+  color: #eed9ab;
+  background: rgba(226, 198, 138, 0.07);
+  border-color: rgba(226, 198, 138, 0.2);
 }
 
 .omni-ds-chip-danger {
-  color: #ffb4b4;
-  background: rgba(255, 61, 77, 0.08);
-  border-color: rgba(255, 61, 77, 0.22);
+  color: #f0b9be;
+  background: rgba(229, 134, 143, 0.07);
+  border-color: rgba(229, 134, 143, 0.2);
 }
 
 /* Concept-stage safety framing chip */
 .omni-ds-chip-concept {
-  color: #d4b4ff;
-  background: rgba(157, 122, 255, 0.08);
-  border-color: rgba(157, 122, 255, 0.22);
+  color: #d6d2e2;
+  background: rgba(185, 180, 201, 0.07);
+  border-color: rgba(185, 180, 201, 0.2);
 }
 
 .omni-ds-chip-muted {
@@ -291,7 +325,7 @@
 .omni-ds-label {
   display: block;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--omni-ds-letter-label);
   text-transform: uppercase;
   color: var(--omni-ds-text-faint);
@@ -300,7 +334,7 @@
 .omni-ds-value {
   display: block;
   font-size: 0.84rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--omni-ds-text-secondary);
   line-height: 1.4;
 }
@@ -320,8 +354,8 @@
   font-family: var(--omni-ds-font-mono);
   font-size: 0.80rem;
   color: var(--omni-ds-text-code);
-  background: rgba(191, 244, 255, 0.06);
-  border: 1px solid rgba(191, 244, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--omni-ds-radius-xs);
 }
 
@@ -333,9 +367,9 @@
   margin: 0;
   padding: var(--omni-ds-space-sm) var(--omni-ds-space-md);
   font-size: 0.76rem;
-  color: rgba(255, 235, 190, 0.68);
-  background: rgba(255, 200, 100, 0.04);
-  border: 1px solid rgba(255, 200, 100, 0.12);
+  color: rgba(238, 217, 171, 0.72);
+  background: rgba(226, 198, 138, 0.04);
+  border: 1px solid rgba(226, 198, 138, 0.12);
   border-radius: var(--omni-ds-radius-sm);
   line-height: 1.55;
 }
@@ -356,7 +390,7 @@
   padding-left: 1.1rem;
   display: grid;
   gap: var(--omni-ds-space-xs);
-  color: #ffb4b4;
+  color: #f0b9be;
   font-size: 0.84rem;
   line-height: 1.65;
 }
@@ -370,7 +404,7 @@
   padding-left: 1.1rem;
   display: grid;
   gap: var(--omni-ds-space-xs);
-  color: #b3ffe2;
+  color: #bfe6d3;
   font-size: 0.84rem;
   line-height: 1.65;
 }

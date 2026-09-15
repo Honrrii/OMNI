@@ -1,7 +1,13 @@
 # OMNI Auto Dev
 
 OMNI Auto Dev is a planned system for scoping and tracking multi-step engineering
-campaigns. This document describes the Phase 11 core skeleton only.
+campaigns. This document describes the current local, non-autonomous tooling only.
+
+For the canonical, provider-neutral production workflow, invariants, and
+packet lifecycle that this tooling is meant to eventually support, see
+`docs/agentic/` (`production_protocol.md`, `repository_invariants.md`,
+`packet_contracts.md`). This document does not duplicate that content — it
+documents what the current CLI and modules actually do.
 
 ## What exists today
 
@@ -9,10 +15,20 @@ campaigns. This document describes the Phase 11 core skeleton only.
   campaign: `AutoDevCampaign`, `AutoDevTask`, `AutoDevSafetyRule`,
   `AutoDevValidationPlan`, `AutoDevDryRunSummary`. No validation logic yet.
 * `omni/autodev/config.py` — default lists: `DEFAULT_PROTECTED_AREAS`,
-  `DEFAULT_NON_GOALS`, `DEFAULT_VALIDATION_COMMANDS`, and
-  `DEFAULT_REQUIRED_ISSUE_SECTIONS`. Plain data, not enforcement.
+  `DEFAULT_NON_GOALS`, `DEFAULT_VALIDATION_COMMANDS`,
+  `DEFAULT_REQUIRED_ISSUE_SECTIONS`, and `DEFAULT_PROTECTED_PATH_RULES`.
+  Plain data, not enforcement.
 * `omni/autodev/issue_readiness.py` — deterministic heading-text matching
   that checks a local issue body file for the required Auto Dev sections.
+* `omni/autodev/protected_paths.py` — matches a single path string against
+  the protected path patterns. No git diff scanning or changed-file
+  enforcement yet.
+* `omni/autodev/packets.py` — structured, validated production packet
+  contracts (run manifest, task packet, implementation handoff, test
+  evidence, review packet, repair packet, closeout packet). See
+  `docs/agentic/packet_contracts.md` for what each one means. This module
+  builds and validates packets only — it does not call a model, launch an
+  agent, commit, or open a PR.
 * `scripts/omni_autodev.py` — a CLI with `--help` and `--dry-run`. The
   dry run prints a skeleton-only summary and does not touch the network,
   call a model, or call the GitHub API.
@@ -96,13 +112,61 @@ the missing ones by name. A missing input file is a clear, nonzero-exit CLI
 error, not a `NEEDS_DETAIL` verdict. This checker only reads a local file; it
 never fetches from GitHub, calls a model, or uses the `gh` CLI.
 
+## Protected path policy
+
+Auto Dev defines which paths need dedicated human review before any future
+layer touches them. This is policy data plus a single-path matcher — it does
+not scan a git diff or enforce anything against a real change set yet.
+
+```bash
+python scripts/omni_autodev.py protected-paths
+```
+
+Lists each protected glob pattern and the reason it's protected (sandbox,
+frontend, ML model code, ROS export, Visual Bay, mission graph). To check one
+path in code:
+
+```python
+from omni.autodev.protected_paths import match_protected_path
+
+match_protected_path("backend/app/sandbox/limited_launcher.py")  # -> AutoDevProtectedPathRule(...)
+match_protected_path("omni/autodev/config.py")                   # -> None
+match_protected_path("../escape.py")                             # -> raises ValueError
+```
+
+`match_protected_path` fails closed on invalid input (empty, `.`, `..`, an
+absolute or drive-qualified path, a UNC path, or anything containing a `..`
+component) — it raises `ValueError` rather than returning an ordinary
+unprotected `None`. See `docs/agentic/packet_contracts.md`'s "one shared
+repository-relative path contract" for the full normalization and matching
+rules, which this module also exposes as `normalize_repo_relative_path` and
+`spec_matches` for reuse elsewhere in Auto Dev.
+
+## Production packet contracts
+
+`omni/autodev/packets.py` defines validated dataclasses for the packets a
+production run under `docs/agentic/production_protocol.md` produces:
+`RunManifest`, `TaskPacket`, `ImplementationHandoff`, `TestEvidence`,
+`ReviewPacket`, `RepairPacket`, `CloseoutPacket`. They validate at
+construction (verdicts, repair-cycle bounds, timeout representation) and
+round-trip through `to_dict`/`to_json` plus the module's `*_from_dict`
+functions. See `docs/agentic/packet_contracts.md` for semantics and
+lifecycle.
+
+This is contract data only. Nothing in this module writes a packet into a
+run directory automatically, calls a model, launches Claude or Codex,
+commits, or opens a PR — wiring these packets into the run-directory
+scaffold (`run_layout.py`) and into an actual orchestrator remain future,
+separately reviewed changes.
+
 ## Planned future layers
 
 Later phases may add, in order:
 
 1. Campaign YAML loading
-2. Handoff packet generation
+2. Wiring packet contracts (`packets.py`) into run-directory generation and
+   an actual implementer/reviewer handoff flow
 3. Validation result tracking
-4. Protected path checks
+4. Changed-file protected-path enforcement (git diff scanning against this policy)
 
 Each of these is a separate, reviewed change — not part of this skeleton.

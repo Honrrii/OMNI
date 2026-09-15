@@ -2,9 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/brand/omni-snail-mark.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta
+      name="description"
+      content="OMNI (Orchestrated Multi-AI Networked Intelligence) is an experimental, local-first engineering system that turns rough ideas into structured, reviewable engineering packages."
+    />
+    <meta name="theme-color" content="#eef0f2" />
+    <title>OMNI — Orchestrated Multi-AI Networked Intelligence</title>
+    <script>
+      // Set the view before first paint so the light overview never flashes
+      // the console's dark background. App.jsx keeps this in sync afterwards.
+      document.documentElement.dataset.omniView = location.hash.startsWith("#/console")
+        ? "console"
+        : "home";
+    </script>
   </head>
   <body>
     <div id="root"></div>

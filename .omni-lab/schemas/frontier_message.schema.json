@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://omni.local/schemas/frontier_message.schema.json",
+  "title": "OMNI Frontier Research Message",
+  "description": "One message on an OMNI Frontier Research thread. See .omni-lab/protocols/FRONTIER_RESEARCH_PROTOCOL.md for semantics. Field names match omni/frontier/protocol.py's FrontierMessage dataclass, which is the Python-side validated contract this schema mirrors as a provider-neutral wire format — Codex or any other agent can validate a message against this file without importing OMNI's Python package. Keep the two in sync (tests/test_frontier_schemas.py checks for drift).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "thread_id",
+    "sequence",
+    "from_agent",
+    "to_agent",
+    "message_type",
+    "claim",
+    "created_at",
+    "protocol_version"
+  ],
+  "properties": {
+    "thread_id": {
+      "type": "string",
+      "pattern": "^OMNI-FRONTIER-\\d{4,}$",
+      "description": "Research thread identifier, e.g. OMNI-FRONTIER-0001."
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-indexed message position within the thread."
+    },
+    "from_agent": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Sending agent identity, e.g. \"claude\", \"codex\", \"human\"."
+    },
+    "to_agent": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Receiving agent identity, or a broadcast marker such as \"all\"."
+    },
+    "message_type": {
+      "type": "string",
+      "enum": [
+        "HYPOTHESIS",
+        "COUNTER_HYPOTHESIS",
+        "REVIEW_REQUEST",
+        "REVIEW_FINDING",
+        "EVIDENCE",
+        "COUNTEREVIDENCE",
+        "EXPERIMENT_PROPOSAL",
+        "EXPERIMENT_RESULT",
+        "CHALLENGE",
+        "RESPONSE",
+        "CONCLUSION",
+        "ESCALATE_TO_HUMAN"
+      ]
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What this message asserts, requests, or reports."
+    },
+    "mechanism": {
+      "type": "string",
+      "description": "Plausible mechanism explaining why the claim could matter, if applicable."
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Repository-checkable references (file path, command, test name) — not narrative assertions. See docs/agentic/repository_invariants.md's \"another agent's verdict is not evidence.\""
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requested_action": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "in_reply_to": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "sequence number of the message this one replies to, if any."
+    },
+    "protocol_version": {
+      "type": "string",
+      "const": "0.1"
+    }
+  }
+}

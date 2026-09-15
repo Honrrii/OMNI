@@ -1,7 +1,9 @@
 import { useMemo, useState, useEffect } from "react";
 import "./styles/omni-design-system.css";
 import "./App.css";
-import { initSpaceBg } from "./space-bg";
+import PublicHome from "./site/PublicHome.jsx";
+import SnailMark from "./components/SnailMark.jsx";
+import { AGENT_PROFILES } from "./content/agents.js";
 import MissionReportPanel from "./components/MissionReportPanel.jsx";
 import MissionGraphReviewPanel from "./components/MissionGraphReviewPanel.jsx";
 import CandidateEvaluationPanel from "./components/CandidateEvaluationPanel.jsx";
@@ -18,34 +20,18 @@ import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
 import OmniForgePanel from "./components/OmniForgePanel";
 import OmniSimulationPanel from "./components/OmniSimulationPanel";
 
-import omniImg from "./assets/agents/omni.png";
-import echoImg from "./assets/agents/echo.png";
-import skyImg from "./assets/agents/sky.png";
-import korvaImg from "./assets/agents/korva.png";
-import isyImg from "./assets/agents/isy.png";
-import oliImg from "./assets/agents/oli.png";
-import plutoImg from "./assets/agents/pluto.png";
-import qazImg from "./assets/agents/qaz.png";
-import vegaImg from "./assets/agents/vega.png";
-
 const API_URL = "http://127.0.0.1:8000/api/mission/run";
 const EXPORT_API_URL = "http://127.0.0.1:8000/api/mission/export";
 const INTERPRET_API_URL = "http://127.0.0.1:8000/api/mission/interpret";
 const INTERPRET_AND_RUN_API_URL =
   "http://127.0.0.1:8000/api/mission/interpret-and-run";
 
-const AGENT_IMAGE_MAP = {
-  omni: omniImg,
-  echo: echoImg,
-  vega: vegaImg,
-  design: vegaImg,
-  sky: skyImg,
-  korva: korvaImg,
-  isy: isyImg,
-  oli: oliImg,
-  pluto: plutoImg,
-  qaz: qazImg,
-};
+// The public overview is the default view; the mission console lives at #/console.
+const CONSOLE_HASH = "#/console";
+
+function readViewFromHash() {
+  return window.location.hash.startsWith(CONSOLE_HASH) ? "console" : "home";
+}
 
 const JOKE_API_URL =
   "https://v2.jokeapi.dev/joke/Dark,Pun?blacklistFlags=nsfw,religious,political,racist,sexist,explicit&type=single&lang=en";
@@ -98,128 +84,36 @@ const PAGE_ITEMS = [
   { id: "memory", label: "Memory" },
 ];
 
+// id is the key the console uses for reports; profileId selects the shared
+// name/role from content/agents.js (Vega's reports are keyed "design").
+function agentEntry(id, profileId, status) {
+  const { name, role } = AGENT_PROFILES[profileId];
+  return { id, name, role, status };
+}
+
 const AGENT_ROLE_MAP = {
-  echo: {
-    id: "echo",
-    name: "Echo",
-    role: "Mission Interpreter / Prompt Expansion Agent",
-    status: "Idea interpreted",
-    figure: "echo",
-  },
-    vega: {
-    id: "design",
-    name: "Vega",
-    role: "Creative Design, Morphology, and Concept Expansion",
-    status: "Design alternatives generated",
-    figure: "vega",
-  },
-    design: {
-    id: "design",
-    name: "Vega",
-    role: "Creative Design, Morphology, and Concept Expansion",
-    status: "Design alternatives generated",
-    figure: "vega",
-    colorName: "Bio-Cyber Teal",
-  },
-  reed_richards: {
-    id: "omni",
-    name: "Omni",
-    role: "Mission Orchestrator / Systems Intelligence",
-    status: "Mission synthesized",
-    figure: "omni",
-  },
-  omni: {
-    id: "omni",
-    name: "Omni",
-    role: "Mission Orchestrator / Systems Intelligence",
-    status: "Mission synthesized",
-    figure: "omni",
-  },
-  tony_stark: {
-    id: "sky",
-    name: "Sky",
-    role: "Robotics, ROS2, Drones, and Autonomy",
-    status: "Robotics report generated",
-    figure: "sky",
-  },
-  sky: {
-    id: "sky",
-    name: "Sky",
-    role: "Robotics, ROS2, Drones, and Autonomy",
-    status: "Robotics report generated",
-    figure: "sky",
-  },
-  shuri: {
-    id: "korva",
-    name: "Korva",
-    role: "Hardware, Electronics, Embedded Systems, and PCB",
-    status: "Hardware architecture generated",
-    figure: "korva",
-  },
-  korva: {
-    id: "korva",
-    name: "Korva",
-    role: "Hardware, Electronics, Embedded Systems, and PCB",
-    status: "Hardware architecture generated",
-    figure: "korva",
-  },
-  bruce_banner: {
-    id: "isy",
-    name: "Isy",
-    role: "Physics, Controls, Dynamics, and Feasibility",
-    status: "Physics analysis generated",
-    figure: "isy",
-  },
-  isy: {
-    id: "isy",
-    name: "Isy",
-    role: "Physics, Controls, Dynamics, and Feasibility",
-    status: "Physics analysis generated",
-    figure: "isy",
-  },
-  hank_pym: {
-    id: "oli",
-    name: "Oli",
-    role: "CAD, Fusion 360, 3D Concepts, and Visual Artifacts",
-    status: "Design report generated",
-    figure: "oli",
-  },
-  oli: {
-    id: "oli",
-    name: "Oli",
-    role: "CAD, Fusion 360, 3D Concepts, and Visual Artifacts",
-    status: "Design report generated",
-    figure: "oli",
-  },
-  ultron: {
-    id: "pluto",
-    name: "Pluto",
-    role: "Risk, Failure Analysis, and Safety Gates",
-    status: "Risk critique generated",
-    figure: "pluto",
-  },
-  pluto: {
-    id: "pluto",
-    name: "Pluto",
-    role: "Risk, Failure Analysis, and Safety Gates",
-    status: "Risk critique generated",
-    figure: "pluto",
-  },
-  vision: {
-    id: "qaz",
-    name: "QaZ",
-    role: "Validation, Scoring, and Requirements Verification",
-    status: "Validation complete",
-    figure: "qaz",
-  },
-  qaz: {
-    id: "qaz",
-    name: "QaZ",
-    role: "Validation, Scoring, and Requirements Verification",
-    status: "Validation complete",
-    figure: "qaz",
-  },
+  echo: agentEntry("echo", "echo", "Idea interpreted"),
+  vega: agentEntry("design", "vega", "Design alternatives generated"),
+  design: agentEntry("design", "vega", "Design alternatives generated"),
+  omni: agentEntry("omni", "omni", "Mission synthesized"),
+  sky: agentEntry("sky", "sky", "Robotics report generated"),
+  korva: agentEntry("korva", "korva", "Hardware architecture generated"),
+  isy: agentEntry("isy", "isy", "Physics analysis generated"),
+  oli: agentEntry("oli", "oli", "Design report generated"),
+  pluto: agentEntry("pluto", "pluto", "Risk critique generated"),
+  qaz: agentEntry("qaz", "qaz", "Validation complete"),
 };
+
+// Keys from the original agent naming, still present in older mission data.
+Object.assign(AGENT_ROLE_MAP, {
+  reed_richards: AGENT_ROLE_MAP.omni,
+  tony_stark: AGENT_ROLE_MAP.sky,
+  shuri: AGENT_ROLE_MAP.korva,
+  bruce_banner: AGENT_ROLE_MAP.isy,
+  hank_pym: AGENT_ROLE_MAP.oli,
+  ultron: AGENT_ROLE_MAP.pluto,
+  vision: AGENT_ROLE_MAP.qaz,
+});
 
 const FALLBACK_AGENTS = [
   AGENT_ROLE_MAP.echo,
@@ -374,8 +268,6 @@ function normalizeAgents(agents) {
         name: mapped?.name || replaceLegacyNames(agent.name) || "Unknown Agent",
         role: mapped?.role || agent.role || "Specialist Intelligence",
         status: agent.status || mapped?.status || "Report generated",
-        figure: mapped?.figure || agent.figure || "omni",
-        colorName: mapped?.colorName || agent.colorName || "Unknown",
         report: stringifyContent(agent.report || agent.content || agent.output || ""),
       };
     });
@@ -390,8 +282,6 @@ function normalizeAgents(agents) {
         name: mapped?.name || formatTitle(key),
         role: mapped?.role || "Specialist Intelligence",
         status: mapped?.status || "Report generated",
-        figure: mapped?.figure || key,
-        colorName: mapped?.colorName || "Unknown",
         report: stringifyContent(value),
       };
     });
@@ -757,46 +647,11 @@ function BuildVerificationCard({ exportResult }) {
   );
 }
 
-function AgentFigure({ type = "omni", small = false, hero = false, active = false }) {
-  const normalized = String(type || "omni").toLowerCase();
-  const size = hero ? "hero" : small ? "small" : "large";
-  const imageSrc = AGENT_IMAGE_MAP[normalized] || AGENT_IMAGE_MAP.omni;
-
+function HeaderTag({ agents, label }) {
   return (
-    <div
-      className={`agent-portrait-shell ${normalized} ${size} ${
-        active ? "active" : ""
-      }`}
-    >
-      <div className="agent-portrait-orbit" />
-      <img
-        className="agent-portrait-image"
-        src={imageSrc}
-        alt={`${normalized} agent`}
-        draggable="false"
-        loading="lazy"
-      />
-    </div>
-  );
-}
-
-function CommandAttentionAnimation() {
-  return (
-    <div className="command-animation-stage" aria-hidden="true">
-      <div className="command-grid-floor" />
-      <div className="command-scanline" />
-      <div className="command-core-pulse">
-        <span className="command-core-dot" />
-        <span className="command-core-ring ring-one" />
-        <span className="command-core-ring ring-two" />
-        <span className="command-core-ring ring-three" />
-      </div>
-      <div className="command-orbit orbit-one" />
-      <div className="command-orbit orbit-two" />
-      <div className="command-orbit orbit-three" />
-      <div className="command-data-rain rain-one" />
-      <div className="command-data-rain rain-two" />
-      <div className="command-data-rain rain-three" />
+    <div className="header-figure-card">
+      <span className="header-tag-agents">{agents}</span>
+      <span className="header-tag-label">{label}</span>
     </div>
   );
 }
@@ -829,10 +684,9 @@ function SystemTopBar({ activePage, missionResult, exportResult, loading, interp
   return (
     <div className="system-top-bar" role="banner" aria-label="OMNI system status">
       <div className="stb-left">
-        <span className="stb-brand-dot" aria-hidden="true" />
-        <span className="stb-brand">OMNI</span>
+        <a className="stb-brand" href="#/" aria-label="OMNI overview">OMNI</a>
         <span className="stb-sep" aria-hidden="true" />
-        <span className="stb-system">Command Center</span>
+        <span className="stb-system">Mission Console</span>
       </div>
 
       <div className="stb-center">
@@ -877,13 +731,13 @@ function BottomActionRail({ activePage, setActivePage, missionResult }) {
 function TopNav({ activePage, setActivePage, missionResult }) {
   return (
     <aside className="omni-sidebar">
-      <div className="brand-lockup">
-        <div className="brand-mark">◉</div>
+      <a className="brand-lockup" href="#/" title="Back to the OMNI overview">
+        <SnailMark size={44} className="brand-mark" decorative />
         <div>
           <h2>OMNI</h2>
-          <p>Engineering Command</p>
+          <p>Mission Console</p>
         </div>
-      </div>
+      </a>
 
       <nav className="page-nav">
         {PAGE_ITEMS.map((page) => (
@@ -916,7 +770,6 @@ function EchoPreview({ echoResult, setMission }) {
   return (
     <div className="echo-preview-card">
       <div className="echo-preview-header">
-        <AgentFigure type="echo" small active />
         <div>
           <p className="eyebrow">Echo Interpretation</p>
           <h2>{echoResult.mission_title || "Interpreted OMNI Mission"}</h2>
@@ -985,23 +838,13 @@ function CommandPage({
   return (
     <section className="page command-page">
       <div className="command-hero">
-        <CommandAttentionAnimation />
-        <div className="omni-red-glow" />
-
         <div className="command-copy">
-          <p className="eyebrow">Autonomous Engineering Command</p>
+          <SnailMark size={76} className="command-mark" decorative />
+          <p className="eyebrow">Mission Console</p>
           <h1>OMNI</h1>
           <p className="command-subtitle">
-            Give it a mission, or let Echo translate a rough idea into one.
+            Describe a complete mission, or let Echo shape a rough idea into one.
           </p>
-        </div>
-
-        <div className="command-signal-strip" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
         </div>
 
         <div className="mission-console">
@@ -1026,7 +869,7 @@ function CommandPage({
               <textarea
                 value={mission}
                 onChange={(event) => setMission(event.target.value)}
-                placeholder="Example: Design a ROS2-based robotic desk assistant with a Raspberry Pi, camera module, servo-mounted sensor head, IMU, productivity logging, Fusion 360 enclosure concept, risk matrix, and validation checklist."
+                placeholder="Example: Design a ROS 2 desk assistant with a Raspberry Pi, camera module, servo-mounted sensor head, and IMU. Include node architecture, a wiring plan, a Fusion 360 enclosure concept, a risk review, and a validation checklist."
               />
 
               <div className="console-actions">
@@ -1068,13 +911,13 @@ function CommandPage({
               <textarea
                 value={quickIdea}
                 onChange={(event) => setQuickIdea(event.target.value)}
-                placeholder="Yo Echo, I saw a tiny robot online that follows people around with a camera. I want to build something like that with ROS2 and Fusion 360."
+                placeholder="Describe the idea in plain language. For example: a small camera robot that follows a person, built with ROS 2 and Fusion 360."
               />
 
               <textarea
                 value={ideaContext}
                 onChange={(event) => setIdeaContext(event.target.value)}
-                placeholder="Optional context: parts I have, constraints, assignment details, screenshot notes, or what phase I want first."
+                placeholder="Optional context: available parts, constraints, deadlines, or which phase to start with."
               />
 
               <div className="console-actions">
@@ -1126,10 +969,7 @@ function ForgePage() {
           </p>
         </div>
 
-        <div className="header-figure-card">
-          <AgentFigure type="oli" small active />
-          <span>CAD Artifact System</span>
-        </div>
+        <HeaderTag agents="Oli" label="CAD artifact system" />
       </div>
 
       <OmniForgePanel />
@@ -1151,10 +991,7 @@ function SimulationPage() {
           </p>
         </div>
 
-        <div className="header-figure-card">
-          <AgentFigure type="sky" small active />
-          <span>ROS2 Status System</span>
-        </div>
+        <HeaderTag agents="Sky" label="ROS 2 status" />
       </div>
 
       <OmniSimulationPanel />
@@ -1177,10 +1014,7 @@ function VisionPage() {
           </p>
         </div>
 
-        <div className="dual-agent-card">
-          <AgentFigure type="vega" small active />
-          <AgentFigure type="qaz" small active />
-        </div>
+        <HeaderTag agents="Vega · QaZ" label="ML inference" />
       </div>
 
       <OmniVisionUploadPanel />
@@ -1202,10 +1036,7 @@ function BlueprintPage({ missionResult, exportResult }) {
           {missionResult.createdAt && <p>Created at: {missionResult.createdAt}</p>}
         </div>
 
-        <div className="header-figure-card">
-          <AgentFigure type="omni" small active />
-          <span>Blueprint Generated</span>
-        </div>
+        <HeaderTag agents="OMNI Core" label="Blueprint generated" />
       </div>
 
       {/* ── Operator Brief — quick cockpit summary ── */}
@@ -1261,30 +1092,25 @@ function AgentsPage({ missionResult }) {
     <section className="page agents-page-v2">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Agent Stack</p>
-          <h1>Specialist Intelligences</h1>
+          <p className="eyebrow">Agents</p>
+          <h1>Specialist agents</h1>
           <p>
-            Each intelligence owns a focused part of the mission and contributes
-            to the final OMNI blueprint.
+            Each agent owns a focused part of the mission and contributes to the
+            final OMNI blueprint.
           </p>
         </div>
       </div>
 
       <div className="agent-tab-layout">
         <div className="agent-tabs">
-          {agents.map((agent) => (
+          {agents.map((agent, index) => (
             <button
               key={agent.id}
-              className={`agent-tab ${agent.figure} ${
-                activeAgent?.id === agent.id ? "active" : ""
-              }`}
+              className={`agent-tab ${activeAgent?.id === agent.id ? "active" : ""}`}
+              aria-pressed={activeAgent?.id === agent.id}
               onClick={() => setActiveAgentId(agent.id)}
             >
-              <AgentFigure
-                type={agent.figure}
-                small
-                active={activeAgent?.id === agent.id}
-              />
+              <span className="agent-tab-index">{String(index + 1).padStart(2, "0")}</span>
               <div>
                 <h3>{agent.name}</h3>
                 <p>{agent.role}</p>
@@ -1293,20 +1119,14 @@ function AgentsPage({ missionResult }) {
           ))}
         </div>
 
-        <div className={`agent-detail-panel ${activeAgent.figure}`}>
+        <div className="agent-detail-panel">
           <div className="agent-detail-hero">
-            <AgentFigure
-              key={activeAgent.id}
-              type={activeAgent.figure}
-              hero
-              active
-            />
-            <div>
-              <p className="eyebrow">{activeAgent.colorName}</p>
-              <h2>{activeAgent.name}</h2>
-              <p>{activeAgent.role}</p>
-              <span className="status-pill">{activeAgent.status || "Ready"}</span>
-            </div>
+            <p className="eyebrow">
+              {activeAgent.id === "omni" ? "Orchestration" : "Specialist agent"}
+            </p>
+            <h2>{activeAgent.name}</h2>
+            <p>{activeAgent.role}</p>
+            <span className="status-pill">{activeAgent.status || "Ready"}</span>
           </div>
 
           <div className="agent-report">
@@ -1443,10 +1263,7 @@ function ValidationPage({ missionResult }) {
           </p>
         </div>
 
-        <div className="dual-agent-card">
-          <AgentFigure type="qaz" small active />
-          <AgentFigure type="pluto" small active />
-        </div>
+        <HeaderTag agents="QaZ · Pluto" label="Validation and review" />
       </div>
 
       <div className="validation-grid">
@@ -1607,7 +1424,7 @@ function MemoryPage({ missionResult }) {
           </p>
         </div>
 
-        <AgentFigure type="omni" small active />
+        <HeaderTag agents="OMNI Core" label="Mission memory" />
       </div>
 
       <div className="memory-grid">
@@ -1647,10 +1464,7 @@ function ReliabilityPage({ missionResult, exportResult }) {
           </p>
         </div>
 
-        <div className="dual-agent-card">
-          <AgentFigure type="qaz" small active />
-          <AgentFigure type="pluto" small active />
-        </div>
+        <HeaderTag agents="QaZ · Pluto" label="Reliability review" />
       </div>
 
       <OmniReliabilityPanel
@@ -2081,7 +1895,7 @@ function EmptyPage({ title, message }) {
   return (
     <section className="page empty-page">
       <div className="empty-card">
-        <AgentFigure type="omni" hero active />
+        <SnailMark size={96} className="empty-mark" decorative />
         <p className="eyebrow">{title}</p>
         <h1>No mission data yet</h1>
         <p>{message}</p>
@@ -2117,6 +1931,7 @@ function LoadingOverlay({
 }
 
 function App() {
+  const [view, setView] = useState(readViewFromHash);
   const [activePage, setActivePage] = useState("command");
 
   const [commandMode, setCommandMode] = useState("mission");
@@ -2134,10 +1949,30 @@ function App() {
   const [error, setError] = useState("");
   const [loadingJoke, setLoadingJoke] = useState(getLocalMorbidJoke());
 
-  // ── Space background ──────────────────────────────────────────────
+  // ── Overview / console routing (hash-based; no router dependency) ──
   useEffect(() => {
-    return initSpaceBg();
+    const syncView = () => setView(readViewFromHash());
+    window.addEventListener("hashchange", syncView);
+    return () => window.removeEventListener("hashchange", syncView);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.omniView = view;
+
+    // Honor section anchors (e.g. #capabilities) on the overview; otherwise
+    // start each view at the top.
+    const { hash } = window.location;
+    const section =
+      view === "home" && hash.length > 1 && !hash.startsWith("#/")
+        ? document.getElementById(hash.slice(1))
+        : null;
+
+    if (section) {
+      section.scrollIntoView();
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [view]);
 
   const pageTitle = useMemo(() => {
     return PAGE_ITEMS.find((page) => page.id === activePage)?.label || "Command";
@@ -2331,15 +2166,12 @@ function App() {
     }
   };
 
+  if (view === "home") {
+    return <PublicHome />;
+  }
+
   return (
     <>
-      {/* Space background layers — rendered behind everything */}
-      <canvas id="space-canvas" />
-      <div className="space-grid" />
-      <div className="space-scanline" />
-      <div className="space-scanline" />
-      <div className="space-scanline" />
-
       <div className="omni-hud-shell">
         <SystemTopBar
           activePage={activePage}

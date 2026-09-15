@@ -1,7 +1,12 @@
 :root {
-  font-family: Arial, sans-serif;
-  color: #f5f3ff;
-  background-color: #050816;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #f2f3f5;
+  background-color: #0b0c0f;
+}
+
+html,
+body {
+  background-color: #0b0c0f;
 }
 
 html,
@@ -10,9 +15,4 @@ body,
   margin: 0;
   min-width: 100%;
   min-height: 100%;
-  background-color: #050816;
-}
-
-body {
-  margin: 0;
 }

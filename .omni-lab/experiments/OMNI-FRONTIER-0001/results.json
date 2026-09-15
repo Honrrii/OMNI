@@ -1,0 +1,52 @@
+{
+  "experiment_id": "OMNI-FRONTIER-0001",
+  "title": "Mock shift: The Frontier Research orchestrator's `conclusion_state` for a research thread (CONFIRMED",
+  "hypothesis": "The Frontier Research orchestrator's `conclusion_state` for a research thread (CONFIRMED/REFUTED/SUPPORTED/etc.) is determined solely from a regex match against Claude's own free-text CONCLUDE-stage message, while Codex's independent EXPERIMENT_REVIEW-stage `REVIEW_FINDING` \u2014 the one place the protocol's \"another agent's verdict is not evidence\" / no-self-certification principle is supposed to bite for research conclusions \u2014 is recorded into the thread and archive but never read, compared, or allowed to veto/alter that conclusion_state. `ensure_multi_agent_participation` only checks that Codex *spoke somewhere* on the thread, not that its review content agrees with, or was incorporated into, the recorded verdict. This means a thread can reach a \"dual-agent-verified\" CONFIRMED/SUPPORTED conclusion even if Codex's real, independently-generated review explicitly disagreed with it \u2014 and nothing in the current code path would notice or stop that.",
+  "scoring": {
+    "omni_alignment": 3,
+    "potential_impact": 3,
+    "information_gain": 3,
+    "generalizability": 2,
+    "novelty": 2,
+    "experimentalability": 3,
+    "risk": 1,
+    "implementation_cost": 2
+  },
+  "created_at": "2026-09-05T22:51:59Z",
+  "mechanism": "`omni/frontier/orchestrator.py`'s `_record_conclusion` (line 530) calls `_extract_conclusion_state(message)` (line 98), which only regex-searches the CONCLUDE-stage `FrontierMessage.claim` \u2014 and that stage is only ever run by `self.claude` (`run_mock_shift`, line 656-657; STAGE_CONCLUDE never runs on `self.codex`). Codex's prior EXPERIMENT_REVIEW turn produces a `REVIEW_FINDING` message that gets appended to `thread_messages`/`messages.jsonl` for provenance, but `_record_experiment_review` (line 527-528) is a documented no-op (\"procedural only in Phase 2B\") \u2014 its content is never parsed, diffed against Claude's eventual verdict, or fed into `finalize_experiment_conclusion`. The only cross-agent guard, `ensure_multi_agent_participation` (line 189), checks `from_agent` set membership only \u2014 Codex having sent *any* message on the thread satisfies it, regardless of what that message said. In the current mock system this gap is invisible because `MockClaudeAdapter`'s CONCLUDE text and `MockCodexAdapter`'s EXPERIMENT_REVIEW text are both hardcoded to agree on \"PROMISING_UNPROVEN\" (agents.py:318-324 vs 430-436) \u2014 they agree because they share a scripted assumption, not because anything checks agreement. The uncommitted `run-dual-live-shift` work on this branch (scripts/omni_frontier_lab.py, tests/test_frontier_dual_live_wiring.py) is the first place two *independently real* models could occupy these two roles simultaneously, which is exactly when a genuine disagreement becomes possible for the first time \u2014 and the code path that would need to notice it does not exist.",
+  "competing_hypotheses": [
+    "The primary failure mode may not be that Codex's EXPERIMENT_REVIEW verdict was accidentally omitted from a supposed veto path. A stronger competing explanation is that the current Frontier Lab protocol has no structured concept of multi-agent epistemic agreement at all: `REVIEW_FINDING` is intentionally procedural, while `conclusion_state` is a single-author, prose-derived field produced from Claude's final CONCLUSION message. Under this counter-hypothesis, a disagreeing Codex review is only one symptom. The same mechanism can misrecord a conclusion even without cross-agent disagreement, for example when Claude's prose negates or contrasts conclusion-state words."
+  ],
+  "predicted_evidence": [
+    "omni/frontier/orchestrator.py:98-109 (_extract_conclusion_state reads only message.claim via regex)",
+    "omni/frontier/orchestrator.py:527-528 (_record_experiment_review is a no-op)",
+    "omni/frontier/orchestrator.py:656-657 (STAGE_CONCLUDE is only ever run by self.claude in run_mock_shift)",
+    "omni/frontier/orchestrator.py:189-207 (ensure_multi_agent_participation checks from_agent presence only, not content)",
+    "omni/frontier/agents.py:312-331 (MockClaudeAdapter CONCLUDE claim hardcoded to PROMISING_UNPROVEN)",
+    "omni/frontier/agents.py:423-440 (MockCodexAdapter EXPERIMENT_REVIEW claim also hardcoded to recommend PROMISING_UNPROVEN)",
+    "tests/test_frontier_dual_live_wiring.py:339-347 (test_validated_conclusion_state_survives_into_durable_archive exercises this exact path with two independently-scripted fake runners that happen to agree, and asserts on the resulting conclusion_state without ever constructing a disagreeing-Codex scenario)",
+    "grep across tests/test_frontier_orchestrator.py and tests/test_frontier_dual_live_wiring.py for disagree|override|refut|contradict returned no matches \u2014 no existing test constructs a Codex-disagrees-with-Claude's-verdict case",
+    "omni/frontier/experiments.py:31-38 \u2014 CONCLUSION_STATES = (CONFIRMED, REFUTED, SUPPORTED, PROMISING_UNPROVEN, INCONCLUSIVE, BLOCKED_BY_REQUIRED_EVIDENCE), confirmed by direct Read.",
+    "omni/frontier/orchestrator.py:82-109 \u2014 _CONCLUSION_STATE_TOKEN_PATTERN built as \\b(?:CONFIRMED|REFUTED|...)\\b and _extract_conclusion_state uses pattern.search(message.claim); the surrounding comment explicitly states 'alternation order does not affect which match wins because re.search always returns the leftmost match position' and explicitly anticipates prose that 'may mention other states only contrastively later' \u2014 this is a documented, acknowledged tradeoff in the source itself, not a hidden bug the author was unaware of.",
+    "Static trace (not executed, due to this turn's read-only/approval-gated tool boundary): for the literal string 'Not CONFIRMED; actually REFUTED.', the substring 'CONFIRMED' begins at index 4 and 'REFUTED' begins at index ~24; re.search returns the match at the lower index, i.e. 'CONFIRMED', regardless of CONFIRMED/REFUTED's relative order inside the alternation. This independently reproduces the specific claim in Codex's evidence list without treating Codex's stated tool output as ground truth.",
+    "tests/test_frontier_dual_live_wiring.py:65-158 \u2014 _StageRoundAwareClaudeRunner and _StageRoundAwareCodexRunner are real, already-committed-shape fakes (read via this turn's Read tool) that branch on stage/round from the trusted prompt/stdin envelope and are minimally overridable to inject arbitrary claim text per stage, making Case A/B constructible without inventing new test infrastructure.",
+    "tests/test_frontier_dual_live_wiring.py:189-226 \u2014 test_dual_real_shaped_adapters_run_through_canonical_stage_machine already proves the full stage sequence (HYPOTHESIS...REVIEW_FINDING, EXPERIMENT_RESULT, REVIEW_FINDING, CONCLUSION) runs end-to-end through real-shaped adapters and reaches ARCHIVED, giving a template to adapt rather than build fresh.",
+    "My attempt to execute python3 -c against the live CONCLUSION_STATES/regex in this repo was blocked by a tool-approval gate with no user present to grant it in this automated turn, so the full end-to-end pipeline run (Case A/B) remains unexecuted pending a write/execute-capable follow-up turn."
+  ],
+  "experiment_plan": "Codex's broader counter-hypothesis is better supported than my original narrower one, and I can now partially confirm one of its two predicted cases by static trace rather than by trusting Codex's stated output: with `CONCLUSION_STATES = (CONFIRMED, REFUTED, SUPPORTED, PROMISING_UNPROVEN, INCONCLUSIVE, BLOCKED_BY_REQUIRED_EVIDENCE)` and `_CONCLUSION_STATE_TOKEN_PATTERN` built as a single `\\b(...)\\b` alternation searched with `re.search` (leftmost-position match, not leftmost-alternative), the string `\\\"Not CONFIRMED; actually REFUTED.\\\"` deterministically extracts `CONFIRMED` \u2014 because `CONFIRMED` occurs at an earlier character offset than `REFUTED` in that string, independent of tuple order. This confirms the mechanism is a purely positional prose-parsing artifact, reproducible with zero cross-agent disagreement, which is exactly Codex's claim that the flaw is broader than a missing Codex-veto path. The next step is to run Codex's two proposed cases end-to-end through the real orchestrator/adapter machinery (not just the isolated regex) to confirm neither `ensure_multi_agent_participation`, `SelfCertificationError`, nor any other guard intervenes before archival in either case.",
+  "safety_notes": [],
+  "participants": [
+    "claude",
+    "codex"
+  ],
+  "status": "COMPLETE",
+  "conclusion_state": "BLOCKED_BY_REQUIRED_EVIDENCE",
+  "evidence": [],
+  "counterevidence": [],
+  "limitations": [
+    "Shift did not reach CONCLUSION; see remaining_uncertainty for why."
+  ],
+  "remaining_uncertainty": "message content matched safety trigger 'force push'",
+  "recommended_next_action": "Re-run the shift, or escalate to a human, per the recorded stop reason.",
+  "protocol_version": "0.1"
+}
