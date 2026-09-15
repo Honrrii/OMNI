@@ -99,6 +99,8 @@ class ResearchTurnContext:
     thread_messages: tuple[FrontierMessage, ...]
     experiment_snapshot: FrontierExperiment | None
     config: FrontierLabConfig
+    mission_text: str | None = None
+    mission_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if self.stage not in STAGES:

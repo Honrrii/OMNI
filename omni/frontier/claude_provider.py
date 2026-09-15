@@ -93,6 +93,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
+from omni.frontier.mission import mission_prompt_lines
 from omni.frontier.agents import (
     ALLOWED_CONTROL_REQUESTS,
     FAILURE_KIND_INFRASTRUCTURE,
@@ -242,6 +243,7 @@ def build_user_prompt(context: ResearchTurnContext) -> str:
     lines = [
         f"/{OMNI_FRONTIER_ARCHITECT_SKILL}",
         "",
+        *mission_prompt_lines(context.mission_text, context.mission_sha256),
         _STAGE_TASK_DESCRIPTIONS.get(context.stage, "Perform this Frontier Research turn."),
         "",
         f"Expected message_type for this turn: one of {expected}.",

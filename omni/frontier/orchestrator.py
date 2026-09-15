@@ -56,6 +56,7 @@ from omni.frontier.agents import (
 from omni.frontier.config import FrontierLabConfig, MOCK_SHIFT_SCORE
 from omni.frontier.events import EventLog, FrontierEvent
 from omni.frontier.experiments import CONCLUSION_STATES, FrontierExperiment, to_json as experiment_to_json
+from omni.frontier.mission import ResearchMission
 from omni.frontier.mailbox import Mailbox, MailboxItem, MailboxRejectionError
 from omni.frontier.protocol import FrontierMessage, to_dict as message_to_dict, validate_thread_id
 
@@ -292,7 +293,9 @@ class ShiftOrchestrator:
         lab_root: Path,
         clock: Callable[[], str] | None = None,
         preflight: Callable[[], PreflightResult] | None = None,
+        mission: ResearchMission | None = None,
     ):
+        self._mission = mission
         self.config = config
         self.claude = claude
         self.codex = codex
@@ -314,6 +317,18 @@ class ShiftOrchestrator:
         self.rounds_completed = 0
         self._stopped = False
         self._stop_reason = ""
+
+    @property
+    def mission_text(self) -> str | None:
+        return self._mission.text if self._mission is not None else None
+
+    @property
+    def mission_sha256(self) -> str | None:
+        return self._mission.sha256 if self._mission is not None else None
+
+    @property
+    def mission_bytes(self) -> int | None:
+        return self._mission.byte_length if self._mission is not None else None
 
     # -- logging / state -----------------------------------------------
 
@@ -368,6 +383,8 @@ class ShiftOrchestrator:
             thread_messages=tuple(self.thread_messages),
             experiment_snapshot=dataclasses.replace(self.experiment) if self.experiment else None,
             config=self.config,
+            mission_text=self.mission_text,
+            mission_sha256=self.mission_sha256,
         )
 
     def _accept_message(self, agent_id: str, message: FrontierMessage) -> MailboxItem:
@@ -576,7 +593,10 @@ class ShiftOrchestrator:
         """
         self.thread_id = validate_thread_id(thread_id or allocate_thread_id(self.lab_root))
 
-        self._log("SHIFT_STARTED", actor="orchestrator", detail=f"lab_root={self.lab_root}")
+        self._log(
+            "SHIFT_STARTED", actor="orchestrator", detail=f"lab_root={self.lab_root}",
+            context={"mission_sha256": self.mission_sha256} if self._mission is not None else None,
+        )
         self._transition(state.SHIFT_STARTING)
 
         if self._preflight is not None:
@@ -761,6 +781,17 @@ class ShiftOrchestrator:
         (archive_dir / "evidence").mkdir(parents=True, exist_ok=True)
         runtime_dir.mkdir(parents=True, exist_ok=True)
 
+        if self._mission is not None:
+            (archive_dir / "mission.md").write_bytes(self._mission.data)
+            manifest = {
+                "sha256": self.mission_sha256,
+                "bytes": self.mission_bytes,
+                "source": "human_supplied",
+            }
+            (archive_dir / "mission_manifest.json").write_text(
+                json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+            )
+
         messages_jsonl = "".join(json.dumps(message_to_dict(m)) + "\n" for m in self.thread_messages)
         (archive_dir / "messages.jsonl").write_text(messages_jsonl, encoding="utf-8")
 
@@ -789,6 +820,8 @@ class ShiftOrchestrator:
             "stop_reason": self._stop_reason,
             "mock": self._preflight is None,
         }
+        if self._mission is not None:
+            state_payload["mission_sha256"] = self.mission_sha256
         (runtime_dir / "state.json").write_text(json.dumps(state_payload, indent=2) + "\n", encoding="utf-8")
 
         mailbox_jsonl = "".join(

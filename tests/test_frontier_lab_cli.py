@@ -77,7 +77,7 @@ def test_cli_never_imports_a_provider_sdk_or_subprocess():
 
 def test_run_dual_live_shift_is_a_registered_command():
     parser = cli.build_parser()
-    args = parser.parse_args(["run-dual-live-shift"])
+    args = parser.parse_args(["run-dual-live-shift", "--mission-file", "mission.md"])
     assert args.command == "run-dual-live-shift"
     assert args.claude_executable == "claude"
     assert args.codex_executable == "codex"
@@ -90,6 +90,7 @@ def test_run_dual_live_shift_accepts_thread_id_and_output_root():
     args = parser.parse_args(
         [
             "run-dual-live-shift",
+            "--mission-file", "mission.md",
             "--thread-id",
             "OMNI-FRONTIER-0099",
             "--output-root",

@@ -36,8 +36,8 @@ Usage:
     python3 scripts/omni_frontier_lab.py show-state --thread-id OMNI-FRONTIER-0001
     python3 scripts/omni_frontier_lab.py run-claude-shift
     python3 scripts/omni_frontier_lab.py run-claude-shift --dry-run
-    python3 scripts/omni_frontier_lab.py run-dual-live-shift
-    python3 scripts/omni_frontier_lab.py run-dual-live-shift --dry-run
+    python3 scripts/omni_frontier_lab.py run-dual-live-shift --mission-file mission.md
+    python3 scripts/omni_frontier_lab.py run-dual-live-shift --mission-file mission.md --dry-run
 """
 from __future__ import annotations
 
@@ -60,6 +60,7 @@ from omni.frontier.config import (
     PROVIDER_MODE_CLAUDE_LIVE,
     PROVIDER_MODE_CODEX_LIVE,
 )
+from omni.frontier.mission import MissionValidationError, load_mission
 from omni.frontier.orchestrator import PreflightResult, ShiftOrchestrator, ShiftReport
 
 MOCK_BANNER = (
@@ -233,6 +234,7 @@ def run_run_claude_shift(args: argparse.Namespace) -> int:
 
 
 def _run_dual_live_shift(args: argparse.Namespace, lab_root: Path) -> ShiftReport:
+    mission = load_mission(args.mission_file)
     claude_provider_config = ClaudeProviderConfig(
         provider_mode=PROVIDER_MODE_CLAUDE_LIVE,
         claude_executable=args.claude_executable,
@@ -257,6 +259,7 @@ def _run_dual_live_shift(args: argparse.Namespace, lab_root: Path) -> ShiftRepor
         codex=codex_adapter,
         lab_root=lab_root,
         preflight=preflight,
+        mission=mission,
     )
     report = orchestrator.run_mock_shift(thread_id=args.thread_id)
     print(render_shift_report(report, banner=None))
@@ -393,6 +396,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_dual_live_shift.add_argument(
+        "--mission-file", required=True, type=Path,
+        help="Human research mission: a non-empty UTF-8 regular file, at most 128 KiB.",
+    )
+    run_dual_live_shift.add_argument(
         "--thread-id",
         default=None,
         help="Explicit thread ID (e.g. OMNI-FRONTIER-0001). Default: allocate the next unused one.",
@@ -448,7 +455,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run-claude-shift":
         return run_run_claude_shift(args)
     if args.command == "run-dual-live-shift":
-        return run_run_dual_live_shift(args)
+        try:
+            return run_run_dual_live_shift(args)
+        except MissionValidationError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
 
     parser.print_help()
     return 0

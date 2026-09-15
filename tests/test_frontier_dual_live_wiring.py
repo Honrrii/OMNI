@@ -159,7 +159,7 @@ class _StageRoundAwareCodexRunner:
 
 
 def _dual_live_orchestrator(
-    tmp_path, *, claude_runner=None, codex_runner=None, **config_overrides
+    tmp_path, *, claude_runner=None, codex_runner=None, mission=None, **config_overrides
 ) -> tuple[ShiftOrchestrator, ClaudeCodeAdapter, CodexAdapter]:
     claude_adapter = ClaudeCodeAdapter(
         config=ClaudeProviderConfig(provider_mode=PROVIDER_MODE_CLAUDE_LIVE),
@@ -173,6 +173,7 @@ def _dual_live_orchestrator(
     )
     orchestrator = ShiftOrchestrator(
         config=FrontierLabConfig(**config_overrides),
+        mission=mission,
         claude=claude_adapter,
         codex=codex_adapter,
         lab_root=tmp_path / ".omni-lab",
