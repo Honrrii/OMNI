@@ -114,7 +114,9 @@ def run_isolated(
             if len(events) != 2 or type(events[1].get("exit-code")) is not int or events[1]["exit-code"] != result.returncode:
                 raise ValueError("sandbox did not report successful setup/exec")
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise CollectionError("unverified Bubblewrap setup/exec") from exc
+        raise CollectionError(
+            f"unverified Bubblewrap setup/exec: {type(exc).__name__}: {exc}"
+        ) from exc
     outcome = "timeout" if result.timed_out else "error" if result.output_limit_exceeded else "completed"
     code = result.returncode if outcome == "completed" else None
     return ObservedCommand(command.argv, code, outcome, elapsed, str(evidence_path.relative_to(bundle)))
