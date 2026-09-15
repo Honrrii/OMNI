@@ -24,10 +24,13 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install Bubblewrap
+      - name: Install and authorize Bubblewrap
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y \
+            bubblewrap \
+            apparmor-profiles \
+            apparmor-utils
 
           echo "Bubblewrap path:"
           command -v bwrap
@@ -35,14 +38,39 @@ jobs:
           echo "Bubblewrap version:"
           bwrap --version
 
+          echo "AppArmor user namespace setting:"
+          sysctl kernel.apparmor_restrict_unprivileged_userns || true
+
+          PROFILE="/usr/share/apparmor/extra-profiles/bwrap-userns-restrict"
+
+          if [ ! -f "$PROFILE" ]; then
+            echo "Required Bubblewrap AppArmor profile not found:"
+            echo "$PROFILE"
+            exit 1
+          fi
+
+          sudo install -m 0644 \
+            "$PROFILE" \
+            /etc/apparmor.d/bwrap-userns-restrict
+
+          sudo apparmor_parser -r \
+            /etc/apparmor.d/bwrap-userns-restrict
+
+          echo "Bubblewrap AppArmor profile loaded."
+
       - name: Verify Bubblewrap isolation
         run: |
           bwrap \
             --ro-bind / / \
             --proc /proc \
             --dev /dev \
+            --unshare-user \
+            --unshare-pid \
+            --unshare-ipc \
             --unshare-net \
             /bin/true
+
+          echo "Bubblewrap namespace isolation verified."
 
       - name: Create trusted CI virtualenv
         run: |
