@@ -15,21 +15,30 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
+      - name: Create trusted CI virtualenv
+        run: |
+          python -m venv "$RUNNER_TEMP/omni-ci-venv"
+          "$RUNNER_TEMP/omni-ci-venv/bin/python" -m pip install --upgrade pip
+
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
           # Do not install root requirements.txt here. That file can contain
-          # local ROS2/system packages from a developer machine, such as
+          # local ROS 2/system packages from a developer machine, such as
           # ackermann-msgs and rclpy, which are not installable from PyPI on
-          # GitHub-hosted runners. OMNI CI installs only the Python packages
-          # needed by the curated tests/ suite.
-          python -m pip install \
+          # GitHub-hosted runners.
+          #
+          # OMNI CI installs only the Python packages required by the curated
+          # tests/ suite.
+          "$RUNNER_TEMP/omni-ci-venv/bin/python" -m pip install \
             pytest \
             fastapi \
             uvicorn \
@@ -47,15 +56,37 @@ jobs:
             python-dateutil \
             ezdxf
 
-      # Collection scope (the curated tests/ suite only; never knowledge/ or
-      # outputs/) comes from pytest.ini (testpaths + norecursedirs). The
-      # autoload flag only shields the run from globally installed pytest
-      # plugins (e.g. ROS2). pytest exiting 5 (zero tests collected) fails
-      # this step: a run that tests nothing must not score as a pass.
+      - name: Verify trusted runtime and Git fixtures
+        run: |
+          "$RUNNER_TEMP/omni-ci-venv/bin/python" - <<'PY'
+          import sys
+          from pathlib import Path
+
+          print("Python executable:", sys.executable)
+          print("Virtualenv prefix:", sys.prefix)
+          print("Base prefix:", sys.base_prefix)
+
+          assert sys.prefix != sys.base_prefix, \
+              "CI Python is not running inside a virtualenv"
+
+          assert Path(sys.executable).exists(), \
+              "CI Python executable does not exist"
+          PY
+
+          git rev-parse refs/tags/testcube-v1
+
+      # Collection scope is the curated tests/ suite only.
+      # pytest.ini defines testpaths and norecursedirs.
+      #
+      # PYTEST_DISABLE_PLUGIN_AUTOLOAD prevents globally installed plugins,
+      # including ROS 2 pytest plugins, from interfering with collection.
+      #
+      # A pytest exit code of 5 (no tests collected) remains a failure.
       - name: Run Python tests
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
-        run: python -m pytest tests
+        run: |
+          "$RUNNER_TEMP/omni-ci-venv/bin/python" -m pytest tests
 
   frontend-build:
     name: Frontend Build
