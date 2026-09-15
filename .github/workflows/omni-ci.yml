@@ -24,6 +24,26 @@ jobs:
         with:
           python-version: "3.10"
 
+            - name: Install Bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+
+          echo "Bubblewrap path:"
+          command -v bwrap
+
+          echo "Bubblewrap version:"
+          bwrap --version
+
+      - name: Verify Bubblewrap isolation
+        run: |
+          bwrap \
+            --ro-bind / / \
+            --proc /proc \
+            --dev /dev \
+            --unshare-net \
+            /bin/true
+
       - name: Create trusted CI virtualenv
         run: |
           python -m venv "$RUNNER_TEMP/omni-ci-venv"
