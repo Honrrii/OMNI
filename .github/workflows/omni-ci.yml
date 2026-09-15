@@ -104,15 +104,24 @@ jobs:
             python-dateutil \
             ezdxf
 
+      - name: Install CPU PyTorch for OMNITorch
+        run: |
+          "$RUNNER_TEMP/omni-ci-venv/bin/python" -m pip install \
+            torch \
+            --index-url https://download.pytorch.org/whl/cpu
+
       - name: Verify trusted runtime and Git fixtures
         run: |
           "$RUNNER_TEMP/omni-ci-venv/bin/python" - <<'PY'
           import sys
           from pathlib import Path
+          import torch
 
           print("Python executable:", sys.executable)
           print("Virtualenv prefix:", sys.prefix)
           print("Base prefix:", sys.base_prefix)
+          print("PyTorch version:", torch.__version__)
+          print("CUDA available:", torch.cuda.is_available())
 
           assert sys.prefix != sys.base_prefix, \
               "CI Python is not running inside a virtualenv"
