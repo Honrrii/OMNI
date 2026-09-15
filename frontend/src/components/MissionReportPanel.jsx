@@ -51,9 +51,6 @@ export default function MissionReportPanel({ exportResult }) {
           </p>
         </div>
 
-        <div className="mission-report-status-pill">
-          {report.status || "generated"}
-        </div>
       </div>
 
       <div className="mission-report-summary-grid">

@@ -114,7 +114,7 @@ export const CAPABILITIES_SECTION = {
       title: "Machine learning",
       status: "experimental",
       summary:
-        "OMNITorch wraps PyTorch models behind a stable inference API. Today it serves a demonstration image classifier.",
+        "OMNITorch preserves uploaded images, builds dataset snapshots, and runs explicit CPU classification experiments with checkpoint evaluation and inference. Engineering-specific models remain future work.",
     },
     {
       title: "Software evolution",

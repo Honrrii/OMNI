@@ -20,6 +20,7 @@ from backend.app.omni_core.omni_forge_service import (
 )
 from backend.app.ros.ros_status_service import get_ros_status
 from backend.app.api.ml_routes import router as ml_router
+from backend.app.api.ml_lab_routes import router as ml_lab_router
 from backend.app.api.reliability_routes import router as reliability_router
 from backend.app.api.visual_bay_routes import router as visual_bay_router
 
@@ -29,6 +30,7 @@ app = FastAPI(title="OMNI Command API")
 app.include_router(reliability_router, prefix="/api/reliability", tags=["reliability"])
 
 app.include_router(ml_router, prefix="/api/ml", tags=["ml"])
+app.include_router(ml_lab_router, prefix="/api/ml/v2", tags=["omnitorch-learning"])
 
 app.include_router(visual_bay_router, prefix="/api/visual-bay", tags=["visual-bay"])
 

@@ -8,16 +8,6 @@ import {
 const DEFAULT_FORGE_PROMPT =
   "Design a printable Raspberry Pi camera mount for monitoring my 3D printer. It should be PLA, screw-mounted, angled downward 25 degrees, and include a safety/fabrication review. Do not start any print.";
 
-function StatusBadge({ status }) {
-  const cleanStatus = status || "idle";
-
-  return (
-    <span className={`forge-badge forge-badge-${cleanStatus}`}>
-      {cleanStatus}
-    </span>
-  );
-}
-
 function Section({ title, children }) {
   return (
     <section className="forge-section">
@@ -126,17 +116,11 @@ export default function OmniForgePanel() {
           </p>
         </div>
 
-        <StatusBadge
-          status={
-            executionResult?.status ||
-            cadScriptResult?.status ||
-            forgeResult?.status ||
-            "idle"
-          }
-        />
       </div>
 
+      <label className="field-label" htmlFor="forge-mission">Workshop brief</label>
       <textarea
+        id="forge-mission"
         className="forge-textarea"
         value={mission}
         onChange={(event) => setMission(event.target.value)}

@@ -976,3 +976,13 @@ html[data-omni-view="home"] body {
     padding: 26px 22px 28px;
   }
 }
+
+/* Quiet interaction across the public overview and laboratory. */
+.site :is(.site-capability, .site-agent) { transition: background-color 180ms ease; }
+.site :is(.site-capability, .site-agent):hover { background-color: rgb(128 134 144 / 5%); }
+.site-capability p, .site-agent-summary { line-height: 1.8; }
+.site-nav a { padding-block: 12px; text-underline-offset: 6px; }
+.site-nav a:hover { text-decoration: underline; }
+.site-skip { position: fixed; top: -80px; left: 16px; z-index: 500; background: #eef0f2; color: #121317; padding: 12px 20px; }
+.site-skip:focus { top: 8px; }
+@media (prefers-reduced-motion: reduce) { .site :is(.site-capability, .site-agent) { transition: none; } }

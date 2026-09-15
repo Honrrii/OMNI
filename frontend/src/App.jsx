@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback, lazy, Suspense } from "react";
 import "./styles/omni-design-system.css";
 import "./App.css";
 import PublicHome from "./site/PublicHome.jsx";
@@ -14,7 +14,8 @@ import VisualBayPanel from "./components/VisualBayPanel.jsx";
 import ConceptDossierPanel from "./components/ConceptDossierPanel.jsx";
 import HenryEngineLoader from "./components/HenryEngineLoader.jsx";
 import OperatorBriefPanel from "./components/OperatorBriefPanel.jsx";
-import OmniVisionUploadPanel from "./components/OmniVisionUploadPanel";
+import { PAGE_ITEMS, SystemTopBar, TopNav, BottomActionRail } from "./components/ConsoleNavigation.jsx";
+const OmniTorchWorkspace = lazy(() => import("./components/OmniTorchWorkspace.jsx"));
 import OmniReliabilityPanel from "./components/OmniReliabilityPanel.jsx";
 
 import OmniForgePanel from "./components/OmniForgePanel";
@@ -29,23 +30,14 @@ const INTERPRET_AND_RUN_API_URL =
 // The public overview is the default view; the mission console lives at #/console.
 const CONSOLE_HASH = "#/console";
 
+function readPageFromHash() {
+  const page = window.location.hash.split("/")[2];
+  return PAGE_ITEMS.some(item => item.id === page) ? page : "command";
+}
+
 function readViewFromHash() {
   return window.location.hash.startsWith(CONSOLE_HASH) ? "console" : "home";
 }
-
-const JOKE_API_URL =
-  "https://v2.jokeapi.dev/joke/Dark,Pun?blacklistFlags=nsfw,religious,political,racist,sexist,explicit&type=single&lang=en";
-
-const MORBID_LOADING_JOKES = [
-  "Level 1: I asked my code for stability. It opened a support ticket with my therapist.",
-  "Level 2: My deadline smiled at me today. That's how I knew it had teeth.",
-  "Level 3: I told my laptop we were in this together. The fan started laughing in binary.",
-  "Level 4: I asked life for a sign. It gave me a check engine light and lower back pain.",
-  "Level 5: OMNI checked the risk matrix and quietly added my sleep schedule as a known vulnerability.",
-  "Level 6: The build failed so dramatically that even the compiler asked for a moment of silence.",
-  "Level 7: My ambitions are scalable. Unfortunately, so are the consequences.",
-  "Level 8: The robots are not replacing me yet. They're just watching me debug for training data.",
-];
 
 const DEFAULT_TIMELINE = [
   {
@@ -68,20 +60,6 @@ const DEFAULT_TIMELINE = [
     title: "Artifacts Generated",
     description: "The final response was organized into mission artifacts.",
   },
-];
-
-const PAGE_ITEMS = [
-  { id: "command", label: "Command" },
-  { id: "forge", label: "Forge" },
-  { id: "simulation", label: "Simulation" },
-  { id: "vision", label: "Vision" },
-  { id: "blueprint", label: "Blueprint" },
-  { id: "agents", label: "Agents" },
-  { id: "artifacts", label: "Artifacts" },
-  { id: "validation", label: "Validation" },
-  { id: "reliability", label: "Reliability" },
-  { id: "knowledge", label: "Knowledge" },
-  { id: "memory", label: "Memory" },
 ];
 
 // id is the key the console uses for reports; profileId selects the shared
@@ -126,40 +104,6 @@ const FALLBACK_AGENTS = [
   AGENT_ROLE_MAP.pluto,
   AGENT_ROLE_MAP.qaz,
 ];
-
-function getLocalMorbidJoke() {
-  const randomIndex = Math.floor(Math.random() * MORBID_LOADING_JOKES.length);
-  return MORBID_LOADING_JOKES[randomIndex];
-}
-
-async function fetchMorbidLoadingJoke() {
-  try {
-    const response = await fetch(JOKE_API_URL);
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-
-    if (data?.error) {
-      return null;
-    }
-
-    if (data?.type === "single" && data?.joke) {
-      return data.joke;
-    }
-
-    if (data?.setup && data?.delivery) {
-      return `${data.setup} ${data.delivery}`;
-    }
-
-    return null;
-  } catch (error) {
-    console.warn("Could not fetch online loading joke. Using local fallback.", error);
-    return null;
-  }
-}
 
 function formatTitle(text) {
   if (!text) return "Generated Artifact";
@@ -656,114 +600,6 @@ function HeaderTag({ agents, label }) {
   );
 }
 
-const RAIL_NAV = [
-  { id: "command",    label: "Mission"    },
-  { id: "blueprint",  label: "Blueprint"  },
-  { id: "artifacts",  label: "Artifacts"  },
-  { id: "validation", label: "Validation" },
-  { id: "simulation", label: "Simulation" },
-  { id: "memory",     label: "Memory"     },
-];
-
-function getMissionState(missionResult, exportResult, loading, interpreting, exporting) {
-  if (loading)      return { label: "EXECUTING",     cls: "hud-executing" };
-  if (interpreting) return { label: "ECHO ACTIVE",   cls: "hud-echo"      };
-  if (exporting)    return { label: "EXPORTING",     cls: "hud-exporting" };
-  const exp = exportResult?.export || {};
-  if (exp.graph_review?.status === "reviewed")      return { label: "REVIEW ONLINE", cls: "hud-review" };
-  if (exp.ros2_validation?.passed === false)        return { label: "NEEDS REVIEW",  cls: "hud-warn"   };
-  if (exportResult)  return { label: "EXPORT READY",  cls: "hud-ok"     };
-  if (missionResult) return { label: "MISSION ACTIVE", cls: "hud-active" };
-  return { label: "IDLE", cls: "hud-idle" };
-}
-
-function SystemTopBar({ activePage, missionResult, exportResult, loading, interpreting, exporting }) {
-  const pageLabel = PAGE_ITEMS.find(p => p.id === activePage)?.label || "Command";
-  const { label: stateLabel, cls: stateCls } = getMissionState(missionResult, exportResult, loading, interpreting, exporting);
-
-  return (
-    <div className="system-top-bar" role="banner" aria-label="OMNI system status">
-      <div className="stb-left">
-        <a className="stb-brand" href="#/" aria-label="OMNI overview">OMNI</a>
-        <span className="stb-sep" aria-hidden="true" />
-        <span className="stb-system">Mission Console</span>
-      </div>
-
-      <div className="stb-center">
-        <span className="stb-page-label" aria-live="polite">{pageLabel}</span>
-      </div>
-
-      <div className="stb-right">
-        <span className={`stb-state-chip ${stateCls}`} aria-live="polite" aria-atomic="true">
-          <span className="stb-state-dot" aria-hidden="true" />
-          {stateLabel}
-        </span>
-        <span className="stb-link" aria-label="Backend: local link active">
-          <span className="stb-link-dot" aria-hidden="true" />
-          LOCAL LINK
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function BottomActionRail({ activePage, setActivePage, missionResult }) {
-  return (
-    <nav className="bottom-action-rail" aria-label="Quick navigation">
-      {RAIL_NAV.map(item => {
-        const needsMission = item.id !== "command" && item.id !== "simulation";
-        const dimmed = needsMission && !missionResult;
-        return (
-          <button
-            key={item.id}
-            className={`bar-btn${activePage === item.id ? " bar-active" : ""}${dimmed ? " bar-dim" : ""}`}
-            onClick={() => setActivePage(item.id)}
-            aria-current={activePage === item.id ? "page" : undefined}
-          >
-            <span className="bar-btn-label">{item.label}</span>
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
-
-function TopNav({ activePage, setActivePage, missionResult }) {
-  return (
-    <aside className="omni-sidebar">
-      <a className="brand-lockup" href="#/" title="Back to the OMNI overview">
-        <SnailMark size={44} className="brand-mark" decorative />
-        <div>
-          <h2>OMNI</h2>
-          <p>Mission Console</p>
-        </div>
-      </a>
-
-      <nav className="page-nav">
-        {PAGE_ITEMS.map((page) => (
-          <button
-            key={page.id}
-            className={`nav-button ${activePage === page.id ? "active" : ""}`}
-            onClick={() => setActivePage(page.id)}
-          >
-            {page.label}
-          </button>
-        ))}
-      </nav>
-
-      <div className="sidebar-status-card">
-        <p className="eyebrow">System Status</p>
-        <h3>{missionResult ? "Mission Loaded" : "Awaiting Mission"}</h3>
-        <p>
-          {missionResult
-            ? "Blueprint data is ready across all OMNI pages."
-            : "Submit a mission from Command to activate the intelligence stack."}
-        </p>
-      </div>
-    </aside>
-  );
-}
-
 function EchoPreview({ echoResult, setMission }) {
   if (!echoResult) return null;
 
@@ -850,6 +686,7 @@ function CommandPage({
         <div className="mission-console">
           <div className="mode-toggle">
             <button
+              aria-pressed={commandMode === "mission"}
               className={commandMode === "mission" ? "active" : ""}
               onClick={() => setCommandMode("mission")}
             >
@@ -857,6 +694,7 @@ function CommandPage({
             </button>
 
             <button
+              aria-pressed={commandMode === "idea"}
               className={commandMode === "idea" ? "active" : ""}
               onClick={() => setCommandMode("idea")}
             >
@@ -866,7 +704,9 @@ function CommandPage({
 
           {commandMode === "mission" && (
             <>
+              <label className="field-label" htmlFor="mission-brief">Mission brief</label>
               <textarea
+                id="mission-brief"
                 value={mission}
                 onChange={(event) => setMission(event.target.value)}
                 placeholder="Example: Design a ROS 2 desk assistant with a Raspberry Pi, camera module, servo-mounted sensor head, and IMU. Include node architecture, a wiring plan, a Fusion 360 enclosure concept, a risk review, and a validation checklist."
@@ -908,13 +748,17 @@ function CommandPage({
 
           {commandMode === "idea" && (
             <div className="echo-console">
+              <label className="field-label" htmlFor="quick-idea">Your idea</label>
               <textarea
+                id="quick-idea"
                 value={quickIdea}
                 onChange={(event) => setQuickIdea(event.target.value)}
                 placeholder="Describe the idea in plain language. For example: a small camera robot that follows a person, built with ROS 2 and Fusion 360."
               />
 
+              <label className="field-label" htmlFor="idea-context">Context (optional)</label>
               <textarea
+                id="idea-context"
                 value={ideaContext}
                 onChange={(event) => setIdeaContext(event.target.value)}
                 placeholder="Optional context: available parts, constraints, deadlines, or which phase to start with."
@@ -1000,26 +844,7 @@ function SimulationPage() {
 }
 
 function VisionPage() {
-  return (
-    <section className="page vision-page-v2">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">OMNI Vision</p>
-          <h1>Image Intake + ML Inference</h1>
-          <p>
-            Upload images into OMNI&apos;s PyTorch inference service. This demo
-            currently uses Fashion-MNIST, but the same pipeline can later
-            support CAD screenshots, robot images, component recognition, and
-            visual design review.
-          </p>
-        </div>
-
-        <HeaderTag agents="Vega · QaZ" label="ML inference" />
-      </div>
-
-      <OmniVisionUploadPanel />
-    </section>
-  );
+  return <Suspense fallback={<div className="page" role="status">Opening OMNITorch workspace…</div>}><OmniTorchWorkspace /></Suspense>;
 }
 
 function BlueprintPage({ missionResult, exportResult }) {
@@ -1077,9 +902,9 @@ function BlueprintPage({ missionResult, exportResult }) {
   );
 }
 
-function AgentsPage({ missionResult }) {
+function AgentsPage({ missionResult, initialAgentId = "echo", subsystem }) {
   const agents = missionResult?.agents || FALLBACK_AGENTS;
-  const [activeAgentId, setActiveAgentId] = useState(agents[0]?.id || "echo");
+  const [activeAgentId, setActiveAgentId] = useState(initialAgentId);
 
   const activeAgent =
     agents.find((agent) => agent.id === activeAgentId) || agents[0] || FALLBACK_AGENTS[0];
@@ -1093,7 +918,7 @@ function AgentsPage({ missionResult }) {
       <div className="page-header">
         <div>
           <p className="eyebrow">Agents</p>
-          <h1>Specialist agents</h1>
+          <h1>{subsystem || "Specialist agents"}</h1>
           <p>
             Each agent owns a focused part of the mission and contributes to the
             final OMNI blueprint.
@@ -1126,7 +951,6 @@ function AgentsPage({ missionResult }) {
             </p>
             <h2>{activeAgent.name}</h2>
             <p>{activeAgent.role}</p>
-            <span className="status-pill">{activeAgent.status || "Ready"}</span>
           </div>
 
           <div className="agent-report">
@@ -1849,7 +1673,6 @@ function ArtifactCard({ title, description, content, id, type }) {
     <div className="artifact-card">
       <div className="artifact-header">
         <h3>{title}</h3>
-        <span>Generated</span>
       </div>
       <p className={`artifact-description${isLongDesc ? " artifact-desc-clamped" : ""}`}>
         {descPreview}
@@ -1904,35 +1727,13 @@ function EmptyPage({ title, message }) {
   );
 }
 
-// LoadingOverlay retained for reference; active loading UI is HenryEngineLoader (Phase 18D).
-// eslint-disable-next-line no-unused-vars
-function LoadingOverlay({
-  message = "OMNI is coordinating the intelligence stack...",
-  joke = getLocalMorbidJoke(),
-}) {
-  return (
-    <div className="loading-overlay">
-      <div className="loading-card">
-        <div className="loading-command-animation" aria-hidden="true">
-          <span className="loading-ring ring-a" />
-          <span className="loading-ring ring-b" />
-          <span className="loading-ring ring-c" />
-          <span className="loading-core" />
-        </div>
-        <p className="eyebrow">Executing Mission</p>
-        <h2>{message}</h2>
-        <div className="loading-joke-card">
-          <p className="eyebrow">Morbid Runtime Humor</p>
-          <p>{joke}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function App() {
   const [view, setView] = useState(readViewFromHash);
-  const [activePage, setActivePage] = useState("command");
+  const [activePage, updateActivePage] = useState(readPageFromHash);
+  const setActivePage = useCallback((page) => {
+    updateActivePage(page);
+    window.location.hash = `#/console/${page}`;
+  }, []);
 
   const [commandMode, setCommandMode] = useState("mission");
   const [mission, setMission] = useState("");
@@ -1947,11 +1748,10 @@ function App() {
   const [exportResult, setExportResult] = useState(null);
   const [missionResult, setMissionResult] = useState(null);
   const [error, setError] = useState("");
-  const [loadingJoke, setLoadingJoke] = useState(getLocalMorbidJoke());
 
   // ── Overview / console routing (hash-based; no router dependency) ──
   useEffect(() => {
-    const syncView = () => setView(readViewFromHash());
+    const syncView = () => { setView(readViewFromHash()); updateActivePage(readPageFromHash()); };
     window.addEventListener("hashchange", syncView);
     return () => window.removeEventListener("hashchange", syncView);
   }, []);
@@ -1974,19 +1774,14 @@ function App() {
     }
   }, [view]);
 
+  useEffect(() => {
+    if (view !== "console") return;
+    window.scrollTo(0, 0);
+  }, [activePage, view]);
+
   const pageTitle = useMemo(() => {
     return PAGE_ITEMS.find((page) => page.id === activePage)?.label || "Command";
   }, [activePage]);
-
-  const prepareLoadingJoke = async () => {
-    setLoadingJoke(getLocalMorbidJoke());
-
-    const onlineJoke = await fetchMorbidLoadingJoke();
-
-    if (onlineJoke) {
-      setLoadingJoke(onlineJoke);
-    }
-  };
 
   const launchMission = async () => {
     if (!mission.trim()) {
@@ -1995,7 +1790,6 @@ function App() {
     }
 
     setLoading(true);
-    prepareLoadingJoke();
     setError("");
     setExportResult(null);
     setMissionResult(null);
@@ -2081,7 +1875,6 @@ function App() {
     }
 
     setLoading(true);
-    prepareLoadingJoke();
     setError("");
     setExportResult(null);
     setMissionResult(null);
@@ -2173,13 +1966,15 @@ function App() {
   return (
     <>
       <div className="omni-hud-shell">
+        <a className="skip-link" href="#console-content" onClick={event => {
+          event.preventDefault();
+          const content = document.getElementById("console-content");
+          content?.focus();
+          content?.scrollIntoView();
+        }}>Skip to workspace</a>
         <SystemTopBar
           activePage={activePage}
           missionResult={missionResult}
-          exportResult={exportResult}
-          loading={loading}
-          interpreting={interpreting}
-          exporting={exporting}
         />
 
         <main className="omni-app-shell">
@@ -2189,7 +1984,9 @@ function App() {
             missionResult={missionResult}
           />
 
-        <section className="omni-main">
+        <section className="omni-main" id="console-content" tabIndex={-1}>
+          {loading && <HenryEngineLoader isRunning={loading} missionText={commandMode === "idea" ? quickIdea : mission} />}
+          {activePage !== "command" && error && <p className="error-message" role="alert">{error}</p>}
           <header className="mobile-topbar">
             <div>
               <p className="eyebrow">OMNI</p>
@@ -2227,7 +2024,10 @@ function App() {
 
           {activePage === "blueprint" && <BlueprintPage missionResult={missionResult} exportResult={exportResult} />}
 
-          {activePage === "agents" && <AgentsPage missionResult={missionResult} />}
+          {activePage === "agents" && <AgentsPage key="agents" missionResult={missionResult} />}
+          {activePage === "design" && <AgentsPage key="design" missionResult={missionResult} initialAgentId="design" subsystem="Engineering design" />}
+          {activePage === "robotics" && <AgentsPage key="robotics" missionResult={missionResult} initialAgentId="sky" subsystem="Robotics" />}
+          {activePage === "electronics" && <AgentsPage key="electronics" missionResult={missionResult} initialAgentId="korva" subsystem="Electronics & hardware" />}
 
           {activePage === "artifacts" && (
             <ArtifactsPage
@@ -2263,14 +2063,6 @@ function App() {
         />
       </div>
 
-      {loading && (
-        <HenryEngineLoader
-          isRunning={loading}
-          missionText={commandMode === "idea" ? quickIdea : mission}
-          commandMode={commandMode}
-          joke={loadingJoke}
-        />
-      )}
     </>
   );
 }

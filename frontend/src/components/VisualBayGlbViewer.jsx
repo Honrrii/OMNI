@@ -106,7 +106,7 @@ export default function VisualBayGlbViewer({ asset }) {
         setLoaded(true);
       },
       undefined,
-      (_err) => {
+      () => {
         setError(
           "Model could not be loaded for preview. " +
           "No data was modified. Check that the export folder is accessible."

@@ -36,7 +36,7 @@ function SimList({ items, emptyText }) {
 
 export default function OmniSimulationPanel() {
   const [rosStatus, setRosStatus] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [error, setError] = useState("");
 
@@ -55,7 +55,12 @@ export default function OmniSimulationPanel() {
   }
 
   useEffect(() => {
-    refreshRosStatus();
+    let cancelled = false;
+    getRosStatus()
+      .then(data => { if (!cancelled) setRosStatus(data); })
+      .catch(err => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -84,11 +89,6 @@ export default function OmniSimulationPanel() {
           </p>
         </div>
 
-        <div className="sim-header-actions">
-          <span className={`sim-main-badge ${rosStatus?.ros_available ? "online" : "offline"}`}>
-            {rosStatus?.ros_available ? "ROS2 Online" : "ROS2 Offline"}
-          </span>
-        </div>
       </div>
 
       <div className="sim-actions">
