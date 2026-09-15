@@ -33,24 +33,70 @@ def git(repo, *argv, check=True):
 def snapshot(repo):
     # Exact bytes, including index/config/refs and tracked source. Ignore no
     # file in these small synthetic repositories.
-    return {str(path.relative_to(repo)): path.read_bytes()
-            for path in repo.rglob("*") if path.is_file() and not path.is_symlink()}
+    return {
+        str(path.relative_to(repo)): path.read_bytes()
+        for path in repo.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
 
 
 @pytest.fixture
 def fixture_repo(tmp_path):
     repo = tmp_path / "source"
     repo.mkdir()
+
     git(repo, "init", "-b", "main")
-    (repo / "calc.py").write_text("def add(a, b):\n    return a - b\n")
-    (repo / "test_calc.py").write_text("from calc import add\ndef test_add():\n    assert add(2, 3) == 5\n")
-    (repo / "protected.txt").write_text("protected fixture\n")
-    git(repo, "add", "--", "calc.py", "test_calc.py", "protected.txt")
-    git(repo, "-c", "user.name=TestCube fixture", "-c", "user.email=testcube@example.invalid",
-        "commit", "-m", "Synthetic base")
+
+    # These synthetic repositories are compared byte-for-byte, including
+    # their .git directories. Disable automatic Git housekeeping so transient
+    # maintenance/GC lock files cannot make integrity assertions flaky.
+    #
+    # snapshot() remains intentionally strict: every regular repository file
+    # is still compared. This only prevents Git from asynchronously creating
+    # temporary maintenance state during deterministic tests.
+    git(repo, "config", "maintenance.auto", "false")
+    git(repo, "config", "gc.auto", "0")
+
+    (repo / "calc.py").write_text(
+        "def add(a, b):\n"
+        "    return a - b\n"
+    )
+
+    (repo / "test_calc.py").write_text(
+        "from calc import add\n"
+        "def test_add():\n"
+        "    assert add(2, 3) == 5\n"
+    )
+
+    (repo / "protected.txt").write_text(
+        "protected fixture\n"
+    )
+
+    git(
+        repo,
+        "add",
+        "--",
+        "calc.py",
+        "test_calc.py",
+        "protected.txt",
+    )
+
+    git(
+        repo,
+        "-c",
+        "user.name=TestCube fixture",
+        "-c",
+        "user.email=testcube@example.invalid",
+        "commit",
+        "-m",
+        "Synthetic base",
+    )
+
     base = git(repo, "rev-parse", "HEAD").decode().strip()
+
     output = tmp_path / "evidence"
     output.mkdir()
+
     return repo, base, output
 
 
