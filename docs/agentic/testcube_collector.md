@@ -61,9 +61,19 @@ Commands run inside these mounts:
 | `/work/.git` | Empty, read-only mask; real Git metadata unavailable |
 | `/runtime` | Explicit trusted virtualenv, read-only |
 | `/usr`, library/bin aliases | System tools and libraries, read-only |
+| Runtime base prefix, only if outside `/usr` | The virtualenv's own base Python installation, read-only at its own path |
 | `/bootstrap.py` | Trusted collector exec bootstrap, read-only |
 | `/tmp`, `/scratch` | Private tmpfs, fresh for every command |
 | `/proc`, `/dev` | Namespace-local process view and minimal devices |
+
+A virtualenv's interpreter links to its base installation, which may live
+outside `/usr` (for example `actions/setup-python`'s tool cache). That prefix is
+derived only from the runtime's own `pyvenv.cfg`: exactly one `home = <bin>`
+entry in the form `venv` writes, absolute, canonical, and an existing `bin`
+directory. The base is its parent. It must not be `/`, collide with a sandbox
+path, or overlap the source or output root. The interpreter must resolve inside
+the virtualenv, `/usr`, or that base. Anything else is `COLLECTION_FAILED`.
+The derived prefix is recorded as `runtime_base_prefix` in `environment.json`.
 
 The trusted checkout, peer candidate, artifact directory, user home,
 credentials, host sockets, and policy source are not mounted. Network and PID

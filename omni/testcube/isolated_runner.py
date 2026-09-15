@@ -2,13 +2,24 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import sys
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from backend.app.sandbox.execution import run_command
 from omni.testcube.collector_models import CollectorPolicy, CommandSpec, canonical_bytes
+
+_PYVENV_LIMIT = 64 * 1024
+_USR = PurePosixPath("/usr")
+# Paths the sandbox itself creates or masks. A base installation at or beneath
+# one would collide with, or be hidden by, those mounts.
+_SANDBOX_PATHS = tuple(PurePosixPath(path) for path in (
+    "/bin", "/lib", "/lib64", "/runtime", "/work", "/bootstrap.py",
+    "/proc", "/dev", "/tmp", "/scratch",
+))
 
 
 class CollectionError(RuntimeError):
@@ -32,6 +43,85 @@ def write_new(path: Path, data: bytes) -> None:
         os.close(directory)
 
 
+def paths_overlap(first: Path, second: Path) -> bool:
+    return first == second or first in second.parents or second in first.parents
+
+
+def _pyvenv_home(raw: bytes) -> str:
+    """The single ``home`` value, accepted only in the exact form ``venv`` writes.
+
+    CPython startup and ``site`` parse pyvenv.cfg differently. Anything either
+    could read differently (case, spacing, duplicates, unusual line breaks) is
+    rejected rather than interpreted.
+    """
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CollectionError("runtime pyvenv.cfg is not UTF-8") from exc
+    lines = text.split("\n")
+    if "\0" in text or any(line.splitlines() not in ([], [line]) for line in lines):
+        raise CollectionError("runtime pyvenv.cfg contains unsupported control characters")
+    entries = [line for line in lines if "=" in line and line.partition("=")[0].strip().lower() == "home"]
+    if len(entries) != 1:
+        raise CollectionError("runtime pyvenv.cfg must contain exactly one home entry")
+    home = entries[0][len("home = "):]
+    if not entries[0].startswith("home = ") or not home or home != home.strip():
+        raise CollectionError("runtime pyvenv.cfg home entry is malformed")
+    return home
+
+
+def _base_prefix_for_home(home: str) -> PurePosixPath:
+    """Base prefix of a venv ``home``, which must be that installation's bin directory."""
+    path = PurePosixPath(home)
+    if not path.is_absolute() or str(path) != home or home.startswith("//") or ".." in path.parts:
+        raise CollectionError("runtime Python home must be an absolute canonical path")
+    if path.name != "bin":
+        raise CollectionError("runtime Python home must be a POSIX bin directory")
+    base = path.parent
+    if base == PurePosixPath("/"):
+        raise CollectionError("runtime Python base prefix must not be /")
+    if any(base == reserved or reserved in base.parents for reserved in _SANDBOX_PATHS):
+        raise CollectionError("runtime Python base prefix collides with a sandbox path")
+    return base
+
+
+def runtime_base_prefix(runtime_root: str) -> str | None:
+    """Base Python installation a trusted virtualenv needs outside ``/usr``.
+
+    Returns None when the base is already under the ``/usr`` mount, otherwise the
+    one canonical prefix to expose read-only at its own path. It is derived from
+    the virtualenv's own pyvenv.cfg, never by following the interpreter symlink.
+    """
+    runtime = Path(runtime_root)
+    try:
+        if not runtime.is_absolute() or runtime.resolve(strict=True) != runtime:
+            raise CollectionError("runtime_root must be canonical, not a mutable symlink alias")
+        fd = os.open(runtime / "pyvenv.cfg", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_size > _PYVENV_LIMIT or
+                    info.st_uid not in (0, os.geteuid()) or info.st_mode & 0o022):
+                raise CollectionError("runtime pyvenv.cfg must be a bounded regular file owned by "
+                                      "the operator or root and not group/other writable")
+            raw = os.read(fd, _PYVENV_LIMIT + 1)
+        finally:
+            os.close(fd)
+        if len(raw) > _PYVENV_LIMIT:
+            raise CollectionError("runtime pyvenv.cfg exceeds its size limit")
+        home = _pyvenv_home(raw)
+        base = _base_prefix_for_home(home)
+        if Path(home).resolve(strict=True) != Path(home) or not Path(home).is_dir():
+            raise CollectionError("runtime Python home must be an existing directory without symlink aliases")
+        interpreter = (runtime / "bin/python").resolve(strict=True)
+        if not any(root in interpreter.parents for root in (runtime, Path(_USR), Path(base))):
+            raise CollectionError("runtime interpreter must resolve inside the virtualenv, /usr, or its base prefix")
+    except CollectionError:
+        raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise CollectionError(f"cannot validate runtime Python base: {type(exc).__name__}") from exc
+    return None if base == _USR or _USR in base.parents else str(base)
+
+
 @dataclass(frozen=True)
 class ObservedCommand:
     argv: tuple[str, ...]
@@ -44,10 +134,14 @@ class ObservedCommand:
 def isolated_argv(worktree: Path, policy: CollectorPolicy, command: CommandSpec) -> list[str]:
     # No host root, source repository, artifacts, sockets, or Git metadata are
     # exposed. /work is immutable; all command writes live in ephemeral tmpfs.
+    # A virtualenv whose base Python lives outside /usr cannot start without that
+    # installation, so exactly its canonical prefix is added read-only.
+    base = runtime_base_prefix(policy.runtime_root)
+    base_mount = [] if base is None else ["--ro-bind", base, base]
     return [
         "/usr/bin/bwrap", "--unshare-all", "--unshare-user", "--unshare-net",
         "--unshare-pid", "--die-with-parent", "--new-session", "--cap-drop", "ALL",
-        "--ro-bind", "/usr", "/usr",
+        "--ro-bind", "/usr", "/usr", *base_mount,
         "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib",
         "--symlink", "usr/lib64", "/lib64",
         "--ro-bind", policy.runtime_root, "/runtime",

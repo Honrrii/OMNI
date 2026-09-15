@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from test_testcube_collector import fixture_repo, git, patch_file, snapshot
+from test_testcube_collector import external_base, fake_runtime, fixture_repo, git, patch_file, snapshot
 from omni.frontier.config import ClaudeProviderConfig, CodexProviderConfig
 from omni.testcube.candidate_models import (
     CandidateTaskSpec, CANDIDATE_SCHEMA, EDIT_SCHEMA, HIGH_RISK_CATEGORIES, candidate_schema,
@@ -314,6 +314,22 @@ def test_collector_infrastructure_failure_preserved(fixture_repo, tmp_path, monk
     assert result.outcome == "COLLECTION_FAILED"
     assert result.collection.outcome == "COLLECTION_FAILED"
     assert result.collection.arbitration is None
+
+
+def test_runtime_base_overlap_stops_before_providers(fixture_repo, tmp_path, external_base, monkeypatch):
+    import omni.testcube.candidate_harness as harness
+    args, runners = setup_trial(fixture_repo, tmp_path)
+    runtime = fake_runtime(tmp_path, f"{external_base}/bin", external_base / "bin/python3")
+    output = external_base / "trials"
+    output.mkdir()
+    args.update(policy=replace(args["policy"], runtime_root=str(runtime)), output_root=output)
+    monkeypatch.setattr(harness, "collect_and_evaluate", lambda **kw: pytest.fail("collector invoked"))
+    result = run_supervised_trial(**args)
+    assert result.outcome == "GENERATION_FAILED"
+    assert result.error == "GENERATION_FAILED: ValueError"
+    assert result.receipt is None and result.collection is None
+    assert [p.calls for p in args["providers"]] == [0, 0] and not any(r.calls for r in runners)
+    assert not (output / args["task"].task_id).exists()
 
 
 @pytest.mark.parametrize("kind", ["dirty", "base_mismatch", "source_mutation", "exception"])

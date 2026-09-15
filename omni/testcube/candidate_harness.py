@@ -21,7 +21,7 @@ from omni.testcube.collector import (
     collect_and_evaluate, arbitrate_collected,
 )
 from omni.testcube.collector_models import CollectionReceipt, canonical_bytes, digest
-from omni.testcube.isolated_runner import write_new
+from omni.testcube.isolated_runner import paths_overlap, runtime_base_prefix, write_new
 
 
 def candidate_prompt(task: CandidateTaskSpec, base: str, slot: str, transport=EDIT_SCHEMA) -> str:
@@ -111,6 +111,9 @@ def run_supervised_trial(*, task: CandidateTaskSpec, source_repo: Path, output_r
             not (runtime / "pyvenv.cfg").is_file() or not (runtime / "bin/python").is_file() or
             source == runtime or runtime in source.parents or Path("/usr") in source.parents):
             raise ValueError("invalid or exposed trusted runtime/source")
+        runtime_base = runtime_base_prefix(policy.runtime_root)
+        if runtime_base is not None and any(paths_overlap(path, Path(runtime_base)) for path in (source, output)):
+            raise ValueError("source and output must not overlap the runtime's base Python mount")
         candidate_root = output / task.task_id
         candidate_root.mkdir(mode=0o700)
         root = candidate_root

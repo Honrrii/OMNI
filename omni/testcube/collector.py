@@ -23,7 +23,9 @@ from omni.testcube.collector_models import (
     CollectionReceipt, CollectionResult, CollectorPolicy, CommandSpec,
     canonical_bytes, digest,
 )
-from omni.testcube.isolated_runner import CollectionError, run_isolated, write_new
+from omni.testcube.isolated_runner import (
+    CollectionError, paths_overlap, run_isolated, runtime_base_prefix, write_new,
+)
 from omni.testcube.models import (
     CandidateEvidence, CheckEvidence, EvidenceIdentity, Measurement,
     candidate_evidence_from_dict,
@@ -378,6 +380,9 @@ def collect_and_evaluate(
             raise CollectionError("runtime_root must name a trusted Python virtualenv")
         if str(runtime) != policy.runtime_root:
             raise CollectionError("runtime_root must be canonical, not a mutable symlink alias")
+        runtime_base = runtime_base_prefix(policy.runtime_root)
+        if runtime_base is not None and any(paths_overlap(path, Path(runtime_base)) for path in (source, output)):
+            raise CollectionError("source and output must not overlap the runtime's base Python mount")
         evaluation_id = policy.candidate_policy.evaluation_id
         candidate_bundle = output / evaluation_id
         candidate_bundle.mkdir(mode=0o700)
@@ -425,6 +430,7 @@ def collect_and_evaluate(
                        "collector_code_revision": git.text(Path(__file__).resolve().parents[2], "rev-parse", "HEAD").strip(),
                        "git": git.text(source, "--version").strip(),
                        "base_revision": base, "runtime_root": str(runtime),
+                       "runtime_base_prefix": runtime_base,
                        "runtime_interpreter_sha256": digest(_read_regular((runtime / "bin/python").resolve(), 64 * 1024**2)),
                        "collector_version": COLLECTOR_VERSION,
                        "collector_code": {path.name: digest(path.read_bytes()) for path in sorted(Path(__file__).parent.glob("*.py"))}}

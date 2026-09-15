@@ -3,14 +3,17 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
 
+import omni.testcube.isolated_runner as runner
 from omni.testcube.collector import (
     CollectionError, _changes, _Git, arbitrate_collected,
     cleanup_collection, collect_and_evaluate,
@@ -475,3 +478,215 @@ def test_repeated_collections_keep_non_timing_engineering_facts(fixture_repo, tm
         assert left.touched_files == right.touched_files
         assert left.changed_lines == right.changed_lines
         assert [(c.check_id, c.outcome, c.exit_code) for c in left.checks] == [(c.check_id, c.outcome, c.exit_code) for c in right.checks]
+
+
+def fake_runtime(root, home, interpreter):
+    """A virtualenv as `python -m venv` lays it out: pyvenv.cfg plus a bin/python symlink."""
+    runtime = root / "runtime"
+    (runtime / "bin").mkdir(parents=True)
+    cfg = runtime / "pyvenv.cfg"
+    cfg.write_text(f"home = {home}\ninclude-system-site-packages = false\n")
+    cfg.chmod(0o644)
+    (runtime / "bin/python").symlink_to(interpreter)
+    return runtime.resolve()
+
+
+@pytest.fixture
+def external_base():
+    """A base Python installation outside /usr, shaped like actions/setup-python's.
+
+    It lives outside /tmp, which the sandbox replaces with private tmpfs, and
+    links to the system interpreter and stdlib so it can really start.
+    """
+    root = Path(tempfile.mkdtemp(prefix="omni-testcube-base-", dir="/var/tmp")).resolve()
+    base = root / "hostedtoolcache/Python/3.10.21/x64"
+    (base / "bin").mkdir(parents=True)
+    (base / "lib").mkdir()
+    version = subprocess.run(["/usr/bin/python3", "-I", "-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+    (base / "bin/python3").symlink_to("/usr/bin/python3")
+    (base / "lib" / f"python{version}").symlink_to(f"/usr/lib/python{version}")
+    try:
+        yield base
+    finally:
+        shutil.rmtree(root)
+
+
+def binds(argv):
+    return [tuple(argv[index + 1:index + 3]) for index, arg in enumerate(argv)
+            if arg in ("--bind", "--ro-bind", "--dev-bind", "--bind-try", "--ro-bind-try", "--dev-bind-try")]
+
+
+def test_usr_based_virtualenv_adds_no_mount(tmp_path):
+    runtime = fake_runtime(tmp_path, "/usr/bin", "/usr/bin/python3")
+    assert runner.runtime_base_prefix(str(runtime)) is None
+    p = replace(policy("HEAD"), runtime_root=str(runtime))
+    worktree = tmp_path / "worktree"
+    bootstrap = str(Path(runner.__file__).with_name("command_bootstrap.py"))
+    assert binds(runner.isolated_argv(worktree, p, p.commands[0])) == [
+        ("/usr", "/usr"), (str(runtime), "/runtime"), (str(worktree), "/work"), (bootstrap, "/bootstrap.py")]
+
+
+def test_test_runtime_base_matches_its_interpreter():
+    # /usr on the development host (no mount); the tool-cache prefix on hosted CI.
+    base = Path(sys.base_prefix).resolve()
+    expected = None if base == Path("/usr") or Path("/usr") in base.parents else str(base)
+    assert runner.runtime_base_prefix(str(Path(sys.prefix).resolve())) == expected
+
+
+def test_external_base_is_the_only_added_readonly_mount(tmp_path, external_base):
+    runtime = fake_runtime(tmp_path, f"{external_base}/bin", external_base / "bin/python3")
+    assert runner.runtime_base_prefix(str(runtime)) == str(external_base)
+    p = replace(policy("HEAD"), runtime_root=str(runtime))
+    worktree = tmp_path / "worktree"
+    argv = runner.isolated_argv(worktree, p, p.commands[0])
+    bootstrap = str(Path(runner.__file__).with_name("command_bootstrap.py"))
+    assert binds(argv) == [("/usr", "/usr"), (str(external_base), str(external_base)),
+                           (str(runtime), "/runtime"), (str(worktree), "/work"), (bootstrap, "/bootstrap.py")]
+    assert not {"--bind", "--dev-bind", "--bind-try", "--dev-bind-try"} & set(argv)
+    sources = [source for source, _ in binds(argv)]
+    for broader in external_base.parents:  # the /opt/hostedtoolcache analogue, /var/tmp, /var, /
+        assert str(broader) not in sources
+    assert {"--unshare-all", "--unshare-user", "--unshare-net", "--unshare-pid"} <= set(argv)
+
+
+@pytest.mark.parametrize("home,base", [
+    ("/usr/bin", "/usr"),
+    ("/opt/hostedtoolcache/Python/3.10.21/x64/bin", "/opt/hostedtoolcache/Python/3.10.21/x64"),
+])
+def test_base_prefix_is_the_parent_of_the_venv_home(home, base):
+    assert str(runner._base_prefix_for_home(home)) == base
+
+
+@pytest.mark.parametrize("home", ["usr/bin", "bin", "./bin"])
+def test_relative_python_home_fails_closed(home):
+    with pytest.raises(CollectionError, match="absolute canonical"):
+        runner._base_prefix_for_home(home)
+
+
+def test_root_derived_base_fails_closed():
+    with pytest.raises(CollectionError, match="must not be /"):
+        runner._base_prefix_for_home("/bin")
+
+
+@pytest.mark.parametrize("home", ["/usr/bin/", "//usr/bin", "/usr/./bin", "/usr/../usr/bin", "/usr/lib",
+                                  "/tmp/python/bin", "/scratch/bin", "/work/bin", "/runtime/bin", "/proc/1/bin", "/lib/bin"])
+def test_noncanonical_or_colliding_python_home_fails_closed(home):
+    with pytest.raises(CollectionError):
+        runner._base_prefix_for_home(home)
+
+
+def test_venv_written_pyvenv_home_is_accepted():
+    raw = (b"home = /usr/bin\ninclude-system-site-packages = false\nversion = 3.10.12\n"
+           b"command = /usr/bin/python3 -m venv /home/runner/work/_temp/omni-ci-venv\n")
+    assert runner._pyvenv_home(raw) == "/usr/bin"
+
+
+@pytest.mark.parametrize("raw", [
+    b"include-system-site-packages = false\n",
+    b"home = /usr/bin\nhome = /usr/bin\n",
+    b"home = /usr/bin\nHOME = /opt/python/bin\n",
+    b"home = /usr/bin\n home = /opt/python/bin\n",
+    b"home=/usr/bin\n",
+    b"home = \n",
+    b"home =  /usr/bin\n",
+    b"home = /usr/bin \n",
+    b"home = /usr/bin\r\n",
+    b"home = /usr/bin\x0bhome = /opt/python/bin\n",
+    b"home = /usr/bin\0\n",
+    b"home = /usr/\xffbin\n",
+])
+def test_malformed_pyvenv_home_fails_closed(raw):
+    with pytest.raises(CollectionError):
+        runner._pyvenv_home(raw)
+
+
+@pytest.mark.parametrize("defect", ["missing", "symlink", "directory", "group_writable", "oversized",
+                                    "home_missing", "home_alias", "interpreter_elsewhere"])
+def test_untrusted_runtime_files_fail_closed(tmp_path, external_base, defect):
+    runtime = fake_runtime(tmp_path, f"{external_base}/bin", external_base / "bin/python3")
+    cfg = runtime / "pyvenv.cfg"
+    if defect == "missing":
+        cfg.unlink()
+    elif defect == "symlink":
+        real = tmp_path / "real-pyvenv.cfg"
+        real.write_bytes(cfg.read_bytes())
+        real.chmod(0o644)
+        cfg.unlink()
+        cfg.symlink_to(real)
+    elif defect == "directory":
+        cfg.unlink()
+        cfg.mkdir()
+    elif defect == "group_writable":
+        cfg.chmod(0o664)
+    elif defect == "oversized":
+        cfg.write_text(cfg.read_text() + "#" * (64 * 1024))
+    elif defect == "home_missing":
+        cfg.write_text(f"home = {external_base}/missing/bin\n")
+    elif defect == "home_alias":
+        alias = external_base.parent / "alias"
+        alias.symlink_to(external_base)
+        cfg.write_text(f"home = {alias}/bin\n")
+    else:
+        elsewhere = tmp_path / "elsewhere/python3"
+        elsewhere.parent.mkdir()
+        elsewhere.write_text("")
+        (runtime / "bin/python").unlink()
+        (runtime / "bin/python").symlink_to(elsewhere)
+    with pytest.raises(CollectionError):
+        runner.runtime_base_prefix(str(runtime))
+
+
+@pytest.mark.parametrize("unsafe,reason", [
+    ("missing_home", "exactly one home entry"),
+    ("relative_home", "absolute canonical"),
+    ("root_home", "must not be /"),
+    ("output_inside_base", "must not overlap the runtime's base Python mount"),
+    ("base_inside_output", "must not overlap the runtime's base Python mount"),
+    ("source_inside_base", "must not overlap the runtime's base Python mount"),
+])
+def test_unsafe_runtime_base_never_launches_or_arbitrates(fixture_repo, tmp_path, external_base, monkeypatch, unsafe, reason):
+    import omni.testcube.collector as module
+    repo, base, output = fixture_repo
+    runtime = fake_runtime(tmp_path, f"{external_base}/bin", external_base / "bin/python3")
+    cfg = runtime / "pyvenv.cfg"
+    if unsafe == "missing_home":
+        cfg.write_text("include-system-site-packages = false\n")
+    elif unsafe == "relative_home":
+        cfg.write_text("home = usr/bin\n")
+    elif unsafe == "root_home":
+        cfg.write_text("home = /bin\n")
+    elif unsafe == "output_inside_base":
+        output = external_base / "evidence"
+        output.mkdir()
+    elif unsafe == "base_inside_output":
+        output = external_base.parent
+    else:
+        repo = external_base / "source"
+        shutil.copytree(fixture_repo[0], repo)
+    monkeypatch.setattr(module, "run_isolated", lambda *args: pytest.fail("sandbox launched with an unsafe runtime base"))
+    monkeypatch.setattr(module, "evaluate", lambda **kwargs: pytest.fail("arbiter invoked"))
+    result = collect_and_evaluate(source_repo=repo, patch_a=patch_file(tmp_path, "A.diff"),
+                                  patch_b=patch_file(tmp_path, "B.diff", new="a * b"),
+                                  policy=replace(policy(base), runtime_root=str(runtime)), output_root=output)
+    assert result.outcome == "COLLECTION_FAILED"
+    assert result.receipt is None and result.arbitration is None
+    assert reason in result.errors[0]
+    assert not (output / "trial").exists()
+
+
+def test_external_base_virtualenv_collects_inside_isolation(fixture_repo, tmp_path, external_base):
+    """Hosted-CI regression: /runtime/bin/python links into a base outside /usr."""
+    _, base, _ = fixture_repo
+    runtime = fake_runtime(tmp_path, f"{external_base}/bin", external_base / "bin/python3")
+    commands = (CommandSpec("build", ("/runtime/bin/python", "-c", "import calc")),
+                CommandSpec("test:focused", ("/runtime/bin/python", "-c", "from calc import add; assert add(2, 3) == 5")))
+    result = run_trial(fixture_repo, tmp_path, p=replace(policy(base), runtime_root=str(runtime), commands=commands))
+    assert result.outcome == "CANDIDATE_INVALID", result.errors
+    assert result.arbitration.verdict == "CANDIDATE_A_PREFERRED"
+    bundle = Path(result.receipt.bundle_path)
+    environment = json.loads((bundle / "environment.json").read_text())
+    assert environment["runtime_root"] == str(runtime)
+    assert environment["runtime_base_prefix"] == str(external_base)
+    launch = json.loads((bundle / "environment/runtime.launch.json").read_text())
+    assert binds(launch["isolation_argv"]).count((str(external_base), str(external_base))) == 1
