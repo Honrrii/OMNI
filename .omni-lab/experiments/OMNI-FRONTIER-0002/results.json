@@ -1,0 +1,51 @@
+{
+  "experiment_id": "OMNI-FRONTIER-0002",
+  "title": "Mock shift: For Component Intelligence v0.1, the choice that matters most is not graph versus typed ",
+  "hypothesis": "For Component Intelligence v0.1, the choice that matters most is not graph versus typed records versus rules. It is whether every engineering value carries its own epistemic state (KNOWN, UNKNOWN or ASSUMED) and its own provenance, and whether that survives every stage boundary through to CAD. OMNI's current downstream layers cannot carry UNKNOWN or source class, and they quietly replace a missing value with a concrete one. The CAD IR gives every dimension a numeric default. Unregistered component types become a 50x30x15 mm box. Deserialization silently drops fields it doesn't recognize. OMNI has at least four status vocabularies that don't match, and only one includes UNKNOWN, which no code in mission_graph reads. Reliability scoring averages BLOCKED gates into a single confidence number. Provenance marks every agent's output 'llm_generated' and has no classes like STANDARD or MANUFACTURER. So a Component Intelligence layer could correctly produce UNKNOWN or FAIL findings (for example 'bearing speed rating unavailable' or 'bore does not match seat') and still lose them when it plugs into the existing pipeline: they would become plausible geometry and a positive score. Prediction: unless v0.1 makes (a) a value-level Known/Unknown type with provenance and (b) typed CAD obligations the only path into CAD, with a boundary check that rejects defaulted values, the architecture will not fail closed in practice, however good its rule engine is. The CAD layer currently has no mechanical assembly concepts at all, so v0.1 can define this boundary from scratch rather than retrofit it.",
+  "scoring": {
+    "omni_alignment": 3,
+    "potential_impact": 3,
+    "information_gain": 3,
+    "generalizability": 2,
+    "novelty": 2,
+    "experimentalability": 3,
+    "risk": 1,
+    "implementation_cost": 2
+  },
+  "created_at": "2026-09-15T19:18:32Z",
+  "mechanism": "The mission requires that UNKNOWN is never silently turned into PASS. In this repository, missing information is lost at the stage boundaries rather than inside a rule evaluator. There are four ways it happens.\n\n(1) Geometry defaults. MechanicalComponentSpec uses length_mm=0.0 to mean 'use library default'. `_component()` in cad_detail_pass_planner always fills it from `default_dims()`, which returns (50.0, 30.0, 15.0) for any unregistered type. `component_shape()` falls back to 'box'. MountingFeatureSpec and FastenerPatternSpec default to diameter_mm 6.0 and 3.2. A bearing whose bore is unknown, handed to this IR, would therefore become concrete placeholder geometry with no finding.\n\n(2) Schema filtering. `AssemblySpec.from_dict` keeps only keys in `__dataclass_fields__`. Any upstream `status`, `provenance` or `unknown` annotation not already in the dataclass is silently discarded.\n\n(3) Status collapse. The vocabularies are:\n- reliability: PASS/WARN/FAIL/BLOCKED, with no UNKNOWN\n- mission_graph ValidationCheck: PASS/WARNING/FAIL/UNKNOWN, but UNKNOWN has no reader in mission_graph\n- engineering validation_engine: lowercase pass/warning/blocked\n- findings_projection: severities only, where an empty severity becomes 'warning' and status is always 'open'\n\n`compute_engineering_confidence` averages BLOCKED at 0.1 alongside PASS at 1.0, so enough passing gates can outweigh an unknown in the single confidence number.\n\n(4) Provenance flattening. ProvenanceRef.evidence_type defaults to 'llm_generated', and reliability/provenance.py maps all nine agents to 'llm_generated'. EvidenceRecord.confidence is low/medium/high with no source-class axis. Nothing can tell a STANDARD fact from an OMNI_HEURISTIC or AI assertion, so Claude and Codex agreeing cannot be kept separate from validated knowledge.\n\nArchitectural consequence (a proposal, not a fact): the core data model should be built around a Fact/Quantity type, roughly {value | UNKNOWN, unit, source_class \u2208 {STANDARD, MANUFACTURER, HANDBOOK, OMNI_VALIDATED, OMNI_HEURISTIC, USER_PROVIDED}, source_ref, fact_id}. Typed interfaces, rules, patterns and obligations would all operate on that type. Rule outcomes would use a three-valued logic: any UNKNOWN input yields UNKNOWN unless the rule explicitly declares a justified WARN. Oli would receive a CadObligation set instead of a spec full of defaults. There is a counterweight in the repo: calculation_engine already fails closed (missing_inputs \u2192 blocked). Fail-closed behaviour exists locally, but no contract carries it across boundaries.\n\nInformal FrontierResearchScore, not authoritative:\n- alignment 5\n- impact 5\n- information gain 4\n- generalizability 5 (applies to every future component family)\n- novelty 3\n- experimentability 5 (cheap fault injection or property test)\n- risk 1\n- implementation cost 2",
+  "competing_hypotheses": [
+    "The primary architectural risk is incomplete assembly semantics: OMNI can omit a required relationship or select an inappropriate assembly configuration while every represented value is KNOWN and preserves its provenance. Value-level epistemic typing cannot detect a requirement that was never instantiated. I propose making a configuration-specific assembly constraint model the core of v0.1, with fact provenance supporting that model. This competes with the claim that value-state preservation is the decisive architectural choice."
+  ],
+  "predicted_evidence": [
+    "backend/app/cad/mechanical_component_library.py:336-341 \u2014 default_dims() returns (50.0, 30.0, 15.0) for any unregistered component; component_shape() :344-349 falls back to 'box'. No bearing/shaft/coupling/gear/leadscrew entry exists in _COMPONENT_PATTERNS (lines 31-260).",
+    "backend/app/cad/cad_detail_pass_planner.py:92 \u2014 `L, W, H = default_dims(component_type)` always fills dimensions; there is no path that marks a dimension as unknown.",
+    "backend/app/cad/cad_assembly_ir.py:204 \u2014 `length_mm: float = 0.0  # 0 = use library default` (the numeric field doubles as a 'missing' sentinel); :60,90 MountingFeatureSpec diameter_mm=6.0, FastenerPatternSpec diameter_mm=3.2 concrete defaults; no status/provenance/unknown field on any IR dataclass.",
+    "backend/app/cad/cad_assembly_ir.py:388-457 \u2014 from_dict filters every nested record to `__dataclass_fields__`, silently dropping unrecognized annotations.",
+    "Grep for shaft|bearing|coupling|keyway in generators/fusion360_script_generator.py, cad/fusion_detail_profiles.py and cad/cad_assembly_ir.py returned no matches. The CAD layer has no mechanical assembly concepts yet. (An earlier count grep hit these files only via 'component_type'.)",
+    "backend/app/reliability/schemas.py:8 GateStatus = PASS/WARN/FAIL/BLOCKED (no UNKNOWN); backend/app/mission_graph/schemas.py:104 ValidationCheck status PASS/WARNING/FAIL/UNKNOWN; grep for UNKNOWN in backend/app/mission_graph/*.py finds only that schema line; backend/app/engineering/validation_engine.py:177-181 lowercase pass/warning/blocked.",
+    "backend/app/reliability/scoring.py:6-11,29 \u2014 BLOCKED contributes 0.1 to an averaged gate_score, so an unknown/blocked gate can be diluted by passing gates in the confidence float (partially offset by the 0.15 blocker_penalty).",
+    "backend/app/engineering/finding_projection.py:30-35 and mission_graph/finding_projection.py:27-38 \u2014 empty/non-string severity becomes 'warning'; docs/contracts/findings_projection.md \u2014 status 'Currently always open', requires_human_review 'Currently always false', evidence_ids 'Reserved; currently []'.",
+    "backend/app/mission_graph/schemas.py ProvenanceRef: evidence_type default 'llm_generated', status default 'unknown'; backend/app/reliability/provenance.py:10-20 maps echo/korva/sky/qaz/oli/isy/pluto/omni/vega all to 'llm_generated'; schemas.py:10,24 confidence is low/medium/high only \u2014 no STANDARD/MANUFACTURER/HANDBOOK source-class axis.",
+    "docs/agentic/repository_map.md:44-49 \u2014 'Provenance is not a single shape in this codebase \u2014 there are multiple provenance representations\u2026 Do not assume\u2026 interchangeable'.",
+    "Counter-evidence (a fail-closed precedent exists): backend/app/engineering/calculation_engine.py:225-232 \u2014 missing required inputs yields reason 'inputs_missing'/'inputs_partial' and the calculation is counted as blocked rather than computed with defaults.",
+    "backend/app/cad/workshop_part_cad_planner.py:62-65,120,143-145,164 \u2014 defaults are acknowledged only as free-text 'assumptions' strings ('Default dimensions are placeholders'), not as machine-readable per-value epistemic state.",
+    "No prior frontier work on this topic: .omni-lab/experiments/ contains only OMNI-FRONTIER-0001 (orchestrator conclusion-state extraction), unrelated."
+  ],
+  "experiment_plan": "Shift stopped before an experiment plan was finalized.",
+  "safety_notes": [],
+  "participants": [
+    "claude",
+    "codex"
+  ],
+  "status": "COMPLETE",
+  "conclusion_state": "BLOCKED_BY_REQUIRED_EVIDENCE",
+  "evidence": [],
+  "counterevidence": [],
+  "limitations": [
+    "Shift did not reach CONCLUSION; see remaining_uncertainty for why."
+  ],
+  "remaining_uncertainty": "claude failed 2 consecutive turn(s) (max_consecutive_agent_failures=2)",
+  "recommended_next_action": "Re-run the shift, or escalate to a human, per the recorded stop reason.",
+  "protocol_version": "0.1"
+}
